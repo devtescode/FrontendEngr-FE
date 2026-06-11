@@ -182,7 +182,8 @@ export function Navbar() {
               to="/login"
               className="ml-2 rounded-full bg-brand-navy px-5 py-2 text-sm font-semibold text-white"
             >
-              Student Portal
+              {/* Student Portal */}
+              Login
             </Link>
           )}
         </div>

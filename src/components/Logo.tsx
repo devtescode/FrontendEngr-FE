@@ -16,7 +16,7 @@ export function Logo({ className = "" }: { className?: string }) {
       <span className="text-xl font-bold tracking-tight">
         <span style={{ color: "#24315D" }}>EU</span>{" "}
         <span style={{ color: "#1F2A44" }} className="font-semibold">
-          Hardstore
+          Hardwarestore
         </span>
       </span>
     </div>

@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: "EU Hardstore — Elizade University Hardware Hub" },
       { name: "description", content: "Order microcontrollers, sensors and lab components online and pick them up on Elizade University campus." },
-      { property: "og:title", content: "EU Hardstore — Elizade University Hardware Hub" },
+      { property: "og:title", content: "EU Hardwarestore — Elizade University Hardware Hub" },
       { property: "og:description", content: "Order microcontrollers, sensors and lab components online and pick them up on campus." },
     ],
   }),
