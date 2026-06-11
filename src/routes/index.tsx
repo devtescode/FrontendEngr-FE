@@ -10,9 +10,9 @@ import { useStore } from "@/lib/store";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "PulseLab — Elizade University Hardware Hub" },
+      { title: "EU Hardstore — Elizade University Hardware Hub" },
       { name: "description", content: "Order microcontrollers, sensors and lab components online and pick them up on Elizade University campus." },
-      { property: "og:title", content: "PulseLab — Elizade University Hardware Hub" },
+      { property: "og:title", content: "EU Hardstore — Elizade University Hardware Hub" },
       { property: "og:description", content: "Order microcontrollers, sensors and lab components online and pick them up on campus." },
     ],
   }),
