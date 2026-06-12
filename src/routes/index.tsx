@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { ArrowRight, ShoppingCart, CreditCard, Package, CheckCircle2 } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { NavAppShell } from "@/components/NavAppShell";
 import { ComponentCard } from "@/components/ComponentCard";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { Reveal } from "@/components/Section";
@@ -10,7 +10,7 @@ import { useStore } from "@/lib/store";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "EU Hardstore — Elizade University Hardware Hub" },
+      { title: "EU Hardwarestore — Elizade University Hardware Hub" },
       { name: "description", content: "Order microcontrollers, sensors and lab components online and pick them up on Elizade University campus." },
       { property: "og:title", content: "EU Hardwarestore — Elizade University Hardware Hub" },
       { property: "og:description", content: "Order microcontrollers, sensors and lab components online and pick them up on campus." },
@@ -47,8 +47,7 @@ const totalStock = components.reduce((a, c) => a + c.stock, 0);
 const totalStudents = users.filter((u) => u.role === "student").length;
 
   return (
-    <AppShell>
-      {/* Hero */}
+    <NavAppShell>
       <header className="relative overflow-hidden pt-20 pb-32">
         <div className="absolute inset-0 bg-circuit [mask-image:linear-gradient(to_bottom,white,transparent)]" />
         <div className="absolute top-20 -left-20 size-72 rounded-full bg-brand-accent/10 blur-3xl animate-float-soft" />
@@ -219,7 +218,7 @@ const totalStudents = users.filter((u) => u.role === "student").length;
           ))}
         </div>
       </section>
-    </AppShell>
+    </NavAppShell>
   );
 }
 

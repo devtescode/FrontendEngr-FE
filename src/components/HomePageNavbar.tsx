@@ -5,7 +5,7 @@ import { useState, useMemo } from "react";
 import { Logo } from "./Logo";
 import { useCurrentUser, useStore } from "@/lib/store";
 
-export function Navbar() {
+export function HomePageNavbar() {
   const user = useCurrentUser();
 
   // ✅ SAFE: raw stable store slices only
@@ -59,26 +59,26 @@ export function Navbar() {
         {/* NAV LINKS */}
         <div className="hidden md:flex items-center gap-8 text-sm font-medium">
           
-          <NavLink to="/components">Components</NavLink>
+          {/* <HomePageNavLink to="/components">Home</HomePageNavLink>
 
           {user?.role === "student" && (
-            <NavLink to="/dashboard">Dashboard</NavLink>
+            <HomePageNavLink to="/dashboard">Dashboard</HomePageNavLink>
           )}
 
           {user?.role === "student" && (
-            <NavLink to="/orders">My Orders</NavLink>
+            <HomePageNavLink to="/orders">My Orders</HomePageNavLink>
           )}
 
           {user?.role === "admin" && (
-            <NavLink to="/admin">Admin</NavLink>
-          )}
+            <HomePageNavLink to="/admin">Admin</HomePageNavLink>
+          )} */}
         </div>
 
         {/* RIGHT SIDE */}
         <div className="flex items-center gap-2">
 
           {/* CART */}
-          <Link
+          {/* <Link
             to="/cart"
             className="relative size-10 rounded-full hover:bg-slate-100 flex items-center justify-center"
           >
@@ -93,7 +93,7 @@ export function Navbar() {
                 {cartCount}
               </motion.span>
             )}
-          </Link>
+          </Link> */}
 
           {/* NOTIFICATIONS */}
           {user && (
@@ -193,7 +193,8 @@ export function Navbar() {
   );
 }
 
-function NavLink({
+
+function HomePageNavLink({
   to,
   children,
 }: {

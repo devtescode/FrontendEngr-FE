@@ -9,7 +9,14 @@ import { useStore } from "@/lib/store";
 import { Field } from "./login";
 
 // icons
-import { User, Mail, Hash, Lock } from "lucide-react";
+import {
+  User,
+  Mail,
+  Hash,
+  Lock,
+  Users,
+  Phone
+} from "lucide-react";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -25,37 +32,73 @@ function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [matric, setMatric] = useState("");
+  const [gender, setGender] = useState("");
   const [password, setPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const submit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError(null);
 
-    if (password.length < 6) {
-      return setError("Password must be at least 6 characters.");
-    }
+  const formattedMatric = matric.trim().toUpperCase();
 
-    const res = register({
-      fullName,
-      email,
-      matric,
-      password,
-    });
+  const matricRegex = /^EU\d{6}-\d{4}$/i;
 
-    if (!res.ok) {
-      return setError(res.error ?? "Registration failed");
+  if (!matricRegex.test(formattedMatric)) {
+    return setError(
+      "Matric number must be in the format EU250102-4768"
+    );
+  }
+
+  if (!phoneNumber.trim()) {
+    return setError("Phone number is required.");
+  }
+
+  if (!gender) {
+    return setError("Please select your gender.");
+  }
+
+  if (password.length < 6) {
+    return setError("Password must be at least 6 characters.");
+  }
+
+  try {
+    const response = await fetch(
+      "http://localhost:4500/engineering/usersignup",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fullName,
+          email,
+          matric: formattedMatric,
+          phoneNumber,
+          gender,
+          password,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return setError(data.message || "Registration failed");
     }
 
     navigate({ to: "/login" });
-  };
-
+  } catch (error) {
+    setError("Unable to connect to server");
+  }
+};
   return (
     <div className="min-h-screen flex items-center justify-center px-2 bg-slate-50">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md rounded-sm border-none border-slate-200 bg-white p-6 shadow-sm"
+        className="w-full max-w-md rounded-sm bg-white p-6 shadow-sm"
       >
         {/* HEADER */}
         <h1 className="text-3xl font-bold text-brand-navy">
@@ -63,7 +106,7 @@ function RegisterPage() {
         </h1>
 
         <p className="text-slate-500 text-sm mt-1">
-          Join the EU hardware hub.
+          Join the EU Hardware Hub.
         </p>
 
         {/* FORM */}
@@ -72,7 +115,7 @@ function RegisterPage() {
             label="Full Name"
             value={fullName}
             onChange={setFullName}
-            placeholder="Adekunle Adebayo"
+            placeholder="Agboola Teslim"
             icon={<User size={18} />}
           />
 
@@ -81,7 +124,7 @@ function RegisterPage() {
             value={email}
             onChange={setEmail}
             type="email"
-            placeholder="you@elizade.edu.ng"
+            placeholder="name@gmail.com"
             icon={<Mail size={18} />}
           />
 
@@ -92,6 +135,39 @@ function RegisterPage() {
             placeholder="EU250102-4768"
             icon={<Hash size={18} />}
           />
+
+          <Field
+            label="Phone Number"
+            value={phoneNumber}
+            onChange={setPhoneNumber}
+            placeholder="08064864821"
+            icon={<Phone size={18} />}
+          />
+
+          {/* Gender */}
+          <label className="block">
+            <span className="text-xs font-mono uppercase tracking-widest text-slate-500">
+              Gender
+            </span>
+
+            <div className="relative mt-1">
+              <Users
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                required
+                className="w-full h-11 rounded-sm border border-slate-200 bg-white pl-10 pr-3 text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-accent/10 focus:border-brand-accent transition"
+              >
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+          </label>
 
           <Field
             label="Password"
@@ -110,7 +186,7 @@ function RegisterPage() {
             type="submit"
             className="w-full h-12 rounded-lg bg-brand-navy text-white font-semibold hover:bg-slate-800 transition-colors active:scale-[0.98]"
           >
-            Create account
+            Create Account
           </button>
         </form>
 
