@@ -87,6 +87,7 @@ export const useStore = create<AppState>()(
       cart: [],
       orders: [],
       notifications: [],
+      
 
       register: (data) => {
         const exists = get().users.some((u) => u.email.toLowerCase() === data.email.toLowerCase());
@@ -207,6 +208,8 @@ export const useStore = create<AppState>()(
 export function useCurrentUser() {
   return useStore((s) => s.users.find((u) => u.id === s.currentUserId) || null);
 }
+
+
 
 export function formatNaira(n: number) {
   return "₦" + n.toLocaleString("en-NG");

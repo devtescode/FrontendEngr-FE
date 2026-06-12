@@ -5,11 +5,10 @@ import {
   Navigate,
 } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCurrentUser, useStore } from "@/lib/store";
-
-// icons
 import { Mail, Lock } from "lucide-react";
+import { ReactNode } from "react";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -20,13 +19,34 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const user = useCurrentUser();
-  const login = useStore((s) => s.login);
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("pulselab_user");
+
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved);
+
+      if (parsed?.id) {
+        useStore.setState({
+          currentUserId: parsed.id,
+        });
+      }
+    } catch {
+      sessionStorage.removeItem("pulselab_user");
+    }
+  }, []);
+
+  // -----------------------------
+  // AUTO REDIRECT IF LOGGED IN
+  // -----------------------------
   if (user) {
     return (
       <Navigate
@@ -35,28 +55,71 @@ function LoginPage() {
     );
   }
 
-  const submit = (e: React.FormEvent) => {
+  // -----------------------------
+  // LOGIN SUBMIT
+  // -----------------------------
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
 
-    const res = login(email, password);
+    try {
+      const res = await fetch(
+        "http://localhost:4500/engineering/userlogin",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
-    if (!res.ok) {
-      return setError(res.error ?? "Login failed");
+      const data = await res.json();
+
+      if (!res.ok) {
+        return setError(data.message || "Login failed");
+      }
+
+      const userData = data.user;
+      console.log(data.user);
+      
+
+      // -----------------------------
+      // SAVE SESSION
+      // -----------------------------
+      sessionStorage.setItem(
+        "pulselab_user",
+        JSON.stringify(userData)
+      );
+
+      sessionStorage.setItem("pulselab_token", data.token);
+
+      // -----------------------------
+      // FIXED ZUSTAND UPDATE
+      // -----------------------------
+      useStore.setState({
+        currentUserId: userData.id,
+      });
+
+      // -----------------------------
+      // NAVIGATE
+      // -----------------------------
+      navigate({ to: "/dashboard", replace: true });
+    } catch (err) {
+      setError("Server not reachable");
     }
-
-    navigate({
-      to: res.role === "admin" ? "/admin" : "/dashboard",
-    });
   };
 
+  // -----------------------------
+  // UI
+  // -----------------------------
   return (
     <div className="min-h-screen flex items-center justify-center px-2 bg-slate-50">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md rounded-sm border-none border-slate-200 bg-white p-6 shadow-sm"
+        className="w-full max-w-md rounded-sm bg-white p-6 shadow-sm"
       >
-        {/* HEADER */}
         <h1 className="text-3xl font-bold text-brand-navy">
           Welcome back
         </h1>
@@ -65,7 +128,6 @@ function LoginPage() {
           Sign in with your details
         </p>
 
-        {/* FORM */}
         <form onSubmit={submit} className="mt-8 space-y-4">
           <Field
             label="Email"
@@ -91,13 +153,12 @@ function LoginPage() {
 
           <button
             type="submit"
-            className="w-full h-12 rounded-lg bg-brand-navy text-white font-semibold hover:bg-slate-800 transition-colors active:scale-[0.98]"
+            className="w-full h-12 rounded-lg bg-brand-navy text-white font-semibold hover:bg-slate-800"
           >
             Sign in
           </button>
         </form>
 
-        {/* LINKS */}
         <p className="text-sm text-slate-500 text-center mt-6">
           No account?{" "}
           <Link
@@ -107,24 +168,12 @@ function LoginPage() {
             Register
           </Link>
         </p>
-
-        <p className="text-xs text-slate-400 text-center mt-3">
-          Admin?{" "}
-          <Link
-            to="/admin/login"
-            className="text-brand-gold font-semibold"
-          >
-            Sign in here
-          </Link>
-        </p>
       </motion.div>
     </div>
   );
 }
 
 /* ---------------- FIELD COMPONENT ---------------- */
-
-import { ReactNode } from "react";
 
 export function Field({
   label,
