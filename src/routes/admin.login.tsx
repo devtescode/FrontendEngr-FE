@@ -224,7 +224,7 @@ function AdminLogin() {
 
           <button
             disabled={loading}
-            className="w-full h-12 rounded-lg bg-brand-gold text-white font-semibold hover:bg-amber-700 active:scale-[0.98] transition"
+            className="w-full text-center h-12 rounded-lg bg-brand-gold text-white font-semibold hover:bg-amber-700 active:scale-[0.98] transition"
           >
             {loading
               ? "Processing..."
