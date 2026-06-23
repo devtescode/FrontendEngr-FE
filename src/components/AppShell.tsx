@@ -7,7 +7,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
       <main className="flex-1">{children}</main>
-      <Footer />
+      {/* <Footer /> */}
     </div>
   );
 }

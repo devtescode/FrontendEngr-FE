@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { formatNaira, useCurrentUser, useStore } from "@/lib/store";
+import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -18,27 +19,56 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 function DashboardPage() {
-  const user = useCurrentUser()!;
+  const [user, setUser] = useState<any>(null);
 
-  // ✅ ONLY RAW STATE FROM ZUSTAND (IMPORTANT FIX)
+  // ALL HOOKS MUST BE HERE
   const orders = useStore((s) => s.orders);
   const cart = useStore((s) => s.cart);
   const notifications = useStore((s) => s.notifications);
 
-  // -----------------------------
-  // ✅ DERIVED DATA (OUTSIDE STORE)
-  // -----------------------------
+  useEffect(() => {
+    const savedUser = sessionStorage.getItem("pulselab_user");
 
-  const userOrders = orders.filter((o) => o.userId === user.id);
-  const active = userOrders.filter((o) => o.status !== "Collected");
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (err) {
+        console.error(err);
+        sessionStorage.removeItem("pulselab_user");
+      }
+    }
+  }, []);
 
-  const cartCount = cart.reduce((a, c) => a + c.quantity, 0);
+  if (!user) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center h-[60vh]">
+          Loading...
+        </div>
+      </AppShell>
+    );
+  }
+
+  const userOrders = orders.filter(
+    (o) => o.userId === user.id
+  );
+
+  const active = userOrders.filter(
+    (o) => o.status !== "Collected"
+  );
+
+  const cartCount = cart.reduce(
+    (a, c) => a + c.quantity,
+    0
+  );
 
   const userNotifications = notifications.filter(
     (n) => n.userId === user.id
   );
 
-  const unread = userNotifications.filter((n) => !n.read).length;
+  const unread = userNotifications.filter(
+    (n) => !n.read
+  ).length;
 
   return (
     <AppShell>
@@ -49,15 +79,16 @@ function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-10"
         >
-          <p className="font-mono text-[10px] uppercase tracking-widest text-slate-400">
+          <p className="font-mono text-[13px] uppercase tracking-widest text-slate-400">
             Welcome back
           </p>
 
-          <h1 className="text-4xl font-bold text-brand-navy mt-1">
-            {user.fullName.split(" ")[0]}.
+          <h1 className="text-3xl font-bold text-brand-navy mt-1">
+            {/* {user.fullName.split(" ")[0]} */}
+            {user.fullName.split("  ")}
           </h1>
 
-          <p className="text-slate-500 mt-1">
+          <p className="text-slate-600 mt-1">
             Matric ·{" "}
             <span className="font-mono">{user.matric}</span>
           </p>
@@ -165,11 +196,10 @@ function DashboardPage() {
                 {userNotifications.slice(0, 5).map((n) => (
                   <div
                     key={n.id}
-                    className={`p-3 rounded-lg text-sm ${
-                      !n.read
-                        ? "bg-brand-accent/5 text-brand-navy"
-                        : "bg-slate-50 text-slate-500"
-                    }`}
+                    className={`p-3 rounded-lg text-sm ${!n.read
+                      ? "bg-brand-accent/5 text-brand-navy"
+                      : "bg-slate-50 text-slate-500"
+                      }`}
                   >
                     {n.message}
                   </div>
@@ -199,18 +229,16 @@ function StatCard({
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className={`rounded-2xl border p-5 ${
-        highlight
-          ? "bg-brand-navy text-white border-transparent"
-          : "bg-white border-slate-200"
-      }`}
+      className={`rounded-2xl border p-5 ${highlight
+        ? "bg-brand-navy text-white border-transparent"
+        : "bg-white border-slate-200"
+        }`}
     >
       <div
-        className={`size-9 rounded-lg grid place-items-center mb-3 ${
-          highlight
-            ? "bg-white/10"
-            : "bg-brand-accent/10 text-brand-accent"
-        }`}
+        className={`size-9 rounded-lg grid place-items-center mb-3 ${highlight
+          ? "bg-white/10"
+          : "bg-brand-accent/10 text-brand-accent"
+          }`}
       >
         <Icon className="size-4" />
       </div>
@@ -220,9 +248,8 @@ function StatCard({
       </div>
 
       <div
-        className={`text-[10px] font-mono uppercase tracking-widest mt-1 ${
-          highlight ? "text-white/60" : "text-slate-400"
-        }`}
+        className={`text-[10px] font-mono uppercase tracking-widest mt-1 ${highlight ? "text-white/60" : "text-slate-400"
+          }`}
       >
         {label}
       </div>
@@ -242,9 +269,8 @@ export function StatusPill({ status }: { status: string }) {
 
   return (
     <span
-      className={`rounded px-2 py-1 text-[10px] font-bold uppercase tracking-tight ${
-        palette[status] ?? "bg-slate-100"
-      }`}
+      className={`rounded px-2 py-1 text-[10px] font-bold uppercase tracking-tight ${palette[status] ?? "bg-slate-100"
+        }`}
     >
       {status}
     </span>

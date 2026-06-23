@@ -15,9 +15,9 @@ function AdminLayout() {
   if (pathname === "/admin/login") return <Outlet />;
 
   return (
-    <RequireAuth role="admin">
+    // <RequireAuth role="admin">
       <AdminShell />
-    </RequireAuth>
+    // </RequireAuth>
   );
 }
 
@@ -58,7 +58,7 @@ function AdminShell() {
             })}
           </nav>
           <div className="p-3 border-t border-white/5">
-            <button onClick={() => { logout(); navigate({ to: "/" }); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-white/5 hover:text-white">
+            <button onClick={() => { logout(); navigate({ to: "/admin/login" }); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-white/5 hover:text-white">
               <LogOut className="size-4" /> Sign out
             </button>
           </div>
