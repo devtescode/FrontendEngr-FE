@@ -4,6 +4,7 @@ import { LayoutDashboard, Boxes, ClipboardList, Hand, LogOut } from "lucide-reac
 import { RequireAuth } from "@/components/RequireAuth";
 import { Logo } from "@/components/Logo";
 import { useStore } from "@/lib/store";
+import { useState } from "react";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Admin — PulseLab" }] }),
@@ -39,34 +40,122 @@ function AdminShell() {
     <AdminLayoutShell><Outlet /></AdminLayoutShell>
   );
 
-  function AdminLayoutShell({ children }: { children: React.ReactNode }) {
-    return (
-      <div className="min-h-screen flex bg-slate-900 text-white">
-        <aside className="w-64 border-r border-white/5 bg-slate-950 flex flex-col">
-          <div className="p-6 border-b border-white/5">
-            <Logo className="text-white" />
-            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mt-2">Admin Console</div>
+ function AdminLayoutShell({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="min-h-screen flex bg-slate-900 text-white overflow-hidden">
+
+      {/* Mobile Overlay */}
+     {open && (
+  <div
+    onClick={() => setOpen(false)}
+    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+  />
+)}
+
+      {/* Sidebar */}
+      <aside
+        className={`
+          fixed lg:static z-50 top-0 left-0 min-h-screen
+          w-64 border-r border-white/5 bg-slate-950 flex flex-col
+          transform transition-transform duration-300 ease-in-out
+          ${open ? "translate-x-0" : "-translate-x-full"}
+          lg:translate-x-0
+        `}
+      >
+        <div className="p-6 border-b border-white/5">
+          <Logo className="text-white" />
+          <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mt-2">
+            Admin Console
           </div>
-          <nav className="flex-1 p-3 space-y-1">
-            {NAV.map((n) => {
-              const active = n.exact ? pathname === n.to : pathname.startsWith(n.to);
-              return (
-                <Link key={n.to} to={n.to} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${active ? "bg-brand-accent/15 text-brand-accent" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
-                  <n.icon className="size-4" /> {n.label}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="p-3 border-t border-white/5">
-            <button onClick={() => { logout(); navigate({ to: "/admin/login" }); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-white/5 hover:text-white">
-              <LogOut className="size-4" /> Sign out
-            </button>
-          </div>
-        </aside>
-        <main className="flex-1 overflow-auto">{children}</main>
-      </div>
-    );
-  }
+        </div>
+
+        <nav className="flex-1 p-3 space-y-1">
+          {NAV.map((n) => {
+            const active = n.exact
+              ? pathname === n.to
+              : pathname.startsWith(n.to);
+
+            return (
+              <Link
+                key={n.to}
+                to={n.to}
+                onClick={() => setOpen(false)}
+                className={`
+                  flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors
+                  ${
+                    active
+                      ? "bg-brand-accent/15 text-brand-accent"
+                      : "text-slate-400 hover:bg-white/5 hover:text-white"
+                  }
+                `}
+              >
+                <n.icon className="size-4" />
+                {n.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-3 border-t border-white/5">
+          <button
+            onClick={() => {
+              logout();
+              navigate({ to: "/admin/login" });
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <LogOut className="size-4" />
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+
+      {/* Main Content */}
+      <main
+        className={`
+          flex-1 overflow-auto
+          transition-all duration-300
+          ${open ? "blur-sm lg:blur-none" : ""}
+        `}
+      >
+
+        {/* Mobile Header */}
+        <div className="lg:hidden flex items-center gap-3 p-4 border-b border-white/5 bg-slate-950">
+          <button
+            onClick={() => setOpen(true)}
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="size-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+
+          <span className="font-semibold">
+            Admin Console
+          </span>
+        </div>
+
+        {children}
+
+      </main>
+
+    </div>
+  );
+}
 }
 
 function AdminOverview() {
