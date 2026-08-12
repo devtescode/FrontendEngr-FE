@@ -1,4 +1,4 @@
-export type Category = "Microcontroller" | "Sensors" | "Prototyping" | "Passive" | "Power" | "Connector";
+ export type Category = "Microcontroller" | "Sensors" | "Prototyping" | "Passive" | "Power" | "Connector";
 
 export interface Component {
   id: string;
