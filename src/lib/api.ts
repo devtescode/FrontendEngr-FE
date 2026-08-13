@@ -237,7 +237,7 @@ export const componentApi = {
     id: string
   ): Promise<BackendComponent> => {
     const res = await fetch(
-      `${API_URL}/admin/components/${id}`
+      `${API_URL}/admin/getonecomponent/${id}`
     );
 
     return handleResponse<BackendComponent>(res);
@@ -280,7 +280,7 @@ export const componentApi = {
     );
 
     const res = await fetch(
-      `${API_URL}/admin/components/${id}`,
+      `${API_URL}/admin/update-component/${id}`,
       {
         method: "PUT",
         body: formData,
@@ -300,7 +300,7 @@ export const componentApi = {
     component?: BackendComponent;
   }> => {
     const res = await fetch(
-      `${API_URL}/admin/components/${id}`,
+      `${API_URL}/admin/delete-component/${id}`,
       {
         method: "DELETE",
       }

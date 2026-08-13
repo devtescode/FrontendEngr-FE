@@ -421,7 +421,7 @@ export function Navbar() {
                   sm:px-5
                 "
               >
-                Login
+                Log Out
               </Link>
             )}
 
