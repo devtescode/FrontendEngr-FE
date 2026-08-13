@@ -16,7 +16,7 @@ function AdminLayout() {
   if (pathname === "/admin/login") return <Outlet />;
 
   return (
-    // <RequireAuth role="admin">
+    <RequireAuth role="admin">
       <AdminShell />
     // </RequireAuth>
   );

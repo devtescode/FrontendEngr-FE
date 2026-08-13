@@ -97,33 +97,63 @@ function normalizeComponent(
 }
 
 function CatalogIndex() {
-  const [components, setComponents] =
-    useState<Component[]>([]);
+  const [components, setComponents] = useState<Component[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
 
-  const [error, setError] =
-    useState("");
+  const [error, setError] = useState("");
 
-  const [q, setQ] =
-    useState("");
+  const [q, setQ] = useState("");
 
   const [cat, setCat] =
     useState<(typeof CATEGORIES)[number]>("All");
 
   const [sort, setSort] =
-    useState<
-      (typeof SORTS)[number]["id"]
-    >("popular");
+    useState<(typeof SORTS)[number]["id"]>("popular");
+
 
   /*
-   * ==========================================
-   * LOAD COMPONENTS FROM BACKEND
-   * ==========================================
+   * =====================================================
+   * LOAD FROM LOCAL STORAGE FIRST
+   * =====================================================
    */
 
   useEffect(() => {
+    const saved = localStorage.getItem(
+      "pulselab-components"
+    );
+
+    if (saved) {
+      try {
+        const cached = JSON.parse(saved);
+
+        setComponents(cached);
+
+        // We already have the data.
+        setLoading(false);
+
+        return;
+      } catch (error) {
+        console.error(
+          "Invalid cached components:",
+          error
+        );
+
+        localStorage.removeItem(
+          "pulselab-components"
+        );
+      }
+    }
+
+
+    /*
+     * ===================================================
+     * NO CACHE
+     *
+     * Get components from backend once.
+     * ===================================================
+     */
+
     const fetchComponents = async () => {
       try {
         setLoading(true);
@@ -136,7 +166,15 @@ function CatalogIndex() {
           response.map(normalizeComponent);
 
         setComponents(normalized);
+
+        // Save for future reloads
+        localStorage.setItem(
+          "pulselab-components",
+          JSON.stringify(normalized)
+        );
+
       } catch (error: any) {
+
         console.error(
           "Failed to fetch components:",
           error
@@ -146,28 +184,65 @@ function CatalogIndex() {
           error?.message ||
             "Failed to load components"
         );
+
       } finally {
         setLoading(false);
       }
     };
 
     fetchComponents();
+
   }, []);
 
+
   /*
-   * ==========================================
-   * REAL-TIME CREATE
-   * ==========================================
+   * =====================================================
+   * EVERY TIME COMPONENTS CHANGE,
+   * UPDATE LOCAL STORAGE
+   * =====================================================
    */
 
   useEffect(() => {
+    if (components.length === 0) return;
+
+    localStorage.setItem(
+      "pulselab-components",
+      JSON.stringify(components)
+    );
+  }, [components]);
+
+
+  /*
+   * =====================================================
+   * SOCKET.IO
+   * =====================================================
+   */
+
+  useEffect(() => {
+
+    console.log(
+      "Connecting to component realtime events..."
+    );
+
+
+    /*
+     * ADMIN CREATED COMPONENT
+     */
+
     const handleCreated = (
       component: BackendComponent
     ) => {
+
+      console.log(
+        "Component created:",
+        component
+      );
+
       const normalized =
         normalizeComponent(component);
 
       setComponents((current) => {
+
         const exists = current.some(
           (item) =>
             item.id === normalized.id
@@ -178,21 +253,26 @@ function CatalogIndex() {
         }
 
         return [
-          ...current,
           normalized,
+          ...current,
         ];
       });
     };
 
+
     /*
-     * ==========================================
-     * REAL-TIME UPDATE
-     * ==========================================
+     * ADMIN UPDATED COMPONENT
      */
 
     const handleUpdated = (
       component: BackendComponent
     ) => {
+
+      console.log(
+        "Component updated:",
+        component
+      );
+
       const normalized =
         normalizeComponent(component);
 
@@ -205,24 +285,35 @@ function CatalogIndex() {
       );
     };
 
+
     /*
-     * ==========================================
-     * REAL-TIME DELETE
-     * ==========================================
+     * ADMIN DELETED COMPONENT
      */
 
     const handleDeleted = (
       component: BackendComponent
     ) => {
-      if (!component._id) return;
+
+      console.log(
+        "Component deleted:",
+        component
+      );
+
+      const id = component._id;
+
+      if (!id) return;
 
       setComponents((current) =>
         current.filter(
-          (item) =>
-            item.id !== component._id
+          (item) => item.id !== id
         )
       );
     };
+
+
+    /*
+     * LISTEN
+     */
 
     socket.on(
       "component:created",
@@ -239,7 +330,13 @@ function CatalogIndex() {
       handleDeleted
     );
 
+
+    /*
+     * CLEANUP
+     */
+
     return () => {
+
       socket.off(
         "component:created",
         handleCreated
@@ -254,18 +351,23 @@ function CatalogIndex() {
         "component:deleted",
         handleDeleted
       );
+
     };
+
   }, []);
 
+
   /*
-   * ==========================================
+   * =====================================================
    * FILTER + SEARCH + SORT
-   * ==========================================
+   * =====================================================
    */
 
   const filtered = useMemo(() => {
+
     let result = components.filter(
       (component) => {
+
         const matchesCategory =
           cat === "All" ||
           component.category === cat;
@@ -292,11 +394,13 @@ function CatalogIndex() {
       }
     );
 
+
     if (sort === "price-asc") {
       result = [...result].sort(
         (a, b) => a.price - b.price
       );
     }
+
 
     if (sort === "price-desc") {
       result = [...result].sort(
@@ -304,13 +408,16 @@ function CatalogIndex() {
       );
     }
 
+
     if (sort === "popular") {
       result = [...result].sort(
         (a, b) => b.stock - a.stock
       );
     }
 
+
     return result;
+
   }, [
     components,
     q,
@@ -318,8 +425,16 @@ function CatalogIndex() {
     sort,
   ]);
 
+
+  /*
+   * =====================================================
+   * UI
+   * =====================================================
+   */
+
   return (
     <AppShell>
+
       <div className="mx-auto max-w-7xl px-6 py-12">
 
         <motion.div
@@ -333,22 +448,25 @@ function CatalogIndex() {
           }}
           className="mb-8"
         >
+
           <h1 className="text-4xl font-bold text-brand-navy">
             Component Catalog
           </h1>
 
           <p className="text-slate-500 mt-2">
             {filtered.length} item
-            {filtered.length !== 1 &&
-              "s"} available.
+            {filtered.length !== 1 && "s"} available.
           </p>
+
         </motion.div>
+
 
         {error && (
           <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-600">
             {error}
           </div>
         )}
+
 
         <div className="flex flex-col md:flex-row gap-4 mb-8">
 
@@ -361,6 +479,7 @@ function CatalogIndex() {
             className="flex-1 h-11 px-4 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
           />
 
+
           <select
             value={sort}
             onChange={(e) =>
@@ -370,6 +489,7 @@ function CatalogIndex() {
             }
             className="h-11 px-3 rounded-lg border border-slate-200 bg-white"
           >
+
             {SORTS.map((s) => (
               <option
                 key={s.id}
@@ -378,12 +498,16 @@ function CatalogIndex() {
                 {s.label}
               </option>
             ))}
+
           </select>
 
         </div>
 
+
         <div className="flex flex-wrap gap-2 mb-10">
+
           {CATEGORIES.map((category) => (
+
             <button
               key={category}
               onClick={() =>
@@ -397,32 +521,46 @@ function CatalogIndex() {
             >
               {category}
             </button>
+
           ))}
+
         </div>
 
+
         {loading ? (
+
           <div className="text-center py-20 text-slate-400">
             Loading components...
           </div>
+
         ) : filtered.length === 0 ? (
+
           <div className="text-center py-20 text-slate-400">
             No components match your filters.
           </div>
+
         ) : (
-          <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
             {filtered.map(
               (component, index) => (
+
                 <ComponentCard
                   key={component.id}
                   c={component}
                   index={index}
                 />
+
               )
             )}
+
           </div>
+
         )}
 
       </div>
+
     </AppShell>
   );
 }

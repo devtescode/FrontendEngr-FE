@@ -18,7 +18,6 @@ import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ComponentsIdRouteImport } from './routes/components.$id'
 import { Route as AdminPickupRouteImport } from './routes/admin.pickup'
 import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
@@ -69,11 +68,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ComponentsIdRoute = ComponentsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ComponentsRoute,
-} as any)
 const AdminPickupRoute = AdminPickupRouteImport.update({
   id: '/pickup',
   path: '/pickup',
@@ -100,7 +94,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
-  '/components': typeof ComponentsRouteWithChildren
+  '/components': typeof ComponentsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
@@ -109,14 +103,13 @@ export interface FileRoutesByFullPath {
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pickup': typeof AdminPickupRoute
-  '/components/$id': typeof ComponentsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
-  '/components': typeof ComponentsRouteWithChildren
+  '/components': typeof ComponentsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
@@ -125,7 +118,6 @@ export interface FileRoutesByTo {
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pickup': typeof AdminPickupRoute
-  '/components/$id': typeof ComponentsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -133,7 +125,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
-  '/components': typeof ComponentsRouteWithChildren
+  '/components': typeof ComponentsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
@@ -142,7 +134,6 @@ export interface FileRoutesById {
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pickup': typeof AdminPickupRoute
-  '/components/$id': typeof ComponentsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -160,7 +151,6 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/orders'
     | '/admin/pickup'
-    | '/components/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -176,7 +166,6 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/orders'
     | '/admin/pickup'
-    | '/components/$id'
   id:
     | '__root__'
     | '/'
@@ -192,7 +181,6 @@ export interface FileRouteTypes {
     | '/admin/login'
     | '/admin/orders'
     | '/admin/pickup'
-    | '/components/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -200,7 +188,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   CartRoute: typeof CartRoute
   CheckoutRoute: typeof CheckoutRoute
-  ComponentsRoute: typeof ComponentsRouteWithChildren
+  ComponentsRoute: typeof ComponentsRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   OrdersRoute: typeof OrdersRoute
@@ -272,13 +260,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/components/$id': {
-      id: '/components/$id'
-      path: '/$id'
-      fullPath: '/components/$id'
-      preLoaderRoute: typeof ComponentsIdRouteImport
-      parentRoute: typeof ComponentsRoute
-    }
     '/admin/pickup': {
       id: '/admin/pickup'
       path: '/pickup'
@@ -326,24 +307,12 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
-interface ComponentsRouteChildren {
-  ComponentsIdRoute: typeof ComponentsIdRoute
-}
-
-const ComponentsRouteChildren: ComponentsRouteChildren = {
-  ComponentsIdRoute: ComponentsIdRoute,
-}
-
-const ComponentsRouteWithChildren = ComponentsRoute._addFileChildren(
-  ComponentsRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   CartRoute: CartRoute,
   CheckoutRoute: CheckoutRoute,
-  ComponentsRoute: ComponentsRouteWithChildren,
+  ComponentsRoute: ComponentsRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   OrdersRoute: OrdersRoute,

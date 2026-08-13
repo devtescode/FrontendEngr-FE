@@ -11,6 +11,7 @@ import { useState, useMemo } from "react";
 import { Logo } from "./Logo";
 import { useCurrentUser, useStore } from "@/lib/store";
 
+
 export function Navbar() {
   const user = useCurrentUser();
 
@@ -58,6 +59,14 @@ export function Navbar() {
     setMobileOpen((open) => !open);
     setNotifOpen(false);
   };
+
+  // const navigate = useNavigate();
+  const Logout = () => {
+    navigate({ to: "/login" });
+    logout();
+    sessionStorage.clear();
+    // localStorage.clear();
+  }
 
   return (
     <>
@@ -340,10 +349,9 @@ export function Navbar() {
                             text-left
                             transition-colors
                             hover:bg-slate-50
-                            ${
-                              !n.read
-                                ? "bg-brand-accent/5"
-                                : ""
+                            ${!n.read
+                              ? "bg-brand-accent/5"
+                              : ""
                             }
                           `}
                         >
@@ -404,8 +412,11 @@ export function Navbar() {
                 </button>
               </div>
             ) : (
-              <Link
-                to="/login"
+              <div
+                //  className="hidden sm:flex"
+                // >
+
+                onClick={Logout}
                 className="
                   ml-1
                   rounded-full
@@ -422,7 +433,7 @@ export function Navbar() {
                 "
               >
                 Log Out
-              </Link>
+              </div>
             )}
 
             {/* =================================================
