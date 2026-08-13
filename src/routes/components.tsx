@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { ComponentCard } from "@/components/ComponentCard";
-
+import { RequireAuth } from "@/components/RequireAuth";
 import { componentApi } from "@/lib/api";
 
 import type {
@@ -28,7 +28,15 @@ export const Route = createFileRoute("/components")({
     ],
   }),
 
-  component: ComponentsLayout,
+  // component: ComponentsLayout,
+
+
+
+  component: () => (
+    <RequireAuth role="student">
+      <ComponentsLayout />
+    </RequireAuth>
+  ),
 });
 
 function ComponentsLayout() {
@@ -182,7 +190,7 @@ function CatalogIndex() {
 
         setError(
           error?.message ||
-            "Failed to load components"
+          "Failed to load components"
         );
 
       } finally {
@@ -513,11 +521,10 @@ function CatalogIndex() {
               onClick={() =>
                 setCat(category)
               }
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                cat === category
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${cat === category
                   ? "bg-brand-navy text-white"
                   : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
-              }`}
+                }`}
             >
               {category}
             </button>
