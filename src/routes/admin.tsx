@@ -18,7 +18,7 @@ function AdminLayout() {
   return (
     <RequireAuth role="admin">
       <AdminShell />
-    // </RequireAuth>
+    </RequireAuth>
   );
 }
 

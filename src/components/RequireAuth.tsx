@@ -66,10 +66,31 @@ export function RequireAuth({
 
   useEffect(() => {
     const checkAuth = () => {
-      const token = sessionStorage.getItem("pulselab_token");
-      const savedUser = sessionStorage.getItem("pulselab_user");
+      // ----------------------------------
+      // USE ROLE-SPECIFIC SESSION KEYS
+      // ----------------------------------
+      const tokenKey =
+        role === "admin"
+          ? "admin_token"
+          : "pulselab_token";
 
-      // No token = definitely logged out
+      const userKey =
+        role === "admin"
+          ? "admin_user"
+          : "pulselab_user";
+
+      const token = sessionStorage.getItem(tokenKey);
+      const savedUser = sessionStorage.getItem(userKey);
+
+      console.log("AUTH CHECK:", {
+        role,
+        tokenExists: !!token,
+        userExists: !!savedUser,
+      });
+
+      // ----------------------------------
+      // NO TOKEN / USER
+      // ----------------------------------
       if (!token || !savedUser) {
         setUser(null);
         setLoading(false);
@@ -83,8 +104,8 @@ export function RequireAuth({
       } catch (error) {
         console.error("Invalid saved user:", error);
 
-        sessionStorage.removeItem("pulselab_user");
-        sessionStorage.removeItem("pulselab_token");
+        sessionStorage.removeItem(userKey);
+        sessionStorage.removeItem(tokenKey);
 
         setUser(null);
       }
@@ -94,7 +115,7 @@ export function RequireAuth({
 
     checkAuth();
 
-    // Check again when user comes back to the tab/page
+    // Check again when user returns to the page
     window.addEventListener("pageshow", checkAuth);
     window.addEventListener("focus", checkAuth);
 
@@ -102,18 +123,30 @@ export function RequireAuth({
       window.removeEventListener("pageshow", checkAuth);
       window.removeEventListener("focus", checkAuth);
     };
-  }, []);
+  }, [role]);
 
+  // ----------------------------------
+  // AUTH CHECK LOADING
+  // ----------------------------------
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-navy" />
       </div>
     );
   }
 
-  // 🔒 No token or user = logged out
-  if (!user || !sessionStorage.getItem("pulselab_token")) {
+  // ----------------------------------
+  // NO AUTH
+  // ----------------------------------
+  const tokenKey =
+    role === "admin"
+      ? "admin_token"
+      : "pulselab_token";
+
+  const token = sessionStorage.getItem(tokenKey);
+
+  if (!user || !token) {
     return (
       <Navigate
         to={role === "student" ? "/login" : "/admin/login"}
@@ -122,10 +155,15 @@ export function RequireAuth({
     );
   }
 
-  // 🔒 Wrong role
+  // ----------------------------------
+  // WRONG ROLE
+  // ----------------------------------
   if (role && user.role !== role) {
     return <Navigate to="/" replace />;
   }
 
+  // ----------------------------------
+  // AUTHENTICATED
+  // ----------------------------------
   return <>{children}</>;
 }

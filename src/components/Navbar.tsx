@@ -158,8 +158,8 @@ export function Navbar() {
               Change Password
             </NavLink>
 
-            <NavLink to="/post">
-              Post
+            <NavLink to="/cart">
+              Add to cart
             </NavLink>
 
             {user?.role === "student" && (
