@@ -27,63 +27,109 @@ export function ComponentCard({
   const [quantity, setQuantity] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // =====================================================
-  // GET TOKEN
-  // =====================================================
+  /*
+   * =====================================================
+   * GET COMPONENT ID
+   * =====================================================
+   *
+   * Your backend requires a MongoDB ObjectId.
+   *
+   * Depending on how your API returns the component,
+   * the ID may be c._id or c.id.
+   */
+
+  const componentId = c._id;
+
+  /*
+   * =====================================================
+   * GET TOKEN
+   * =====================================================
+   */
 
   const getToken = () => {
     return sessionStorage.getItem("pulselab_token");
   };
 
-  // =====================================================
-  // GET REAL COMPONENT ID
-  // =====================================================
 
-  const getComponentId = () => {
-    /*
-     * IMPORTANT:
-     * Your backend MongoDB component ID should be _id.
-     */
+  useEffect(() => {
+  const loadCartQuantity = async () => {
+    const token = sessionStorage.getItem(
+      "pulselab_token"
+    );
 
-    if (c._id) {
-      return c._id;
+    if (!token || !componentId) {
+      return;
     }
 
-    console.error("Component ID is missing:", c);
+    try {
+      const response = await fetch(
+        `${BASE_URL}/engineering/cart`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    return null;
+      if (!response.ok) {
+        throw new Error("Failed to load cart");
+      }
+
+      const cart = await response.json();
+
+      updateQuantityFromCart(cart);
+
+    } catch (error) {
+      console.error(
+        "Failed to restore cart quantity:",
+        error
+      );
+    }
   };
 
-  // =====================================================
-  // UPDATE QUANTITY FROM CART
-  // =====================================================
+  loadCartQuantity();
+}, [componentId]);
+  /*
+   * =====================================================
+   * CHECK COMPONENT ID
+   * =====================================================
+   */
+
+  if (!componentId) {
+    console.error("Component ID is missing:", c);
+  }
+
+  /*
+   * =====================================================
+   * UPDATE QUANTITY FROM CART
+   * =====================================================
+   */
 
   const updateQuantityFromCart = (cart: any) => {
     if (!cart?.items) {
-      setQuantity(0);
       return;
     }
 
-    const componentId = getComponentId();
+    const item = cart.items.find((cartItem: any) => {
+      const cartComponentId =
+        typeof cartItem.componentId === "object"
+          ? cartItem.componentId?._id
+          : cartItem.componentId;
 
-    if (!componentId) {
-      return;
-    }
-
-    const item = cart.items.find((item: any) => {
-      const itemId =
-        item.componentId?._id ||
-        item.componentId;
-
-      return itemId?.toString() === componentId.toString();
+      return (
+        String(cartComponentId) === String(componentId)
+      );
     });
 
-    setQuantity(item ? item.quantity : 0);
+    setQuantity(item?.quantity ?? 0);
   };
 
-  // =====================================================
-  // REAL-TIME CART UPDATE
-  // =====================================================
+  /*
+   * =====================================================
+   * REAL-TIME CART UPDATE
+   * =====================================================
+   */
 
   useEffect(() => {
     const handleCartUpdated = (cart: any) => {
@@ -95,11 +141,13 @@ export function ComponentCard({
     return () => {
       socket.off("cart:updated", handleCartUpdated);
     };
-  }, [c._id]);
+  }, [componentId]);
 
-  // =====================================================
-  // ADD TO CART
-  // =====================================================
+  /*
+   * =====================================================
+   * ADD TO CART
+   * =====================================================
+   */
 
   const handleAddToCart = async () => {
     const token = getToken();
@@ -109,15 +157,14 @@ export function ComponentCard({
       return;
     }
 
-    if (isOutOfStock) {
+    if (!componentId) {
+      console.error("Component ID is missing:", c);
+
+      alert("Component ID is missing.");
       return;
     }
 
-    const componentId = getComponentId();
-
-    if (!componentId) {
-      alert("Component ID is missing.");
-      console.error("Component ID is missing:", c);
+    if (isOutOfStock) {
       return;
     }
 
@@ -143,27 +190,42 @@ export function ComponentCard({
 
       const data = await response.json();
 
+      console.log("ADD TO CART RESPONSE:", data);
+
       if (!response.ok) {
         throw new Error(
           data.message || "Failed to add item to cart"
         );
       }
 
-      updateQuantityFromCart(data);
+      /*
+       * IMPORTANT
+       *
+       * Do not wait for Socket.IO to update the button.
+       * We already know the item was successfully added.
+       *
+       * Immediately change the UI.
+       */
+
+      setQuantity(1);
+
     } catch (error: any) {
       console.error("Add to cart error:", error);
 
       alert(
-        error?.message || "Failed to add item to cart"
+        error.message ||
+          "Failed to add item to cart"
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // =====================================================
-  // INCREASE QUANTITY
-  // =====================================================
+  /*
+   * =====================================================
+   * INCREASE QUANTITY
+   * =====================================================
+   */
 
   const handleIncrease = async () => {
     const token = getToken();
@@ -173,14 +235,12 @@ export function ComponentCard({
       return;
     }
 
-    if (quantity >= c.stock) {
+    if (!componentId) {
+      alert("Component ID is missing.");
       return;
     }
 
-    const componentId = getComponentId();
-
-    if (!componentId) {
-      alert("Component ID is missing.");
+    if (quantity >= c.stock) {
       return;
     }
 
@@ -206,13 +266,21 @@ export function ComponentCard({
 
       const data = await response.json();
 
+      console.log("INCREASE RESPONSE:", data);
+
       if (!response.ok) {
         throw new Error(
-          data.message || "Failed to increase quantity"
+          data.message ||
+            "Failed to increase quantity"
         );
       }
 
-      updateQuantityFromCart(data);
+      /*
+       * Immediately update UI.
+       */
+
+      setQuantity((prev) => prev + 1);
+
     } catch (error: any) {
       console.error(
         "Increase quantity error:",
@@ -220,7 +288,7 @@ export function ComponentCard({
       );
 
       alert(
-        error?.message ||
+        error.message ||
           "Failed to increase quantity"
       );
     } finally {
@@ -228,9 +296,11 @@ export function ComponentCard({
     }
   };
 
-  // =====================================================
-  // DECREASE QUANTITY
-  // =====================================================
+  /*
+   * =====================================================
+   * DECREASE QUANTITY
+   * =====================================================
+   */
 
   const handleDecrease = async () => {
     const token = getToken();
@@ -240,23 +310,23 @@ export function ComponentCard({
       return;
     }
 
-    if (quantity <= 0) {
+    if (!componentId) {
+      alert("Component ID is missing.");
       return;
     }
 
-    const componentId = getComponentId();
-
-    if (!componentId) {
-      alert("Component ID is missing.");
+    if (quantity <= 0) {
       return;
     }
 
     try {
       setLoading(true);
 
-      // =================================================
-      // REMOVE COMPLETELY
-      // =================================================
+      /*
+       * ===============================================
+       * REMOVE ITEM
+       * ===============================================
+       */
 
       if (quantity === 1) {
         const response = await fetch(
@@ -272,6 +342,8 @@ export function ComponentCard({
 
         const data = await response.json();
 
+        console.log("REMOVE CART RESPONSE:", data);
+
         if (!response.ok) {
           throw new Error(
             data.message ||
@@ -279,14 +351,21 @@ export function ComponentCard({
           );
         }
 
-        updateQuantityFromCart(data);
+        /*
+         * Immediately hide +/- controls
+         * and show Add to Cart again.
+         */
+
+        setQuantity(0);
 
         return;
       }
 
-      // =================================================
-      // DECREASE BY 1
-      // =================================================
+      /*
+       * ===============================================
+       * DECREASE FROM 2 -> 1, 3 -> 2, etc.
+       * ===============================================
+       */
 
       const newQuantity = quantity - 1;
 
@@ -308,6 +387,11 @@ export function ComponentCard({
 
       const data = await response.json();
 
+      console.log(
+        "DECREASE RESPONSE:",
+        data
+      );
+
       if (!response.ok) {
         throw new Error(
           data.message ||
@@ -315,7 +399,12 @@ export function ComponentCard({
         );
       }
 
-      updateQuantityFromCart(data);
+      /*
+       * Immediately update UI.
+       */
+
+      setQuantity(newQuantity);
+
     } catch (error: any) {
       console.error(
         "Decrease quantity error:",
@@ -323,7 +412,7 @@ export function ComponentCard({
       );
 
       alert(
-        error?.message ||
+        error.message ||
           "Failed to decrease quantity"
       );
     } finally {
@@ -331,9 +420,11 @@ export function ComponentCard({
     }
   };
 
-  // =====================================================
-  // UI
-  // =====================================================
+  /*
+   * =====================================================
+   * UI
+   * =====================================================
+   */
 
   return (
     <motion.article
@@ -416,6 +507,7 @@ export function ComponentCard({
       {/* CONTENT */}
 
       <div className="mx-2 mb-4 mt-3 p-2">
+
         {/* SKU */}
 
         <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
@@ -437,6 +529,7 @@ export function ComponentCard({
         {/* PRICE / STOCK */}
 
         <div className="mt-3 flex items-end justify-between gap-4">
+
           <div>
             <p className="text-xs font-medium text-slate-400">
               Price
@@ -464,15 +557,25 @@ export function ComponentCard({
               {c.stock} units
             </p>
           </div>
+
         </div>
 
-        {/* CART */}
+        {/* =================================================
+            CART ACTION
+        ================================================= */}
 
         {quantity === 0 ? (
+
+          /*
+           * ADD TO CART
+           */
+
           <button
             type="button"
             disabled={
-              isOutOfStock || loading
+              isOutOfStock ||
+              loading ||
+              !componentId
             }
             onClick={handleAddToCart}
             className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-navy/90 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
@@ -492,8 +595,15 @@ export function ComponentCard({
               </>
             )}
           </button>
+
         ) : (
+
+          /*
+           * INCREMENT / DECREMENT
+           */
+
           <div className="mt-5 flex h-12 w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+
             {/* MINUS */}
 
             <button
@@ -503,7 +613,11 @@ export function ComponentCard({
               className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Decrease quantity"
             >
-              <Minus className="h-4 w-4" />
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Minus className="h-4 w-4" />
+              )}
             </button>
 
             {/* QUANTITY */}
@@ -532,8 +646,11 @@ export function ComponentCard({
             >
               <Plus className="h-4 w-4" />
             </button>
+
           </div>
+
         )}
+
       </div>
     </motion.article>
   );
