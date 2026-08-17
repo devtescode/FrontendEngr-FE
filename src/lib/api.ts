@@ -309,3 +309,41 @@ export const componentApi = {
     return handleResponse(res);
   },
 };
+
+// export const cartApi = {
+//   add: async (
+//     componentId: string,
+//     quantity = 1
+//   ) => {
+//     const token =
+//       sessionStorage.getItem("pulselab_token");
+
+//     const response = await fetch(
+//       // "http://localhost:4500/cart",
+//       `${API_URL}/engineering/addtocart`,
+//       {
+//         method: "POST",
+
+//         headers: {
+//           "Content-Type": "application/json",
+//           Authorization: `Bearer ${token}`,
+//         },
+
+//         body: JSON.stringify({
+//           componentId,
+//           quantity,
+//         }),
+//       }
+//     );
+
+//     if (!response.ok) {
+//       const error = await response.json();
+
+//       throw new Error(
+//         error.message || "Failed to add to cart"
+//       );
+//     }
+
+//     return response.json();
+//   },
+// };

@@ -1,8 +1,18 @@
-
-
 import { motion } from "framer-motion";
-import { Package, ShoppingCart, ArrowUpRight } from "lucide-react";
+import {
+  Package,
+  ShoppingCart,
+  ArrowUpRight,
+  Minus,
+  Plus,
+  Loader2,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+
 import type { BackendComponent } from "@/lib/api";
+import { socket } from "@/lib/socket";
+
+const BASE_URL = "http://localhost:4500";
 
 export function ComponentCard({
   c,
@@ -14,18 +24,338 @@ export function ComponentCard({
   const isOutOfStock = c.stock <= 0;
   const isLowStock = c.stock > 0 && c.stock <= 5;
 
+  const [quantity, setQuantity] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // =====================================================
+  // GET TOKEN
+  // =====================================================
+
+  const getToken = () => {
+    return sessionStorage.getItem("pulselab_token");
+  };
+
+  // =====================================================
+  // GET REAL COMPONENT ID
+  // =====================================================
+
+  const getComponentId = () => {
+    /*
+     * IMPORTANT:
+     * Your backend MongoDB component ID should be _id.
+     */
+
+    if (c._id) {
+      return c._id;
+    }
+
+    console.error("Component ID is missing:", c);
+
+    return null;
+  };
+
+  // =====================================================
+  // UPDATE QUANTITY FROM CART
+  // =====================================================
+
+  const updateQuantityFromCart = (cart: any) => {
+    if (!cart?.items) {
+      setQuantity(0);
+      return;
+    }
+
+    const componentId = getComponentId();
+
+    if (!componentId) {
+      return;
+    }
+
+    const item = cart.items.find((item: any) => {
+      const itemId =
+        item.componentId?._id ||
+        item.componentId;
+
+      return itemId?.toString() === componentId.toString();
+    });
+
+    setQuantity(item ? item.quantity : 0);
+  };
+
+  // =====================================================
+  // REAL-TIME CART UPDATE
+  // =====================================================
+
+  useEffect(() => {
+    const handleCartUpdated = (cart: any) => {
+      updateQuantityFromCart(cart);
+    };
+
+    socket.on("cart:updated", handleCartUpdated);
+
+    return () => {
+      socket.off("cart:updated", handleCartUpdated);
+    };
+  }, [c._id]);
+
+  // =====================================================
+  // ADD TO CART
+  // =====================================================
+
+  const handleAddToCart = async () => {
+    const token = getToken();
+
+    if (!token) {
+      alert("Please login first.");
+      return;
+    }
+
+    if (isOutOfStock) {
+      return;
+    }
+
+    const componentId = getComponentId();
+
+    if (!componentId) {
+      alert("Component ID is missing.");
+      console.error("Component ID is missing:", c);
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const response = await fetch(
+        `${BASE_URL}/engineering/addtocart`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+
+          body: JSON.stringify({
+            componentId: componentId,
+            quantity: 1,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to add item to cart"
+        );
+      }
+
+      updateQuantityFromCart(data);
+    } catch (error: any) {
+      console.error("Add to cart error:", error);
+
+      alert(
+        error?.message || "Failed to add item to cart"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // INCREASE QUANTITY
+  // =====================================================
+
+  const handleIncrease = async () => {
+    const token = getToken();
+
+    if (!token) {
+      alert("Please login first.");
+      return;
+    }
+
+    if (quantity >= c.stock) {
+      return;
+    }
+
+    const componentId = getComponentId();
+
+    if (!componentId) {
+      alert("Component ID is missing.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const response = await fetch(
+        `${BASE_URL}/engineering/addtocart`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+
+          body: JSON.stringify({
+            componentId: componentId,
+            quantity: 1,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to increase quantity"
+        );
+      }
+
+      updateQuantityFromCart(data);
+    } catch (error: any) {
+      console.error(
+        "Increase quantity error:",
+        error
+      );
+
+      alert(
+        error?.message ||
+          "Failed to increase quantity"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // DECREASE QUANTITY
+  // =====================================================
+
+  const handleDecrease = async () => {
+    const token = getToken();
+
+    if (!token) {
+      alert("Please login first.");
+      return;
+    }
+
+    if (quantity <= 0) {
+      return;
+    }
+
+    const componentId = getComponentId();
+
+    if (!componentId) {
+      alert("Component ID is missing.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // =================================================
+      // REMOVE COMPLETELY
+      // =================================================
+
+      if (quantity === 1) {
+        const response = await fetch(
+          `${BASE_URL}/engineering/cart/${componentId}`,
+          {
+            method: "DELETE",
+
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Failed to remove item"
+          );
+        }
+
+        updateQuantityFromCart(data);
+
+        return;
+      }
+
+      // =================================================
+      // DECREASE BY 1
+      // =================================================
+
+      const newQuantity = quantity - 1;
+
+      const response = await fetch(
+        `${BASE_URL}/engineering/cart/${componentId}`,
+        {
+          method: "PUT",
+
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+
+          body: JSON.stringify({
+            quantity: newQuantity,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Failed to decrease quantity"
+        );
+      }
+
+      updateQuantityFromCart(data);
+    } catch (error: any) {
+      console.error(
+        "Decrease quantity error:",
+        error
+      );
+
+      alert(
+        error?.message ||
+          "Failed to decrease quantity"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // UI
+  // =====================================================
+
   return (
     <motion.article
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{
+        opacity: 0,
+        y: 20,
+      }}
+      animate={{
+        opacity: 1,
+        y: 0,
+      }}
       transition={{
         duration: 0.4,
         delay: index * 0.05,
       }}
-      whileHover={{ y: -6 }}
-      className="group relative overflow-hidden rounded border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl"
+      whileHover={{
+        y: -6,
+      }}
+      className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl"
     >
       {/* IMAGE */}
+
       <div className="relative h-66 overflow-hidden bg-slate-50">
         {c.image ? (
           <img
@@ -35,19 +365,27 @@ export function ComponentCard({
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center text-slate-400">
-            <Package className="mb-2 h-12 w-12" strokeWidth={1.5} />
-            <span className="text-sm">No image available</span>
+            <Package
+              className="mb-2 h-12 w-12"
+              strokeWidth={1.5}
+            />
+
+            <span className="text-sm">
+              No image available
+            </span>
           </div>
         )}
 
         {/* CATEGORY */}
+
         <div className="absolute left-4 top-4">
           <span className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur">
             {c.category}
           </span>
         </div>
 
-        {/* STOCK BADGE */}
+        {/* STOCK */}
+
         <div className="absolute right-4 top-4">
           {isOutOfStock ? (
             <span className="rounded-full bg-red-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm">
@@ -64,7 +402,8 @@ export function ComponentCard({
           )}
         </div>
 
-        {/* VIEW BUTTON */}
+        {/* VIEW */}
+
         <button
           type="button"
           className="absolute bottom-4 right-4 flex h-10 w-10 translate-y-2 items-center justify-center rounded-full bg-white text-slate-700 opacity-0 shadow-md transition-all duration-300 hover:bg-brand-navy hover:text-white group-hover:translate-y-0 group-hover:opacity-100"
@@ -75,24 +414,29 @@ export function ComponentCard({
       </div>
 
       {/* CONTENT */}
-      <div className="p-2 mx-2 mb-4 mt-3">
+
+      <div className="mx-2 mb-4 mt-3 p-2">
         {/* SKU */}
+
         <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
           SKU: {c.sku}
         </p>
 
         {/* NAME */}
+
         <h3 className="line-clamp-1 text-lg font-bold text-slate-900 transition-colors group-hover:text-brand-navy">
           {c.name}
         </h3>
 
         {/* DESCRIPTION */}
+
         <p className="mt-2 line-clamp-2 min-h-[40px] text-sm leading-5 text-slate-500">
           {c.description}
         </p>
 
-        {/* FOOTER */}
-        <div className="mt-0 flex items-end justify-between gap-4">
+        {/* PRICE / STOCK */}
+
+        <div className="mt-3 flex items-end justify-between gap-4">
           <div>
             <p className="text-xs font-medium text-slate-400">
               Price
@@ -122,16 +466,74 @@ export function ComponentCard({
           </div>
         </div>
 
-        {/* ACTION */}
-        <button
-          type="button"
-          disabled={isOutOfStock}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-navy/90 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-        >
-          <ShoppingCart className="h-4 w-4" />
+        {/* CART */}
 
-          {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-        </button>
+        {quantity === 0 ? (
+          <button
+            type="button"
+            disabled={
+              isOutOfStock || loading
+            }
+            onClick={handleAddToCart}
+            className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-navy/90 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Adding...
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="h-4 w-4" />
+
+                {isOutOfStock
+                  ? "Out of Stock"
+                  : "Add to Cart"}
+              </>
+            )}
+          </button>
+        ) : (
+          <div className="mt-5 flex h-12 w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {/* MINUS */}
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={handleDecrease}
+              className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Decrease quantity"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+
+            {/* QUANTITY */}
+
+            <div className="flex flex-col items-center">
+              <span className="text-base font-bold text-brand-navy">
+                {quantity}
+              </span>
+
+              <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                In cart
+              </span>
+            </div>
+
+            {/* PLUS */}
+
+            <button
+              type="button"
+              disabled={
+                loading ||
+                quantity >= c.stock
+              }
+              onClick={handleIncrease}
+              className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Increase quantity"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </motion.article>
   );

@@ -92,7 +92,9 @@ function normalizeComponent(
   component: BackendComponent
 ): Component {
   return {
-    id: component._id ?? component.sku,
+    id: component._id,
+    _id: component._id,
+
     sku: component.sku,
     name: component.name,
     category: component.category,
