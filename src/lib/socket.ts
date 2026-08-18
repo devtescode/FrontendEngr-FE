@@ -3,6 +3,6 @@ import { io } from "socket.io-client";
 const SOCKET_URL = "http://localhost:4500";
 
 export const socket = io(SOCKET_URL, {
-  transports: ["websocket"],
   autoConnect: true,
+  transports: ["websocket"],
 });
