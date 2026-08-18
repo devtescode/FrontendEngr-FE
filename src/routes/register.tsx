@@ -15,7 +15,8 @@ import {
   Hash,
   Lock,
   Users,
-  Phone
+  Phone,
+  Loader2
 } from "lucide-react";
 
 export const Route = createFileRoute("/register")({
@@ -36,30 +37,36 @@ function RegisterPage() {
   const [password, setPassword] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
   e.preventDefault();
   setError(null);
+  setLoading(true);
 
   const formattedMatric = matric.trim().toUpperCase();
 
   const matricRegex = /^EU\d{6}-\d{4}$/i;
 
   if (!matricRegex.test(formattedMatric)) {
+    setLoading(false);
     return setError(
       "Matric number must be in the format EU250102-4768"
     );
   }
 
   if (!phoneNumber.trim()) {
+    setLoading(false);
     return setError("Phone number is required.");
   }
 
   if (!gender) {
+    setLoading(false);
     return setError("Please select your gender.");
   }
 
   if (password.length < 6) {
+    setLoading(false);
     return setError("Password must be at least 6 characters.");
   }
 
@@ -85,11 +92,13 @@ function RegisterPage() {
     const data = await response.json();
 
     if (!response.ok) {
+      setLoading(false);
       return setError(data.message || "Registration failed");
     }
 
     navigate({ to: "/login" });
   } catch (error) {
+    setLoading(false);
     setError("Unable to connect to server");
   }
 };
@@ -184,9 +193,21 @@ function RegisterPage() {
 
           <button
             type="submit"
-            className="w-full h-12 rounded-lg bg-brand-navy text-white font-semibold hover:bg-slate-800 transition-colors active:scale-[0.98]"
+            disabled={loading}
+            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+              loading
+                ? "bg-slate-400 text-white cursor-not-allowed"
+                : "bg-brand-navy text-white hover:bg-slate-800"
+            }`}
           >
-            Create Account
+            {loading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>Creating Account...</span>
+              </>
+            ) : (
+              "Create Account"
+            )}
           </button>
         </form>
 
