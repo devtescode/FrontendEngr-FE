@@ -7,12 +7,19 @@ import {
   Loader2,
   ShoppingCart,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
 
 const BASE_URL = "http://localhost:4500";
+
+const CART_STORAGE_KEY = "pulselab_cart";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({
@@ -52,47 +59,90 @@ type CartData = {
 // =====================================================
 
 function CartPage() {
-  const [cart, setCart] = useState<CartData>({
-    items: [],
+  // ===================================================
+  // INITIAL CART
+  // ===================================================
+  //
+  // IMPORTANT:
+  // We load the previous cart from localStorage
+  // immediately.
+  //
+  // This prevents:
+  //
+  // "Your cart is empty"
+  //
+  // from flashing before the backend responds.
+  //
+  const [cart, setCart] = useState<CartData>(() => {
+    try {
+      const savedCart =
+        localStorage.getItem(CART_STORAGE_KEY);
+
+      if (savedCart) {
+        const parsedCart = JSON.parse(savedCart);
+
+        if (
+          parsedCart &&
+          Array.isArray(parsedCart.items)
+        ) {
+          return parsedCart;
+        }
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load saved cart:",
+        error
+      );
+    }
+
+    return {
+      items: [],
+    };
   });
 
-  const [loading, setLoading] = useState(true);
+  // ===================================================
+  // UPDATE STATE
+  // ===================================================
+  //
+  // This is ONLY used when the user clicks +, -, delete.
+  //
+  // It is NOT used when entering the page.
+  //
+  const [updating, setUpdating] =
+    useState<string | null>(null);
 
-  const [updating, setUpdating] = useState<string | null>(null);
+  // ===================================================
+  // PREVENT DUPLICATE FETCH
+  // ===================================================
 
-  // =====================================================
+  const hasFetched = useRef(false);
+
+  // ===================================================
   // GET TOKEN
-  // =====================================================
+  // ===================================================
 
   const getToken = () => {
-    return sessionStorage.getItem("pulselab_token");
+    return sessionStorage.getItem(
+      "pulselab_token"
+    );
   };
 
-  // =====================================================
-  // NORMALIZE CART RESPONSE
-  //
-  // This protects the frontend if the backend returns:
-  //
-  // { items: [...] }
-  //
-  // OR
-  //
-  // { cart: { items: [...] } }
-  //
-  // OR
-  //
-  // [...]
-  // =====================================================
+  // ===================================================
+  // NORMALIZE CART
+  // ===================================================
 
-  const normalizeCart = (data: any): CartData => {
+  const normalizeCart = (
+    data: any
+  ): CartData => {
     if (!data) {
       return {
         items: [],
       };
     }
 
-    // Backend returns:
+    // Backend:
     // { items: [...] }
+
     if (Array.isArray(data.items)) {
       return {
         ...data,
@@ -100,44 +150,84 @@ function CartPage() {
       };
     }
 
-    // Backend returns:
+    // Backend:
     // { cart: { items: [...] } }
-    if (data.cart && Array.isArray(data.cart.items)) {
+
+    if (
+      data.cart &&
+      Array.isArray(data.cart.items)
+    ) {
       return {
         ...data.cart,
         items: data.cart.items,
       };
     }
 
-    // Backend returns array directly
+    // Backend:
+    // [...]
+
     if (Array.isArray(data)) {
       return {
         items: data,
       };
     }
 
-    // Anything unexpected
     return {
       items: [],
     };
   };
 
-  // =====================================================
+  // ===================================================
+  // SAVE CART LOCALLY
+  // ===================================================
+  //
+  // Every time we receive the latest cart,
+  // save it locally.
+  //
+  // Next time the user opens /cart,
+  // the cart is available immediately.
+  //
+  const saveCartLocally = (
+    updatedCart: CartData
+  ) => {
+    try {
+      localStorage.setItem(
+        CART_STORAGE_KEY,
+        JSON.stringify(updatedCart)
+      );
+    } catch (error) {
+      console.error(
+        "Failed to save cart locally:",
+        error
+      );
+    }
+  };
+
+  // ===================================================
+  // UPDATE CART
+  // ===================================================
+  //
+  // One function handles both:
+  //
+  // 1. React state
+  // 2. Local storage
+  //
+  const updateCart = (
+    updatedCart: CartData
+  ) => {
+    setCart(updatedCart);
+
+    saveCartLocally(updatedCart);
+  };
+
+  // ===================================================
   // GET COMPONENT ID
-  //
-  // componentId can either be:
-  //
-  // {
-  //   _id: "..."
-  // }
-  //
-  // OR
-  //
-  // "..."
-  // =====================================================
+  // ===================================================
 
   const getComponentId = (
-    componentId: ComponentData | string
+    componentId:
+      | ComponentData
+      | string
   ): string => {
     if (typeof componentId === "string") {
       return componentId;
@@ -146,24 +236,36 @@ function CartPage() {
     return componentId?._id || "";
   };
 
-  // =====================================================
-  // FETCH CART FROM DATABASE
-  // =====================================================
-
-  const fetchCart = async () => {
+  // ===================================================
+  // FETCH CART SILENTLY
+  // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // There is NO loading state here.
+  //
+  // The page already has the cached cart.
+  //
+  // The backend request happens in the background.
+  //
+  const fetchCartSilently = async () => {
     const token = getToken();
 
     if (!token) {
-      setCart({
-        items: [],
-      });
-
-      setLoading(false);
       return;
     }
 
+    const controller =
+      new AbortController();
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 10000);
+
     try {
-      setLoading(true);
+      console.log(
+        "🛒 SILENTLY FETCHING CART..."
+      );
 
       const response = await fetch(
         `${BASE_URL}/engineering/cart`,
@@ -172,56 +274,127 @@ function CartPage() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          signal: controller.signal,
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
-      console.log("GET CART RESPONSE:", data);
+      console.log(
+        "🛒 GET CART RESPONSE:",
+        data
+      );
 
       if (!response.ok) {
         throw new Error(
-          data?.message || "Failed to load cart"
+          data?.message ||
+            "Failed to load cart"
         );
       }
 
-      const normalizedCart = normalizeCart(data);
+      const normalizedCart =
+        normalizeCart(data);
 
-      setCart(normalizedCart);
-    } catch (error) {
-      console.error("Fetch cart error:", error);
+      console.log(
+        "🛒 SILENT CART:",
+        normalizedCart
+      );
 
-      setCart({
-        items: [],
-      });
+      // Update only when backend responds.
+      updateCart(normalizedCart);
+    } catch (error: any) {
+      if (
+        error?.name ===
+        "AbortError"
+      ) {
+        console.error(
+          "🛒 Silent cart request timed out."
+        );
+      } else {
+        console.error(
+          "🛒 Silent cart fetch error:",
+          error
+        );
+      }
+
+      // IMPORTANT:
+      //
+      // Do NOT clear the existing cart here.
+      //
+      // If the network temporarily fails,
+      // keep showing the cached cart.
     } finally {
-      setLoading(false);
+      clearTimeout(timeout);
     }
   };
 
-  // =====================================================
-  // LOAD CART WHEN PAGE OPENS
-  // =====================================================
+  // ===================================================
+  // LOAD CART SILENTLY
+  // ===================================================
 
   useEffect(() => {
-    fetchCart();
+    if (hasFetched.current) {
+      return;
+    }
+
+    hasFetched.current = true;
+
+    // The page is already displaying the cached cart.
+    // This request happens silently in the background.
+    fetchCartSilently();
   }, []);
 
-  // =====================================================
+  // ===================================================
   // REAL-TIME CART UPDATE
-  // =====================================================
+  // ===================================================
 
   useEffect(() => {
-    const handleCartUpdated = (updatedCart: any) => {
+    const handleCartUpdated = (
+      updatedCart: any
+    ) => {
       console.log(
-        "REAL-TIME CART UPDATE:",
+        "🛒🔥 REAL-TIME CART UPDATE:",
         updatedCart
       );
 
       const normalizedCart =
         normalizeCart(updatedCart);
 
-      setCart(normalizedCart);
+      // Immediately update UI + cache.
+      updateCart(normalizedCart);
+    };
+
+    const handleConnect = () => {
+      console.log(
+        "🟢 Cart socket connected:",
+        socket.id
+      );
+
+      // =================================================
+      // ASK SERVER FOR CURRENT CART
+      // =================================================
+      //
+      // Your backend should listen for:
+      //
+      // "cart:request"
+      //
+      // and respond with:
+      //
+      // "cart:updated"
+      //
+      // containing the user's current cart.
+      //
+      socket.emit("cart:request");
+    };
+
+    const handleDisconnect = (
+      reason: string
+    ) => {
+      console.log(
+        "🔴 Cart socket disconnected:",
+        reason
+      );
     };
 
     socket.on(
@@ -229,17 +402,48 @@ function CartPage() {
       handleCartUpdated
     );
 
+    socket.on(
+      "connect",
+      handleConnect
+    );
+
+    socket.on(
+      "disconnect",
+      handleDisconnect
+    );
+
+    // Socket might already be connected.
+    if (socket.connected) {
+      console.log(
+        "🟢 Socket already connected:",
+        socket.id
+      );
+
+      // Ask for latest cart.
+      socket.emit("cart:request");
+    }
+
     return () => {
       socket.off(
         "cart:updated",
         handleCartUpdated
       );
+
+      socket.off(
+        "connect",
+        handleConnect
+      );
+
+      socket.off(
+        "disconnect",
+        handleDisconnect
+      );
     };
   }, []);
 
-  // =====================================================
+  // ===================================================
   // REMOVE ITEM
-  // =====================================================
+  // ===================================================
 
   const removeItem = async (
     componentId: string
@@ -252,11 +456,9 @@ function CartPage() {
     }
 
     if (!componentId) {
-      console.error(
-        "Cannot remove item: Component ID is missing"
+      alert(
+        "Component ID is missing."
       );
-
-      alert("Component ID is missing.");
       return;
     }
 
@@ -273,10 +475,11 @@ function CartPage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       console.log(
-        "REMOVE CART RESPONSE:",
+        "🗑️ REMOVE CART RESPONSE:",
         data
       );
 
@@ -290,7 +493,7 @@ function CartPage() {
       const normalizedCart =
         normalizeCart(data);
 
-      setCart(normalizedCart);
+      updateCart(normalizedCart);
     } catch (error: any) {
       console.error(
         "Remove cart item error:",
@@ -306,9 +509,9 @@ function CartPage() {
     }
   };
 
-  // =====================================================
+  // ===================================================
   // INCREASE QUANTITY
-  // =====================================================
+  // ===================================================
 
   const increaseQuantity = async (
     item: CartItem
@@ -320,24 +523,27 @@ function CartPage() {
       return;
     }
 
-    const componentId = getComponentId(
-      item.componentId
-    );
-
-    if (!componentId) {
-      console.error(
-        "Cannot increase quantity: Component ID is missing",
-        item
+    const componentId =
+      getComponentId(
+        item.componentId
       );
 
-      alert("Component ID is missing.");
+    if (!componentId) {
+      alert(
+        "Component ID is missing."
+      );
       return;
     }
 
-    // If populated object
+    // =================================================
+    // CHECK STOCK
+    // =================================================
+
     if (
-      typeof item.componentId !== "string" &&
-      item.componentId.stock !== undefined
+      typeof item.componentId !==
+        "string" &&
+      item.componentId.stock !==
+        undefined
     ) {
       if (
         item.quantity >=
@@ -355,20 +561,22 @@ function CartPage() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            componentId: componentId,
+            componentId,
             quantity: 1,
           }),
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       console.log(
-        "INCREASE CART RESPONSE:",
+        "➕ INCREASE CART RESPONSE:",
         data
       );
 
@@ -382,7 +590,7 @@ function CartPage() {
       const normalizedCart =
         normalizeCart(data);
 
-      setCart(normalizedCart);
+      updateCart(normalizedCart);
     } catch (error: any) {
       console.error(
         "Increase quantity error:",
@@ -398,9 +606,9 @@ function CartPage() {
     }
   };
 
-  // =====================================================
+  // ===================================================
   // DECREASE QUANTITY
-  // =====================================================
+  // ===================================================
 
   const decreaseQuantity = async (
     item: CartItem
@@ -412,44 +620,43 @@ function CartPage() {
       return;
     }
 
-    const componentId = getComponentId(
-      item.componentId
-    );
-
-    if (!componentId) {
-      console.error(
-        "Cannot decrease quantity: Component ID is missing",
-        item
+    const componentId =
+      getComponentId(
+        item.componentId
       );
 
-      alert("Component ID is missing.");
+    if (!componentId) {
+      alert(
+        "Component ID is missing."
+      );
       return;
     }
 
     try {
       setUpdating(componentId);
 
-      // ================================================
-      // IF QUANTITY IS 1
+      // =================================================
+      // QUANTITY = 1
       // REMOVE ITEM
-      // ================================================
+      // =================================================
 
       if (item.quantity <= 1) {
-        const response = await fetch(
-          `${BASE_URL}/engineering/cart/${componentId}`,
-          {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        const response =
+          await fetch(
+            `${BASE_URL}/engineering/cart/${componentId}`,
+            {
+              method: "DELETE",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
 
         const data =
           await response.json();
 
         console.log(
-          "REMOVE FROM DECREASE RESPONSE:",
+          "🗑️ REMOVE FROM DECREASE:",
           data
         );
 
@@ -463,36 +670,40 @@ function CartPage() {
         const normalizedCart =
           normalizeCart(data);
 
-        setCart(normalizedCart);
+        updateCart(normalizedCart);
 
         return;
       }
 
-      // ================================================
+      // =================================================
       // DECREASE BY 1
-      // ================================================
+      // =================================================
 
       const newQuantity =
         item.quantity - 1;
 
-      const response = await fetch(
-        `${BASE_URL}/engineering/cart/${componentId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            quantity: newQuantity,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          `${BASE_URL}/engineering/cart/${componentId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              quantity:
+                newQuantity,
+            }),
+          }
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       console.log(
-        "DECREASE CART RESPONSE:",
+        "➖ DECREASE CART RESPONSE:",
         data
       );
 
@@ -506,7 +717,7 @@ function CartPage() {
       const normalizedCart =
         normalizeCart(data);
 
-      setCart(normalizedCart);
+      updateCart(normalizedCart);
     } catch (error: any) {
       console.error(
         "Decrease quantity error:",
@@ -522,12 +733,16 @@ function CartPage() {
     }
   };
 
-  // =====================================================
-  // TOTAL
-  // =====================================================
+  // ===================================================
+  // TOTAL PRICE
+  // ===================================================
 
   const total = useMemo(() => {
-    if (!Array.isArray(cart?.items)) {
+    if (
+      !Array.isArray(
+        cart?.items
+      )
+    ) {
       return 0;
     }
 
@@ -538,16 +753,21 @@ function CartPage() {
 
         if (
           !component ||
-          typeof component === "string"
+          typeof component ===
+            "string"
         ) {
           return sum;
         }
 
         const price =
-          Number(component.price) || 0;
+          Number(
+            component.price
+          ) || 0;
 
         const quantity =
-          Number(item.quantity) || 0;
+          Number(
+            item.quantity
+          ) || 0;
 
         return (
           sum +
@@ -558,25 +778,33 @@ function CartPage() {
     );
   }, [cart]);
 
-  // =====================================================
+  // ===================================================
   // TOTAL QUANTITY
-  // =====================================================
+  // ===================================================
 
-  const totalQuantity = useMemo(() => {
-    if (!Array.isArray(cart?.items)) {
-      return 0;
-    }
+  const totalQuantity =
+    useMemo(() => {
+      if (
+        !Array.isArray(
+          cart?.items
+        )
+      ) {
+        return 0;
+      }
 
-    return cart.items.reduce(
-      (sum, item) =>
-        sum + (Number(item.quantity) || 0),
-      0
-    );
-  }, [cart]);
+      return cart.items.reduce(
+        (sum, item) =>
+          sum +
+          (Number(
+            item.quantity
+          ) || 0),
+        0
+      );
+    }, [cart]);
 
-  // =====================================================
+  // ===================================================
   // FORMAT NAIRA
-  // =====================================================
+  // ===================================================
 
   const formatNaira = (
     amount: number
@@ -586,44 +814,26 @@ function CartPage() {
     )}`;
   };
 
-  // =====================================================
-  // LOADING
-  // =====================================================
+  // ===================================================
+  // SAFE CART ITEMS
+  // ===================================================
 
-  if (loading) {
-    return (
-      <AppShell>
-        <div className="mx-auto flex max-w-5xl items-center justify-center px-6 py-32">
-          <div className="flex items-center gap-3 text-slate-500">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Loading cart...
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
+  const cartItems =
+    Array.isArray(
+      cart?.items
+    )
+      ? cart.items
+      : [];
 
-  // =====================================================
-  // SAFE ITEMS
-  // =====================================================
-
-  const cartItems = Array.isArray(
-    cart?.items
-  )
-    ? cart.items
-    : [];
-
-  // =====================================================
+  // ===================================================
   // PAGE
-  // =====================================================
+  // ===================================================
 
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-12">
 
-        {/* ============================================
-            HEADER
-        ============================================ */}
+        {/* HEADER */}
 
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-brand-navy">
@@ -639,9 +849,31 @@ function CartPage() {
           </p>
         </div>
 
-        {/* ============================================
+        {/* =================================================
+            IMPORTANT
+
+            There is NO loading cart here.
+
+            There is also NO "Updating cart..."
+            when the page first opens.
+
+            Updating only appears when the user
+            actually clicks +, -, or delete.
+        ================================================= */}
+
+        {updating && (
+          <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
+            <Loader2 className="size-4 animate-spin" />
+
+            <span>
+              Updating cart...
+            </span>
+          </div>
+        )}
+
+        {/* =================================================
             EMPTY CART
-        ============================================ */}
+        ================================================= */}
 
         {cartItems.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center">
@@ -653,7 +885,8 @@ function CartPage() {
             </h2>
 
             <p className="mt-2 text-slate-500">
-              You haven't added any components yet.
+              You haven't added any
+              components yet.
             </p>
 
             <Link
@@ -666,27 +899,25 @@ function CartPage() {
           </div>
         ) : (
 
-          /* ==========================================
+          /* =================================================
              CART + SUMMARY
-          ========================================== */
+          ================================================= */
 
           <div className="grid gap-8 lg:grid-cols-3">
 
-            {/* ========================================
-                CART ITEMS
-            ======================================== */}
+            {/* CART ITEMS */}
 
             <div className="space-y-3 lg:col-span-2">
 
               <AnimatePresence mode="popLayout">
 
                 {cartItems.map(
-                  (item, index) => {
+                  (
+                    item,
+                    index
+                  ) => {
 
-                    /*
-                     * Make sure componentId
-                     * is populated.
-                     */
+                    // Make sure component is populated.
 
                     if (
                       !item.componentId ||
@@ -702,7 +933,9 @@ function CartPage() {
                     const componentId =
                       component._id;
 
-                    if (!componentId) {
+                    if (
+                      !componentId
+                    ) {
                       return null;
                     }
 
@@ -737,9 +970,7 @@ function CartPage() {
                         className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"
                       >
 
-                        {/* =================================
-                            IMAGE
-                        ================================= */}
+                        {/* IMAGE */}
 
                         <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-50">
 
@@ -761,9 +992,7 @@ function CartPage() {
 
                         </div>
 
-                        {/* =================================
-                            DETAILS
-                        ================================= */}
+                        {/* DETAILS */}
 
                         <div className="min-w-0 flex-1">
 
@@ -791,9 +1020,7 @@ function CartPage() {
 
                         </div>
 
-                        {/* =================================
-                            QUANTITY
-                        ================================= */}
+                        {/* QUANTITY */}
 
                         <div className="flex items-center self-start rounded-lg border border-slate-200 sm:self-auto">
 
@@ -849,9 +1076,7 @@ function CartPage() {
 
                         </div>
 
-                        {/* =================================
-                            PRICE
-                        ================================= */}
+                        {/* PRICE */}
 
                         <div className="w-full text-left font-bold text-brand-navy sm:w-28 sm:text-right">
                           {formatNaira(
@@ -859,9 +1084,7 @@ function CartPage() {
                           )}
                         </div>
 
-                        {/* =================================
-                            DELETE
-                        ================================= */}
+                        {/* DELETE */}
 
                         <button
                           type="button"
@@ -888,17 +1111,13 @@ function CartPage() {
 
             </div>
 
-            {/* ==========================================
-                ORDER SUMMARY
-            ========================================== */}
+            {/* ORDER SUMMARY */}
 
             <div className="sticky top-24 h-fit rounded-2xl border border-slate-200 bg-white p-6">
 
               <h3 className="mb-4 font-mono text-[10px] uppercase tracking-widest text-slate-400">
                 Order Summary
               </h3>
-
-              {/* SUBTOTAL */}
 
               <div className="space-y-2 text-sm">
 
@@ -918,7 +1137,9 @@ function CartPage() {
                   </span>
 
                   <span className="font-semibold">
-                    {formatNaira(total)}
+                    {formatNaira(
+                      total
+                    )}
                   </span>
                 </div>
 
@@ -954,7 +1175,9 @@ function CartPage() {
                   }}
                   className="font-bold text-brand-navy"
                 >
-                  {formatNaira(total)}
+                  {formatNaira(
+                    total
+                  )}
                 </motion.span>
 
               </div>

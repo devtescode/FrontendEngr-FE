@@ -24,7 +24,7 @@ export const connectUserSocket = () => {
   const token = sessionStorage.getItem("pulselab_token");
 
   if (!token) {
-    console.log("No token found for socket");
+    console.log("❌ No token found for socket");
     return;
   }
 
@@ -37,23 +37,31 @@ export const connectUserSocket = () => {
       decoded.userId;
 
     if (!userId) {
-      console.error("User ID not found in token");
+      console.log("❌ No userId found in token");
       return;
     }
 
-    if (!socket.connected) {
-      socket.connect();
+    const joinRoom = () => {
+      console.log(
+        "👤 Joining socket room:",
+        `user:${userId}`
+      );
+
+      socket.emit("user:join", {
+        userId,
+      });
+    };
+
+    if (socket.connected) {
+      joinRoom();
+    } else {
+      socket.once("connect", joinRoom);
     }
 
-    socket.emit("join-user", userId);
-
-    console.log(
-      "Joined socket room:",
-      `user:${userId}`
-    );
+    console.log("🟢 Socket user:", userId);
   } catch (error) {
     console.error(
-      "Failed to decode socket token:",
+      "❌ Failed to decode socket token:",
       error
     );
   }

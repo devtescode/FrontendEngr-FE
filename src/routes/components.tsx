@@ -28,10 +28,6 @@ export const Route = createFileRoute("/components")({
     ],
   }),
 
-  // component: ComponentsLayout,
-
-
-
   component: () => (
     <RequireAuth role="student">
       <ComponentsLayout />
@@ -109,8 +105,6 @@ function normalizeComponent(
 function CatalogIndex() {
   const [components, setComponents] = useState<Component[]>([]);
 
-  const [loading, setLoading] = useState(true);
-
   const [error, setError] = useState("");
 
   const [q, setQ] = useState("");
@@ -121,69 +115,28 @@ function CatalogIndex() {
   const [sort, setSort] =
     useState<(typeof SORTS)[number]["id"]>("popular");
 
-
   /*
    * =====================================================
-   * LOAD FROM LOCAL STORAGE FIRST
+   * FETCH COMPONENTS
    * =====================================================
    */
 
   useEffect(() => {
-    const saved = localStorage.getItem(
-      "pulselab-components"
-    );
-
-    if (saved) {
-      try {
-        const cached = JSON.parse(saved);
-
-        setComponents(cached);
-
-        // We already have the data.
-        setLoading(false);
-
-        return;
-      } catch (error) {
-        console.error(
-          "Invalid cached components:",
-          error
-        );
-
-        localStorage.removeItem(
-          "pulselab-components"
-        );
-      }
-    }
-
-
-    /*
-     * ===================================================
-     * NO CACHE
-     *
-     * Get components from backend once.
-     * ===================================================
-     */
+    let mounted = true;
 
     const fetchComponents = async () => {
       try {
-        setLoading(true);
         setError("");
 
-        const response =
-          await componentApi.getAll();
+        const response = await componentApi.getAll();
 
-        const normalized =
-          response.map(normalizeComponent);
+        if (!mounted) return;
+
+        const normalized = response.map(normalizeComponent);
 
         setComponents(normalized);
-
-        // Save for future reloads
-        localStorage.setItem(
-          "pulselab-components",
-          JSON.stringify(normalized)
-        );
-
       } catch (error: any) {
+        if (!mounted) return;
 
         console.error(
           "Failed to fetch components:",
@@ -192,35 +145,17 @@ function CatalogIndex() {
 
         setError(
           error?.message ||
-          "Failed to load components"
+            "Failed to load components"
         );
-
-      } finally {
-        setLoading(false);
       }
     };
 
     fetchComponents();
 
+    return () => {
+      mounted = false;
+    };
   }, []);
-
-
-  /*
-   * =====================================================
-   * EVERY TIME COMPONENTS CHANGE,
-   * UPDATE LOCAL STORAGE
-   * =====================================================
-   */
-
-  useEffect(() => {
-    if (components.length === 0) return;
-
-    localStorage.setItem(
-      "pulselab-components",
-      JSON.stringify(components)
-    );
-  }, [components]);
-
 
   /*
    * =====================================================
@@ -229,20 +164,16 @@ function CatalogIndex() {
    */
 
   useEffect(() => {
-
     console.log(
       "Connecting to component realtime events..."
     );
 
-
     /*
      * ADMIN CREATED COMPONENT
      */
-
     const handleCreated = (
       component: BackendComponent
     ) => {
-
       console.log(
         "Component created:",
         component
@@ -252,7 +183,6 @@ function CatalogIndex() {
         normalizeComponent(component);
 
       setComponents((current) => {
-
         const exists = current.some(
           (item) =>
             item.id === normalized.id
@@ -269,15 +199,12 @@ function CatalogIndex() {
       });
     };
 
-
     /*
      * ADMIN UPDATED COMPONENT
      */
-
     const handleUpdated = (
       component: BackendComponent
     ) => {
-
       console.log(
         "Component updated:",
         component
@@ -295,15 +222,12 @@ function CatalogIndex() {
       );
     };
 
-
     /*
      * ADMIN DELETED COMPONENT
      */
-
     const handleDeleted = (
       component: BackendComponent
     ) => {
-
       console.log(
         "Component deleted:",
         component
@@ -320,11 +244,9 @@ function CatalogIndex() {
       );
     };
 
-
     /*
      * LISTEN
      */
-
     socket.on(
       "component:created",
       handleCreated
@@ -340,13 +262,10 @@ function CatalogIndex() {
       handleDeleted
     );
 
-
     /*
      * CLEANUP
      */
-
     return () => {
-
       socket.off(
         "component:created",
         handleCreated
@@ -361,11 +280,8 @@ function CatalogIndex() {
         "component:deleted",
         handleDeleted
       );
-
     };
-
   }, []);
-
 
   /*
    * =====================================================
@@ -374,10 +290,8 @@ function CatalogIndex() {
    */
 
   const filtered = useMemo(() => {
-
     let result = components.filter(
       (component) => {
-
         const matchesCategory =
           cat === "All" ||
           component.category === cat;
@@ -404,13 +318,11 @@ function CatalogIndex() {
       }
     );
 
-
     if (sort === "price-asc") {
       result = [...result].sort(
         (a, b) => a.price - b.price
       );
     }
-
 
     if (sort === "price-desc") {
       result = [...result].sort(
@@ -418,23 +330,19 @@ function CatalogIndex() {
       );
     }
 
-
     if (sort === "popular") {
       result = [...result].sort(
         (a, b) => b.stock - a.stock
       );
     }
 
-
     return result;
-
   }, [
     components,
     q,
     cat,
     sort,
   ]);
-
 
   /*
    * =====================================================
@@ -444,7 +352,6 @@ function CatalogIndex() {
 
   return (
     <AppShell>
-
       <div className="mx-auto max-w-7xl px-6 py-12">
 
         <motion.div
@@ -458,25 +365,21 @@ function CatalogIndex() {
           }}
           className="mb-8"
         >
-
           <h1 className="text-4xl font-bold text-brand-navy">
             Component Catalog
           </h1>
 
           <p className="text-slate-500 mt-2">
-            {filtered.length} item
-            {filtered.length !== 1 && "s"} available.
+            {components.length} item
+            {components.length !== 1 && "s"} available.
           </p>
-
         </motion.div>
-
 
         {error && (
           <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-600">
             {error}
           </div>
         )}
-
 
         <div className="flex flex-col md:flex-row gap-4 mb-8">
 
@@ -489,7 +392,6 @@ function CatalogIndex() {
             className="flex-1 h-11 px-4 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
           />
 
-
           <select
             value={sort}
             onChange={(e) =>
@@ -499,7 +401,6 @@ function CatalogIndex() {
             }
             className="h-11 px-3 rounded-lg border border-slate-200 bg-white"
           >
-
             {SORTS.map((s) => (
               <option
                 key={s.id}
@@ -508,68 +409,47 @@ function CatalogIndex() {
                 {s.label}
               </option>
             ))}
-
           </select>
-
         </div>
 
-
         <div className="flex flex-wrap gap-2 mb-10">
-
           {CATEGORIES.map((category) => (
-
             <button
               key={category}
               onClick={() =>
                 setCat(category)
               }
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${cat === category
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                cat === category
                   ? "bg-brand-navy text-white"
                   : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
-                }`}
+              }`}
             >
               {category}
             </button>
-
           ))}
-
         </div>
 
+        {/* 
+          IMPORTANT:
+          Do not show loading or empty catalog message.
+        */}
 
-        {loading ? (
-
-          <div className="text-center py-20 text-slate-400">
-            Loading components...
-          </div>
-
-        ) : filtered.length === 0 ? (
-
-          <div className="text-center py-20 text-slate-400">
-            No components match your filters.
-          </div>
-
-        ) : (
-
+        {filtered.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-
             {filtered.map(
               (component, index) => (
-
                 <ComponentCard
                   key={component.id}
                   c={component}
                   index={index}
                 />
-
               )
             )}
-
           </div>
-
         )}
 
       </div>
-
     </AppShell>
   );
 }
