@@ -576,10 +576,10 @@ export function Navbar() {
                   </MobileNavLink>
 
                   <MobileNavLink
-                    to="/post"
+                    to="/cart"
                     onClick={closeMobileMenu}
                   >
-                    Post
+                    Add to cart
                   </MobileNavLink>
 
                   {user?.role === "student" && (
