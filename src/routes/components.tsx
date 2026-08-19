@@ -10,7 +10,6 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ComponentCard } from "@/components/ComponentCard";
 import { RequireAuth } from "@/components/RequireAuth";
-import { componentApi } from "@/lib/api";
 
 import type {
   Category,
@@ -18,6 +17,13 @@ import type {
 } from "@/lib/data";
 
 import { socket } from "@/lib/socket";
+
+import {
+  componentsCache,
+  loadComponents,
+  normalizeComponent,
+  setComponentsCache,
+} from "@/lib/componentStore";
 
 export const Route = createFileRoute("/components")({
   head: () => ({
@@ -84,26 +90,20 @@ type BackendComponent = {
   image?: string;
 };
 
-function normalizeComponent(
-  component: BackendComponent
-): Component {
-  return {
-    id: component._id,
-    _id: component._id,
-
-    sku: component.sku,
-    name: component.name,
-    category: component.category,
-    price: component.price,
-    stock: component.stock,
-    description: component.description,
-    details: component.details,
-    image: component.image || "",
-  };
-}
-
 function CatalogIndex() {
-  const [components, setComponents] = useState<Component[]>([]);
+  /*
+   * =====================================================
+   * COMPONENTS
+   * =====================================================
+   *
+   * Start immediately with whatever is already inside
+   * componentStore.
+   *
+   * There is NO localStorage here.
+   */
+
+  const [components, setComponents] =
+    useState<Component[]>(() => componentsCache);
 
   const [error, setError] = useState("");
 
@@ -117,25 +117,28 @@ function CatalogIndex() {
 
   /*
    * =====================================================
-   * FETCH COMPONENTS
+   * LOAD COMPONENTS
    * =====================================================
+   *
+   * loadComponents() uses the componentStore cache.
+   *
+   * If data already exists:
+   *     it returns it immediately.
+   *
+   * If data does not exist:
+   *     it fetches from backend once.
    */
 
   useEffect(() => {
     let mounted = true;
 
-    const fetchComponents = async () => {
-      try {
-        setError("");
-
-        const response = await componentApi.getAll();
-
+    loadComponents()
+      .then((data) => {
         if (!mounted) return;
 
-        const normalized = response.map(normalizeComponent);
-
-        setComponents(normalized);
-      } catch (error: any) {
+        setComponents(data);
+      })
+      .catch((error: any) => {
         if (!mounted) return;
 
         console.error(
@@ -147,10 +150,7 @@ function CatalogIndex() {
           error?.message ||
             "Failed to load components"
         );
-      }
-    };
-
-    fetchComponents();
+      });
 
     return () => {
       mounted = false;
@@ -161,6 +161,8 @@ function CatalogIndex() {
    * =====================================================
    * SOCKET.IO
    * =====================================================
+   *
+   * Admin changes update the page immediately.
    */
 
   useEffect(() => {
@@ -169,8 +171,11 @@ function CatalogIndex() {
     );
 
     /*
-     * ADMIN CREATED COMPONENT
+     * =================================================
+     * CREATED
+     * =================================================
      */
+
     const handleCreated = (
       component: BackendComponent
     ) => {
@@ -183,6 +188,10 @@ function CatalogIndex() {
         normalizeComponent(component);
 
       setComponents((current) => {
+        /*
+         * Prevent duplicate component.
+         */
+
         const exists = current.some(
           (item) =>
             item.id === normalized.id
@@ -192,16 +201,27 @@ function CatalogIndex() {
           return current;
         }
 
-        return [
+        const updated = [
           normalized,
           ...current,
         ];
+
+        /*
+         * Update shared store.
+         */
+
+        setComponentsCache(updated);
+
+        return updated;
       });
     };
 
     /*
-     * ADMIN UPDATED COMPONENT
+     * =================================================
+     * UPDATED
+     * =================================================
      */
+
     const handleUpdated = (
       component: BackendComponent
     ) => {
@@ -213,18 +233,26 @@ function CatalogIndex() {
       const normalized =
         normalizeComponent(component);
 
-      setComponents((current) =>
-        current.map((item) =>
-          item.id === normalized.id
-            ? normalized
-            : item
-        )
-      );
+      setComponents((current) => {
+        const updated = current.map(
+          (item) =>
+            item.id === normalized.id
+              ? normalized
+              : item
+        );
+
+        setComponentsCache(updated);
+
+        return updated;
+      });
     };
 
     /*
-     * ADMIN DELETED COMPONENT
+     * =================================================
+     * DELETED
+     * =================================================
      */
+
     const handleDeleted = (
       component: BackendComponent
     ) => {
@@ -237,16 +265,23 @@ function CatalogIndex() {
 
       if (!id) return;
 
-      setComponents((current) =>
-        current.filter(
+      setComponents((current) => {
+        const updated = current.filter(
           (item) => item.id !== id
-        )
-      );
+        );
+
+        setComponentsCache(updated);
+
+        return updated;
+      });
     };
 
     /*
-     * LISTEN
+     * =================================================
+     * SOCKET LISTENERS
+     * =================================================
      */
+
     socket.on(
       "component:created",
       handleCreated
@@ -263,8 +298,11 @@ function CatalogIndex() {
     );
 
     /*
+     * =================================================
      * CLEANUP
+     * =================================================
      */
+
     return () => {
       socket.off(
         "component:created",
@@ -318,21 +356,36 @@ function CatalogIndex() {
       }
     );
 
+    /*
+     * PRICE LOW → HIGH
+     */
+
     if (sort === "price-asc") {
       result = [...result].sort(
-        (a, b) => a.price - b.price
+        (a, b) =>
+          a.price - b.price
       );
     }
+
+    /*
+     * PRICE HIGH → LOW
+     */
 
     if (sort === "price-desc") {
       result = [...result].sort(
-        (a, b) => b.price - a.price
+        (a, b) =>
+          b.price - a.price
       );
     }
 
+    /*
+     * MOST STOCKED
+     */
+
     if (sort === "popular") {
       result = [...result].sort(
-        (a, b) => b.stock - a.stock
+        (a, b) =>
+          b.stock - a.stock
       );
     }
 
@@ -353,6 +406,8 @@ function CatalogIndex() {
   return (
     <AppShell>
       <div className="mx-auto max-w-7xl px-6 py-12">
+
+        {/* HEADER */}
 
         <motion.div
           initial={{
@@ -375,11 +430,15 @@ function CatalogIndex() {
           </p>
         </motion.div>
 
+        {/* ERROR */}
+
         {error && (
           <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-600">
             {error}
           </div>
         )}
+
+        {/* SEARCH + SORT */}
 
         <div className="flex flex-col md:flex-row gap-4 mb-8">
 
@@ -410,42 +469,53 @@ function CatalogIndex() {
               </option>
             ))}
           </select>
+
         </div>
+
+        {/* CATEGORIES */}
 
         <div className="flex flex-wrap gap-2 mb-10">
-          {CATEGORIES.map((category) => (
-            <button
-              key={category}
-              onClick={() =>
-                setCat(category)
-              }
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                cat === category
-                  ? "bg-brand-navy text-white"
-                  : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
-              }`}
-            >
-              {category}
-            </button>
-          ))}
+
+          {CATEGORIES.map(
+            (category) => (
+              <button
+                key={category}
+                onClick={() =>
+                  setCat(category)
+                }
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  cat === category
+                    ? "bg-brand-navy text-white"
+                    : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                {category}
+              </button>
+            )
+          )}
+
         </div>
 
-        {/* 
-          IMPORTANT:
-          Do not show loading or empty catalog message.
-        */}
+        {/* =================================================
+            PRODUCTS
+            ================================================= */}
 
         {filtered.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
             {filtered.map(
               (component, index) => (
                 <ComponentCard
-                  key={component.id}
+                  key={
+                    component.id ??
+                    component._id
+                  }
                   c={component}
                   index={index}
                 />
               )
             )}
+
           </div>
         )}
 
