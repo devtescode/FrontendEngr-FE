@@ -861,7 +861,7 @@ function CartPage() {
             actually clicks +, -, or delete.
         ================================================= */}
 
-        {updating && (
+        {/* {updating && (
           <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
             <Loader2 className="size-4 animate-spin" />
 
@@ -869,7 +869,7 @@ function CartPage() {
               Updating cart...
             </span>
           </div>
-        )}
+        )} */}
 
         {/* =================================================
             EMPTY CART
