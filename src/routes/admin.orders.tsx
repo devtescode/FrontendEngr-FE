@@ -830,7 +830,7 @@ function CartDetails({
 
       {/* PANEL */}
 
-      <div className="relative z-10 flex h-[92vh] w-[calc(100%-24px)] max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl md:h-full md:w-[620px] md:rounded-none md:rounded-l-3xl">
+      <div className="relative z-10 flex h-[92vh] w-[calc(100%-24px)] max-w-2xl flex-col overflow-hidden rounded-sm border border-white/10 bg-slate-950 shadow-2xl md:h-full md:w-[620px] md:rounded-none">
 
         {/* HEADER */}
 
