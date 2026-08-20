@@ -67,7 +67,7 @@ function AdminShell() {
         <div className="p-6 border-b border-white/5">
           <Logo className="text-white" />
           <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mt-2">
-            Admin Console
+            Admin
           </div>
         </div>
 
@@ -145,7 +145,7 @@ function AdminShell() {
           </button>
 
           <span className="font-semibold">
-            Admin Console
+            Admin
           </span>
         </div>
 
