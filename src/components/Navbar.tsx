@@ -158,6 +158,10 @@ export function Navbar() {
               Change Password
             </NavLink>
 
+            <NavLink to="/receipt">
+              Order Receipt
+            </NavLink>
+
             <NavLink to="/cart">
               Add to cart
             </NavLink>
@@ -573,6 +577,13 @@ export function Navbar() {
                     onClick={closeMobileMenu}
                   >
                     Change Password
+                  </MobileNavLink>
+
+                  <MobileNavLink
+                    to="/receipt"
+                    onClick={closeMobileMenu}
+                  >
+                    Order Receipt
                   </MobileNavLink>
 
                   <MobileNavLink

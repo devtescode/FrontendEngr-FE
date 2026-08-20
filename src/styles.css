@@ -156,3 +156,50 @@
   50% { transform: translateY(-8px); }
 }
 .animate-float-soft { animation: float-soft 6s ease-in-out infinite; }
+
+
+
+
+
+
+
+/* =====================================================
+   CART DETAILS — PREMIUM SCROLLBAR
+   ===================================================== */
+
+.cart-details-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(250, 250, 250, 0.35) transparent;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+/* Chrome / Edge / Safari */
+.cart-details-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+
+.cart-details-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 14px 4px;
+}
+
+.cart-details-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    to bottom,
+    rgba(201, 162, 39, 0.25),
+    rgba(201, 162, 39, 0.5)
+  );
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.cart-details-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    to bottom,
+    rgba(201, 162, 39, 0.5),
+    rgba(201, 162, 39, 0.8)
+  );
+  background-clip: padding-box;
+}
