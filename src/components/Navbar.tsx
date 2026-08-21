@@ -417,27 +417,49 @@ export function Navbar() {
               </div>
             ) : (
               <div
-                //  className="hidden sm:flex"
-                // >
+  onClick={Logout}
+  className="
+    group
+    ml-1
+    flex
+    h-10
+    cursor-pointer
+    items-center
+    gap-2
+    rounded-xl
+    border
+    border-white/10
+    bg-brand-navy
+    px-3
+    text-sm
+    font-semibold
+    text-white
+    shadow-sm
+    transition-all
+    duration-200
+    hover:border-brand-accent/40
+    hover:bg-brand-accent/10
+    hover:text-brand-accent
+    hover:shadow-lg
+    hover:shadow-brand-accent/10
+    active:scale-95
+    sm:ml-2
+    sm:px-4
+  "
+>
+  <LogOut
+    className="
+      size-4
+      transition-transform
+      duration-200
+      group-hover:translate-x-0.5
+    "
+  />
 
-                onClick={Logout}
-                className="
-                  ml-1
-                  rounded-full
-                  bg-brand-navy
-                  px-4
-                  py-2
-                  text-sm
-                  font-semibold
-                  text-white
-                  transition
-                  hover:opacity-90
-                  sm:ml-2
-                  sm:px-5
-                "
-              >
-                Log Out
-              </div>
+  <span className="hidden sm:inline">
+    Logout
+  </span>
+</div>
             )}
 
             {/* =================================================
