@@ -240,7 +240,12 @@ import {
   Navigate,
 } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  type ReactNode,
+  type SyntheticEvent,
+} from "react";
 import { useCurrentUser, useStore } from "@/lib/store";
 import { connectUserSocket } from "@/lib/socket";
 import { Mail, Lock, Loader2 } from "lucide-react";
@@ -270,14 +275,16 @@ function LoginPage() {
     const savedUser = sessionStorage.getItem("pulselab_user");
     const savedToken = sessionStorage.getItem("pulselab_token");
 
-    if (!savedUser || !savedToken) return;
+    if (!savedUser || !savedToken) {
+      return;
+    }
 
     try {
       const parsedUser = JSON.parse(savedUser);
 
       const userId =
-        parsedUser?.id ||
-        parsedUser?._id ||
+        parsedUser?.id ??
+        parsedUser?._id ??
         parsedUser?.userId;
 
       if (userId) {
@@ -285,7 +292,9 @@ function LoginPage() {
           currentUserId: userId,
         });
       }
-    } catch {
+    } catch (error) {
+      console.error("Failed to restore session:", error);
+
       sessionStorage.removeItem("pulselab_user");
       sessionStorage.removeItem("pulselab_token");
     }
@@ -305,8 +314,12 @@ function LoginPage() {
   // --------------------------------
   // LOGIN
   // --------------------------------
-  const submit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const submit = async (event: SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (loading) {
+      return;
+    }
 
     setError(null);
 
@@ -320,7 +333,7 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(
+      const response = await fetch(
         `${BASE_URL}/engineering/userlogin`,
         {
           method: "POST",
@@ -334,16 +347,29 @@ function LoginPage() {
         }
       );
 
-      let data: any = {};
+      let data: {
+        message?: string;
+        token?: string;
+        user?: {
+          id?: string;
+          _id?: string;
+          userId?: string;
+          role?: string;
+          [key: string]: unknown;
+        };
+      } = {};
 
       try {
-        data = await res.json();
+        data = await response.json();
       } catch {
         data = {};
       }
 
-      if (!res.ok) {
-        setError(data?.message || "Invalid email or password.");
+      if (!response.ok) {
+        setError(
+          data?.message ||
+            "Invalid email or password."
+        );
         return;
       }
 
@@ -353,17 +379,24 @@ function LoginPage() {
       const userData = data?.user;
 
       if (!userData) {
-        setError("Login successful, but user information was not returned.");
+        setError(
+          "Login successful, but user information was not returned."
+        );
         return;
       }
 
+      // --------------------------------
+      // GET USER ID
+      // --------------------------------
       const userId =
-        userData.id ||
-        userData._id ||
+        userData.id ??
+        userData._id ??
         userData.userId;
 
       if (!userId) {
-        setError("User ID was not returned by the server.");
+        setError(
+          "User ID was not returned by the server."
+        );
         return;
       }
 
@@ -373,7 +406,9 @@ function LoginPage() {
       const token = data?.token;
 
       if (!token) {
-        setError("Server did not return an authentication token.");
+        setError(
+          "Server did not return an authentication token."
+        );
         return;
       }
 
@@ -411,18 +446,19 @@ function LoginPage() {
       // REDIRECT
       // --------------------------------
       if (userData.role === "admin") {
-        navigate({
+        await navigate({
           to: "/admin",
           replace: true,
         });
       } else {
-        navigate({
+        await navigate({
           to: "/dashboard",
           replace: true,
         });
       }
-    } catch (err) {
-      console.error("Login error:", err);
+    } catch (error) {
+      console.error("Login error:", error);
+
       setError(
         "Unable to connect to the server. Please try again."
       );
@@ -434,8 +470,14 @@ function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-2 bg-slate-50">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{
+          opacity: 0,
+          y: 20,
+        }}
+        animate={{
+          opacity: 1,
+          y: 0,
+        }}
         className="w-full max-w-md rounded-sm bg-white p-6 shadow-sm"
       >
         <h1 className="text-3xl font-bold text-brand-navy">
@@ -511,9 +553,9 @@ function LoginPage() {
   );
 }
 
-/* --------------------------------
-   FIELD COMPONENT
--------------------------------- */
+// --------------------------------
+// FIELD COMPONENT
+// --------------------------------
 
 export function Field({
   label,
@@ -546,11 +588,15 @@ export function Field({
         <input
           type={type}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(event) => {
+            onChange(event.target.value);
+          }}
           placeholder={placeholder}
           required
           className={`w-full h-11 rounded-sm border border-slate-200 bg-white text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-accent/10 focus:border-brand-accent transition ${
-            icon ? "pl-10 pr-3" : "px-3"
+            icon
+              ? "pl-10 pr-3"
+              : "px-3"
           }`}
         />
       </div>
