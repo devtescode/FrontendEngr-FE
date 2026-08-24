@@ -18,6 +18,7 @@ import {
   Phone,
   Loader2
 } from "lucide-react";
+import { API_URLS } from "@/utils/apiConfig";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -72,7 +73,7 @@ function RegisterPage() {
 
   try {
     const response = await fetch(
-      "http://localhost:4500/engineering/usersignup",
+      API_URLS.usersignup,
       {
         method: "POST",
         headers: {
