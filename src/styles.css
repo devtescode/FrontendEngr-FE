@@ -1,6 +1,8 @@
-@import "tailwindcss" source(none);
-@source "../src";
+@import "tailwindcss";
 @import "tw-animate-css";
+
+/* MUST come after imports */
+@source "../src";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -8,9 +10,11 @@
  * Elizade Hardware Hub — design system.
  * Light, academic precision: navy + gold + electric blue.
  */
+
 @theme {
   --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
   --color-brand-navy: #0f172a;
   --color-brand-gold: #d97706;
   --color-brand-accent: #3b82f6;
@@ -24,75 +28,106 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
   --color-ring-offset-background: var(--background);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
+
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
 :root {
   --radius: 0.75rem;
-  /* slate-50 backdrop, navy ink */
+
+  /* Slate-50 backdrop, navy ink */
+
   --background: oklch(0.985 0.005 250);
   --foreground: oklch(0.18 0.04 265);
+
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.18 0.04 265);
+
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.04 265);
-  /* primary = brand navy */
+
+  /* Primary = brand navy */
+
   --primary: oklch(0.21 0.04 266);
   --primary-foreground: oklch(0.985 0.003 247);
+
   --secondary: oklch(0.97 0.01 250);
   --secondary-foreground: oklch(0.21 0.04 266);
+
   --muted: oklch(0.97 0.01 250);
   --muted-foreground: oklch(0.55 0.03 257);
+
   --accent: oklch(0.97 0.01 250);
   --accent-foreground: oklch(0.21 0.04 266);
+
   --destructive: oklch(0.58 0.24 27);
   --destructive-foreground: oklch(0.985 0.003 247);
+
   --border: oklch(0.92 0.01 256);
   --input: oklch(0.92 0.01 256);
   --ring: oklch(0.65 0.15 260);
+
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+
   --sidebar: oklch(0.984 0.003 247.858);
   --sidebar-foreground: oklch(0.129 0.042 264.695);
+
   --sidebar-primary: oklch(0.208 0.042 265.755);
   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+
   --sidebar-accent: oklch(0.968 0.007 247.896);
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
 }
@@ -100,34 +135,47 @@
 .dark {
   --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
+
   --card: oklch(0.208 0.042 265.755);
   --card-foreground: oklch(0.984 0.003 247.858);
+
   --popover: oklch(0.208 0.042 265.755);
   --popover-foreground: oklch(0.984 0.003 247.858);
+
   --primary: oklch(0.929 0.013 255.508);
   --primary-foreground: oklch(0.208 0.042 265.755);
+
   --secondary: oklch(0.279 0.041 260.031);
   --secondary-foreground: oklch(0.984 0.003 247.858);
+
   --muted: oklch(0.279 0.041 260.031);
   --muted-foreground: oklch(0.704 0.04 256.788);
+
   --accent: oklch(0.279 0.041 260.031);
   --accent-foreground: oklch(0.984 0.003 247.858);
+
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.984 0.003 247.858);
+
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);
+
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+
   --sidebar: oklch(0.208 0.042 265.755);
   --sidebar-foreground: oklch(0.984 0.003 247.858);
+
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+
   --sidebar-accent: oklch(0.279 0.041 260.031);
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
@@ -146,22 +194,31 @@
 }
 
 /* Circuit-board ambient pattern */
+
 .bg-circuit {
-  background-image: radial-gradient(circle at 2px 2px, rgba(59, 130, 246, 0.18) 1px, transparent 0);
+  background-image: radial-gradient(
+    circle at 2px 2px,
+    rgba(59, 130, 246, 0.18) 1px,
+    transparent 0
+  );
+
   background-size: 32px 32px;
 }
 
 @keyframes float-soft {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
 }
-.animate-float-soft { animation: float-soft 6s ease-in-out infinite; }
 
-
-
-
-
-
+.animate-float-soft {
+  animation: float-soft 6s ease-in-out infinite;
+}
 
 /* =====================================================
    CART DETAILS — PREMIUM SCROLLBAR
@@ -175,6 +232,7 @@
 }
 
 /* Chrome / Edge / Safari */
+
 .cart-details-scroll::-webkit-scrollbar {
   width: 7px;
 }
@@ -190,6 +248,7 @@
     rgba(201, 162, 39, 0.25),
     rgba(201, 162, 39, 0.5)
   );
+
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
@@ -199,7 +258,8 @@
   background: linear-gradient(
     to bottom,
     rgba(201, 162, 39, 0.5),
-    rgba(201, 162, 39, 0.8)
+    rgba(201, 162, 162, 0.8)
   );
+
   background-clip: padding-box;
 }
