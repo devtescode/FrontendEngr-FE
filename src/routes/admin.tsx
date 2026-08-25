@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Boxes, ClipboardList, Hand, LogOut } from "lucide-react";
+import { LayoutDashboard, Boxes, ClipboardList, Hand, LogOut, Users } from "lucide-react";
 import { RequireAuth } from "@/components/RequireAuth";
 import { Logo } from "@/components/Logo";
 import { useStore } from "@/lib/store";
@@ -27,6 +27,7 @@ const NAV: { to: string; label: string; icon: any; exact?: boolean }[] = [
   { to: "/admin/components", label: "Inventory", icon: Boxes },
   { to: "/admin/orders", label: "Orders", icon: ClipboardList },
   { to: "/admin/pickup", label: "Pickup", icon: Hand },
+  { to: "/admin/users", label: "Users", icon: Users },
 ];
 
 function AdminShell() {
