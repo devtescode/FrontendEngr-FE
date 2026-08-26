@@ -289,7 +289,7 @@ function CartPage() {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            "Failed to load cart"
+          "Failed to load cart"
         );
       }
 
@@ -486,7 +486,7 @@ function CartPage() {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            "Failed to remove item"
+          "Failed to remove item"
         );
       }
 
@@ -502,7 +502,7 @@ function CartPage() {
 
       alert(
         error?.message ||
-          "Failed to remove item"
+        "Failed to remove item"
       );
     } finally {
       setUpdating(null);
@@ -541,9 +541,9 @@ function CartPage() {
 
     if (
       typeof item.componentId !==
-        "string" &&
+      "string" &&
       item.componentId.stock !==
-        undefined
+      undefined
     ) {
       if (
         item.quantity >=
@@ -583,7 +583,7 @@ function CartPage() {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            "Failed to increase quantity"
+          "Failed to increase quantity"
         );
       }
 
@@ -599,7 +599,7 @@ function CartPage() {
 
       alert(
         error?.message ||
-          "Failed to increase quantity"
+        "Failed to increase quantity"
       );
     } finally {
       setUpdating(null);
@@ -663,7 +663,7 @@ function CartPage() {
         if (!response.ok) {
           throw new Error(
             data?.message ||
-              "Failed to remove item"
+            "Failed to remove item"
           );
         }
 
@@ -710,7 +710,7 @@ function CartPage() {
       if (!response.ok) {
         throw new Error(
           data?.message ||
-            "Failed to decrease quantity"
+          "Failed to decrease quantity"
         );
       }
 
@@ -726,7 +726,7 @@ function CartPage() {
 
       alert(
         error?.message ||
-          "Failed to decrease quantity"
+        "Failed to decrease quantity"
       );
     } finally {
       setUpdating(null);
@@ -754,7 +754,7 @@ function CartPage() {
         if (
           !component ||
           typeof component ===
-            "string"
+          "string"
         ) {
           return sum;
         }
@@ -922,7 +922,7 @@ function CartPage() {
                     if (
                       !item.componentId ||
                       typeof item.componentId ===
-                        "string"
+                      "string"
                     ) {
                       return null;
                     }
@@ -1061,7 +1061,7 @@ function CartPage() {
                             disabled={
                               isUpdating ||
                               item.quantity >=
-                                component.stock
+                              component.stock
                             }
                             onClick={() =>
                               increaseQuantity(

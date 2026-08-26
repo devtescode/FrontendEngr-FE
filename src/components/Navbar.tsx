@@ -29,9 +29,9 @@ export function Navbar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const cartCount = useMemo(
-    () => cart.reduce((a, c) => a + c.quantity, 0),
-    [cart]
+  const cartCount = cart.reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0
   );
 
   const userNotifications = useMemo(() => {
@@ -166,6 +166,10 @@ export function Navbar() {
               Add to cart
             </NavLink>
 
+            <NavLink to="/orders">
+              My Orders
+            </NavLink>
+
             {user?.role === "student" && (
               <NavLink to="/dashboard">
                 Dashboard
@@ -195,46 +199,58 @@ export function Navbar() {
                 CART
             ================================================= */}
 
+            {/* =================================================
+    CART
+================================================= */}
+
             <Link
               to="/cart"
-              className="
-                relative
-                flex
-                size-10
-                items-center
-                justify-center
-                rounded-full
-                transition-colors
-                hover:bg-slate-100
-              "
               onClick={closeMobileMenu}
+              className="
+    relative
+    flex
+    size-10
+    items-center
+    justify-center
+    rounded-full
+    transition-all
+    duration-200
+    hover:bg-slate-100
+    active:scale-95
+  "
+              aria-label={`Shopping cart${cartCount > 0 ? `, ${cartCount} items` : ""}`}
             >
               <ShoppingCart className="size-5 text-brand-navy" />
 
               {cartCount > 0 && (
                 <motion.span
+                  key={cartCount}
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   className="
-                    absolute
-                    -right-0.5
-                    -top-0.5
-                    flex
-                    size-5
-                    items-center
-                    justify-center
-                    rounded-full
-                    bg-brand-gold
-                    text-[10px]
-                    font-bold
-                    text-white
-                  "
+      absolute
+      -right-1
+      -top-1
+      flex
+      min-w-[20px]
+      h-5
+      items-center
+      justify-center
+      rounded-full
+      bg-brand-gold
+      px-1
+      text-[10px]
+      font-bold
+      leading-none
+      text-white
+      ring-2
+      ring-white
+    "
                 >
-                  {cartCount}
+                  {cartCount > 99 ? "99+" : cartCount}
                 </motion.span>
               )}
             </Link>
-
             {/* =================================================
                 NOTIFICATIONS
             ================================================= */}
@@ -308,7 +324,7 @@ export function Navbar() {
                         rounded-xl
                         border
                         border-slate-200
-                        bg-white
+                        bg-white 
                         p-2
                         shadow-xl
                       "
@@ -417,8 +433,8 @@ export function Navbar() {
               </div>
             ) : (
               <div
-  onClick={Logout}
-  className="
+                onClick={Logout}
+                className="
     group
     ml-1
     flex
@@ -446,20 +462,20 @@ export function Navbar() {
     sm:ml-2
     sm:px-4
   "
->
-  <LogOut
-    className="
+              >
+                <LogOut
+                  className="
       size-4
       transition-transform
       duration-200
       group-hover:translate-x-0.5
     "
-  />
+                />
 
-  <span className="hidden sm:inline">
-    Logout
-  </span>
-</div>
+                <span className="hidden sm:inline">
+                  Logout
+                </span>
+              </div>
             )}
 
             {/* =================================================
@@ -613,6 +629,12 @@ export function Navbar() {
                     onClick={closeMobileMenu}
                   >
                     Add to cart
+                  </MobileNavLink>
+                  <MobileNavLink
+                    to="/orders"
+                    onClick={closeMobileMenu}
+                  >
+                    My Orders
                   </MobileNavLink>
 
                   {user?.role === "student" && (
