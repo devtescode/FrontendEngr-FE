@@ -670,7 +670,6 @@ function UserDetailsModal({
 
         </div>
 
-        {/* FOOTER */}
 
         <div className="border-t border-white/10 bg-slate-900/70 p-5">
 
