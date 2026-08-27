@@ -16,6 +16,7 @@ import {
 
 import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
+import { RequireAuth } from "@/components/RequireAuth";
 
 const BASE_URL = "http://localhost:4500";
 
@@ -25,7 +26,13 @@ export const Route = createFileRoute("/cart")({
   head: () => ({
     meta: [{ title: "Cart — PulseLab" }],
   }),
-  component: CartPage,
+  // component: CartPage,
+
+   component: () => (
+      <RequireAuth role="student">
+        <CartPage />
+      </RequireAuth>
+    ),
 });
 
 // =====================================================
