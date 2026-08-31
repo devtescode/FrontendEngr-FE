@@ -17,6 +17,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
 import { RequireAuth } from "@/components/RequireAuth";
+import { API_URLS } from "@/utils/apiConfig";
 
 const BASE_URL = "http://localhost:4500";
 
@@ -275,7 +276,8 @@ function CartPage() {
       );
 
       const response = await fetch(
-        `${BASE_URL}/engineering/cart`,
+        // `${BASE_URL}/engineering/cart`,
+        API_URLS.cart,
         {
           method: "GET",
           headers: {
@@ -473,7 +475,7 @@ function CartPage() {
       setUpdating(componentId);
 
       const response = await fetch(
-        `${BASE_URL}/engineering/cart/${componentId}`,
+        `${API_URLS.cart}/${componentId}`,
         {
           method: "DELETE",
           headers: {
@@ -564,7 +566,7 @@ function CartPage() {
       setUpdating(componentId);
 
       const response = await fetch(
-        `${BASE_URL}/engineering/addtocart`,
+        `${API_URLS.addtocart}`,
         {
           method: "POST",
           headers: {
@@ -650,7 +652,7 @@ function CartPage() {
       if (item.quantity <= 1) {
         const response =
           await fetch(
-            `${BASE_URL}/engineering/cart/${componentId}`,
+            `${API_URLS.cart}/${componentId}`,
             {
               method: "DELETE",
               headers: {
@@ -691,7 +693,7 @@ function CartPage() {
 
       const response =
         await fetch(
-          `${BASE_URL}/engineering/cart/${componentId}`,
+          `${API_URLS.cart}/${componentId}`,
           {
             method: "PUT",
             headers: {
