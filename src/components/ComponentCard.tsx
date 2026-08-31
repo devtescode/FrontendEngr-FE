@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 
 import type { BackendComponent } from "@/lib/api";
 import { socket } from "@/lib/socket";
+import { API_URLS } from "@/utils/apiConfig";
 
 const BASE_URL = "http://localhost:4500";
 
@@ -63,7 +64,8 @@ export function ComponentCard({
 
     try {
       const response = await fetch(
-        `${BASE_URL}/engineering/cart`,
+        // `${BASE_URL}/engineering/cart`,
+        API_URLS.cart,
         {
           method: "GET",
           headers: {
@@ -172,7 +174,7 @@ export function ComponentCard({
       setLoading(true);
 
       const response = await fetch(
-        `${BASE_URL}/engineering/addtocart`,
+        `${API_URLS.addtocart}`,
         {
           method: "POST",
 
@@ -248,7 +250,7 @@ export function ComponentCard({
       setLoading(true);
 
       const response = await fetch(
-        `${BASE_URL}/engineering/addtocart`,
+        `${API_URLS.addtocart}`,
         {
           method: "POST",
 
@@ -330,7 +332,7 @@ export function ComponentCard({
 
       if (quantity === 1) {
         const response = await fetch(
-          `${BASE_URL}/engineering/cart/${componentId}`,
+          `${API_URLS.cart}/${componentId}`,
           {
             method: "DELETE",
 
@@ -370,7 +372,7 @@ export function ComponentCard({
       const newQuantity = quantity - 1;
 
       const response = await fetch(
-        `${BASE_URL}/engineering/cart/${componentId}`,
+        `${API_URLS.cart}/${componentId}`,
         {
           method: "PUT",
 
