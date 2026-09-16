@@ -1,6 +1,18 @@
+
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { motion } from "framer-motion";
-import { ArrowRight, ShoppingCart, CreditCard, Package, CheckCircle2 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import React from "react";
+import {
+  ArrowRight,
+  ShoppingCart,
+  CreditCard,
+  Package,
+  CheckCircle2,
+  FileText,
+  ShieldCheck,
+  RotateCcw,
+  MapPin,
+} from "lucide-react";
 import { NavAppShell } from "@/components/NavAppShell";
 import { ComponentCard } from "@/components/ComponentCard";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
@@ -11,40 +23,206 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "EU Hardwarestore — Elizade University Hardware Hub" },
-      { name: "description", content: "Order microcontrollers, sensors and lab components online and pick them up on Elizade University campus." },
-      { property: "og:title", content: "EU Hardwarestore — Elizade University Hardware Hub" },
-      { property: "og:description", content: "Order microcontrollers, sensors and lab components online and pick them up on campus." },
+      {
+        name: "description",
+        content:
+          "Order microcontrollers, sensors and lab components online and pick them up on Elizade University campus.",
+      },
+      {
+        property: "og:title",
+        content: "EU Hardwarestore — Elizade University Hardware Hub",
+      },
+      {
+        property: "og:description",
+        content:
+          "Order microcontrollers, sensors and lab components online and pick them up on campus.",
+      },
     ],
   }),
   component: Index,
 });
 
 const STEPS = [
-  { icon: ShoppingCart, title: "Browse the catalog", body: "Search and filter the EU lab's live inventory of sensors, MCUs, and prototyping gear." },
-  { icon: CreditCard, title: "Pay online", body: "Checkout securely. We tie your order to your matric number — no QR code needed." },
-  { icon: Package, title: "We prepare it", body: "Lab admins verify and package your items the moment payment lands." },
-  { icon: CheckCircle2, title: "Pick up on campus", body: "Walk into the lab, give your Order ID, and collect your parts." },
+  {
+    icon: ShoppingCart,
+    title: "Browse the catalog",
+    body: "Search and filter the EU lab's live inventory of sensors, MCUs, and prototyping gear.",
+  },
+  {
+    icon: CreditCard,
+    title: "Pay online",
+    body: "Checkout securely. We tie your order to your matric number — no QR code needed.",
+  },
+  {
+    icon: Package,
+    title: "We prepare it",
+    body: "Lab admins verify and package your items the moment payment lands.",
+  },
+  {
+    icon: CheckCircle2,
+    title: "Pick up on campus",
+    body: "Walk into the lab, give your Order ID, and collect your parts.",
+  },
 ];
 
 const TESTIMONIALS = [
-  { name: "Tomi A.", role: "400L · Mechatronics", quote: "Used to spend a full day in Lagos sourcing parts. Now my project never stalls." },
-  { name: "Chinwe O.", role: "300L · EEE", quote: "The stock is honest. If it says 12 left, there are 12 left when I arrive." },
-  { name: "Femi B.", role: "200L · Computer Eng.", quote: "Picked up an ESP32 between lectures. Fastest thing on campus." },
+  {
+    name: "Tomi A.",
+    role: "400L · Mechatronics",
+    quote:
+      "Used to spend a full day in Lagos sourcing parts. Now my project never stalls.",
+  },
+  {
+    name: "Chinwe O.",
+    role: "300L · EEE",
+    quote:
+      "The stock is honest. If it says 12 left, there are 12 left when I arrive.",
+  },
+  {
+    name: "Femi B.",
+    role: "200L · Computer Eng.",
+    quote: "Picked up an ESP32 between lectures. Fastest thing on campus.",
+  },
+];
+
+const CUSTOMER_POLICIES = [
+  {
+    icon: FileText,
+    title: "Terms of Service",
+    description:
+      "Learn about the terms and conditions that apply when using EU Hardwarestore.",
+    to: "/terms",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Privacy Policy",
+    description:
+      "Understand how customer information and personal data are handled and protected.",
+    to: "/privacy",
+  },
+  {
+    icon: RotateCcw,
+    title: "Refund & Cancellation",
+    description:
+      "Review our guidelines for order cancellations, refunds, and payment-related issues.",
+    to: "/refund-policy",
+  },
+  {
+    icon: MapPin,
+    title: "Delivery & Pickup",
+    description:
+      "Find out how your hardware order is prepared and collected on campus.",
+    to: "/shipping-policy",
+  },
 ];
 
 function Index() {
-const components = useStore((s) => s.components);
-const users = useStore((s) => s.users);
-const orders = useStore((s) => s.orders);
+  const components = useStore((s) => s.components);
+  const users = useStore((s) => s.users);
+  const orders = useStore((s) => s.orders);
 
-// now compute safely
-const featured = components.slice(0, 6);
+  // now compute safely
+  const featured = components.slice(0, 6);
 
-const totalOrders = orders.length;
+  const totalOrders = orders.length;
 
-const totalStock = components.reduce((a, c) => a + c.stock, 0);
+  const totalStock = components.reduce((a, c) => a + c.stock, 0);
 
-const totalStudents = users.filter((u) => u.role === "student").length;
+  const totalStudents = users.filter((u) => u.role === "student").length;
+
+  function PolicyAccordion({
+  icon: Icon,
+  title,
+  content,
+  defaultOpen = false,
+}: {
+  icon: React.ElementType;
+  title: string;
+  content: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+
+  return (
+    <motion.div
+      layout
+      className={`overflow-hidden rounded-2xl border bg-white transition-all duration-300 ${
+        open
+          ? "border-brand-accent/30 shadow-lg shadow-brand-accent/5"
+          : "border-slate-200 shadow-sm"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-slate-50 md:p-6"
+        aria-expanded={open}
+      >
+        <div className="flex min-w-0 items-center gap-4">
+          <div
+            className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
+              open
+                ? "bg-brand-accent text-white"
+                : "bg-brand-accent/10 text-brand-accent"
+            }`}
+          >
+            <Icon className="size-5" />
+          </div>
+
+          <div>
+            <h3 className="text-base font-bold text-brand-navy md:text-lg">
+              {title}
+            </h3>
+
+            <p className="mt-0.5 text-xs text-slate-400">
+              {open ? "Click to close" : "Click to read policy"}
+            </p>
+          </div>
+        </div>
+
+        <motion.div
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
+            open
+              ? "bg-brand-accent/10 text-brand-accent"
+              : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </motion.div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+          >
+            <div className="border-t border-slate-100 px-5 pb-6 pt-5 text-sm leading-7 text-slate-600 md:px-6">
+              {content}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 
   return (
     <NavAppShell>
@@ -55,7 +233,9 @@ const totalStudents = users.filter((u) => u.role === "student").length;
 
         <div className="relative mx-auto max-w-7xl px-6 text-center">
           <motion.div
-            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
             className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/5 px-3 py-1 text-xs font-semibold text-brand-gold mb-8"
           >
             <span className="relative flex h-2 w-2">
@@ -66,28 +246,45 @@ const totalStudents = users.filter((u) => u.role === "student").length;
           </motion.div>
 
           <motion.h1
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.7 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.7 }}
             className="mx-auto max-w-3xl text-5xl font-bold tracking-tight text-slate-900 md:text-7xl"
           >
-            Engineering the <span className="text-brand-accent">Future</span> of Campus Innovation.
+            Engineering the{" "}
+            <span className="text-brand-accent">Future</span> of Campus
+            Innovation.
           </motion.h1>
 
           <motion.p
-            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35, duration: 0.7 }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.7 }}
             className="mx-auto mt-6 max-w-2xl text-lg text-slate-600"
           >
-            The official inventory system for EU students. Order microcontrollers, sensors and mechanical parts for your projects and pick them up at the lab.
+            The official inventory system for EU students. Order
+            microcontrollers, sensors and mechanical parts for your projects
+            and pick them up at the lab.
           </motion.p>
 
           <motion.div
-            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.7 }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.7 }}
             className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
-            <Link to="/components" className="group relative flex h-12 items-center justify-center gap-2 rounded-lg bg-brand-navy px-8 font-semibold text-white transition-all hover:shadow-xl hover:shadow-brand-navy/20 active:scale-95">
+            <Link
+              to="/components"
+              className="group relative flex h-12 items-center justify-center gap-2 rounded-lg bg-brand-navy px-8 font-semibold text-white transition-all hover:shadow-xl hover:shadow-brand-navy/20 active:scale-95"
+            >
               Browse Inventory
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
             </Link>
-            <a href="#how" className="h-12 inline-flex items-center rounded-lg border border-slate-200 bg-white px-8 font-semibold text-slate-600 transition-all hover:bg-slate-50 hover:border-slate-300">
+
+            <a
+              href="#how"
+              className="h-12 inline-flex items-center rounded-lg border border-slate-200 bg-white px-8 font-semibold text-slate-600 transition-all hover:bg-slate-50 hover:border-slate-300"
+            >
               How it Works
             </a>
           </motion.div>
@@ -108,8 +305,11 @@ const totalStudents = users.filter((u) => u.role === "student").length;
       <section id="how" className="mx-auto max-w-7xl px-6 py-24">
         <Reveal className="text-center mb-14">
           <h2 className="text-4xl font-bold text-brand-navy">How it works</h2>
-          <p className="mt-3 text-slate-500">From browse to bench in four clean steps.</p>
+          <p className="mt-3 text-slate-500">
+            From browse to bench in four clean steps.
+          </p>
         </Reveal>
+
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s, i) => (
             <Reveal key={s.title} delay={i * 0.08}>
@@ -117,8 +317,15 @@ const totalStudents = users.filter((u) => u.role === "student").length;
                 <div className="size-11 rounded-lg bg-brand-accent/10 text-brand-accent flex items-center justify-center mb-4">
                   <s.icon className="size-5" />
                 </div>
-                <div className="font-mono text-[10px] tracking-widest text-slate-400 mb-1">STEP 0{i + 1}</div>
-                <h3 className="text-lg font-bold text-brand-navy">{s.title}</h3>
+
+                <div className="font-mono text-[10px] tracking-widest text-slate-400 mb-1">
+                  STEP 0{i + 1}
+                </div>
+
+                <h3 className="text-lg font-bold text-brand-navy">
+                  {s.title}
+                </h3>
+
                 <p className="mt-2 text-sm text-slate-500">{s.body}</p>
               </div>
             </Reveal>
@@ -130,15 +337,27 @@ const totalStudents = users.filter((u) => u.role === "student").length;
       <section className="mx-auto max-w-7xl px-6 py-12">
         <Reveal className="mb-12 flex items-end justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-brand-navy">Featured Components</h2>
-            <p className="mt-2 text-slate-500">Available for immediate laboratory collection.</p>
+            <h2 className="text-3xl font-bold text-brand-navy">
+              Featured Components
+            </h2>
+
+            <p className="mt-2 text-slate-500">
+              Available for immediate laboratory collection.
+            </p>
           </div>
-          <Link to="/components" className="hidden md:inline-flex items-center gap-2 text-brand-accent font-semibold text-sm hover:gap-3 transition-all">
+
+          <Link
+            to="/components"
+            className="hidden md:inline-flex items-center gap-2 text-brand-accent font-semibold text-sm hover:gap-3 transition-all"
+          >
             View all <ArrowRight className="size-4" />
           </Link>
         </Reveal>
+
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {featured.map((c, i) => <ComponentCard key={c.id} c={c} index={i} />)}
+          {featured.map((c, i) => (
+            <ComponentCard key={c.id} c={c} index={i} />
+          ))}
         </div>
       </section>
 
@@ -147,17 +366,33 @@ const totalStudents = users.filter((u) => u.role === "student").length;
         <div className="mx-auto max-w-7xl px-6 grid gap-16 lg:grid-cols-2">
           <Reveal className="flex flex-col justify-center">
             <h2 className="text-4xl font-bold">Real-time Lab Logistics</h2>
+
             <p className="mt-6 text-slate-400">
-              Monitor your orders from confirmation to collection. Our admin team verifies every component before pickup so your project never stalls.
+              Monitor your orders from confirmation to collection. Our admin
+              team verifies every component before pickup so your project never
+              stalls.
             </p>
+
             <div className="mt-12 space-y-6">
               {[
-                ["Instant Payment Verification", "Automated confirmation linked to your matric number."],
-                ["Smart Stock Management", "Admins receive low-stock alerts to keep essentials in stock."],
-                ["Order-ID Pickup", "Just walk in with your Order ID — no QR code scanning."],
+                [
+                  "Instant Payment Verification",
+                  "Automated confirmation linked to your matric number.",
+                ],
+                [
+                  "Smart Stock Management",
+                  "Admins receive low-stock alerts to keep essentials in stock.",
+                ],
+                [
+                  "Order-ID Pickup",
+                  "Just walk in with your Order ID — no QR code scanning.",
+                ],
               ].map(([title, body]) => (
                 <div key={title} className="flex items-start gap-4">
-                  <div className="mt-0.5 rounded bg-white/10 p-1.5"><CheckCircle2 className="size-4 text-brand-gold" /></div>
+                  <div className="mt-0.5 rounded bg-white/10 p-1.5">
+                    <CheckCircle2 className="size-4 text-brand-gold" />
+                  </div>
+
                   <div>
                     <h4 className="font-bold">{title}</h4>
                     <p className="text-sm text-slate-400">{body}</p>
@@ -167,26 +402,58 @@ const totalStudents = users.filter((u) => u.role === "student").length;
             </div>
           </Reveal>
 
-          <Reveal delay={0.15} className="relative rounded-2xl bg-slate-900 p-8 shadow-2xl ring-1 ring-white/10">
+          <Reveal
+            delay={0.15}
+            className="relative rounded-2xl bg-slate-900 p-8 shadow-2xl ring-1 ring-white/10"
+          >
             <div className="mb-8 flex items-center justify-between border-b border-white/5 pb-4">
-              <span className="font-mono text-xs tracking-widest text-slate-500 uppercase">Admin Dashboard View</span>
+              <span className="font-mono text-xs tracking-widest text-slate-500 uppercase">
+                Admin Dashboard View
+              </span>
+
               <div className="flex gap-2">
                 <div className="size-2 rounded-full bg-red-500" />
                 <div className="size-2 rounded-full bg-amber-500" />
                 <div className="size-2 rounded-full bg-green-500" />
               </div>
             </div>
+
             <div className="space-y-4">
-              <FakeOrder name="John O." initials="JO" items="Arduino R3 x2, LED Pack x1" status="PREPARING" color="amber" />
-              <FakeOrder name="Sarah A." initials="SA" items="Ultrasonic Sensor x5" status="READY" color="green" />
+              <FakeOrder
+                name="John O."
+                initials="JO"
+                items="Arduino R3 x2, LED Pack x1"
+                status="PREPARING"
+                color="amber"
+              />
+
+              <FakeOrder
+                name="Sarah A."
+                initials="SA"
+                items="Ultrasonic Sensor x5"
+                status="READY"
+                color="green"
+              />
+
               <div className="mt-8 grid grid-cols-2 gap-4">
                 <div className="rounded-lg border border-white/5 bg-white/5 p-4">
-                  <p className="text-xs text-slate-500 uppercase tracking-tight">Total Orders</p>
-                  <p className="mt-1 text-2xl font-bold"><AnimatedCounter value={1248} /></p>
+                  <p className="text-xs text-slate-500 uppercase tracking-tight">
+                    Total Orders
+                  </p>
+
+                  <p className="mt-1 text-2xl font-bold">
+                    <AnimatedCounter value={1248} />
+                  </p>
                 </div>
+
                 <div className="rounded-lg border border-white/5 bg-white/5 p-4">
-                  <p className="text-xs text-slate-500 uppercase tracking-tight">Pending Pickups</p>
-                  <p className="mt-1 text-2xl font-bold text-brand-gold"><AnimatedCounter value={14} /></p>
+                  <p className="text-xs text-slate-500 uppercase tracking-tight">
+                    Pending Pickups
+                  </p>
+
+                  <p className="mt-1 text-2xl font-bold text-brand-gold">
+                    <AnimatedCounter value={14} />
+                  </p>
                 </div>
               </div>
             </div>
@@ -197,19 +464,32 @@ const totalStudents = users.filter((u) => u.role === "student").length;
       {/* Testimonials */}
       <section className="mx-auto max-w-7xl px-6 py-24">
         <Reveal className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-brand-navy">Loved by EU engineers</h2>
+          <h2 className="text-3xl font-bold text-brand-navy">
+            Loved by EU engineers
+          </h2>
         </Reveal>
+
         <div className="grid gap-6 md:grid-cols-3">
           {TESTIMONIALS.map((t, i) => (
             <Reveal key={t.name} delay={i * 0.08}>
               <div className="h-full rounded-2xl border border-slate-200 bg-white p-6">
-                <p className="text-brand-navy leading-relaxed">"{t.quote}"</p>
+                <p className="text-brand-navy leading-relaxed">
+                  "{t.quote}"
+                </p>
+
                 <div className="mt-6 flex items-center gap-3 border-t border-slate-100 pt-4">
                   <div className="size-9 rounded-full bg-brand-navy text-white text-xs font-bold grid place-items-center">
-                    {t.name.split(" ").map((p) => p[0]).join("")}
+                    {t.name
+                      .split(" ")
+                      .map((p) => p[0])
+                      .join("")}
                   </div>
+
                   <div>
-                    <div className="text-sm font-semibold text-brand-navy">{t.name}</div>
+                    <div className="text-sm font-semibold text-brand-navy">
+                      {t.name}
+                    </div>
+
                     <div className="text-xs text-slate-500">{t.role}</div>
                   </div>
                 </div>
@@ -218,36 +498,242 @@ const totalStudents = users.filter((u) => u.role === "student").length;
           ))}
         </div>
       </section>
+
+      {/* Customer Policies */}
+       <section className="relative overflow-hidden border-t border-slate-200 bg-slate-50 py-20">
+        {/* Decorative background */}
+        <div className="absolute -left-24 top-10 size-72 rounded-full bg-brand-accent/5 blur-3xl" />
+        <div className="absolute -right-24 bottom-0 size-80 rounded-full bg-brand-gold/5 blur-3xl" />
+
+        <div className="relative mx-auto max-w-4xl px-6">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-xl bg-brand-navy text-white shadow-lg shadow-brand-navy/10">
+              <ShieldCheck className="size-6" />
+            </div>
+
+            <h2 className="text-3xl font-bold tracking-tight text-brand-navy md:text-4xl">
+              Customer Policies
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-slate-500 md:text-base">
+              Everything you need to know about using EU Hardwarestore,
+              payments, refunds, privacy, and campus pickup.
+            </p>
+          </Reveal>
+
+          <div className="mt-10 space-y-4">
+            {[
+              {
+                icon: FileText,
+                title: "Terms of Service",
+                content: (
+                  <>
+                    <p>
+                      By using EU Hardwarestore, you agree to use the platform
+                      responsibly and provide accurate information when
+                      creating an account or placing an order.
+                    </p>
+
+                    <p className="mt-3">
+                      Orders are subject to product availability and successful
+                      payment confirmation. EU Hardwarestore reserves the right
+                      to update product availability, pricing, and service
+                      information when necessary.
+                    </p>
+                  </>
+                ),
+              },
+              {
+                icon: ShieldCheck,
+                title: "Privacy Policy",
+                content: (
+                  <>
+                    <p>
+                      We collect information necessary to provide our services,
+                      including your name, email address, matriculation number,
+                      order details, and payment-related information.
+                    </p>
+
+                    <p className="mt-3">
+                      Your information is used to process orders, provide
+                      customer support, verify transactions, and improve the
+                      platform. We do not sell your personal information to
+                      third parties.
+                    </p>
+                  </>
+                ),
+              },
+              {
+                icon: RotateCcw,
+                title: "Refund & Cancellation Policy",
+                content: (
+                  <>
+                    <p>
+                      Customers may request cancellation of an order before
+                      the order has been prepared for collection.
+                    </p>
+
+                    <p className="mt-3">
+                      Refund requests are reviewed based on the circumstances
+                      of the order, payment status, product availability, and
+                      whether the order has already been collected.
+                    </p>
+
+                    <p className="mt-3">
+                      Where a refund is approved, the applicable refund will be
+                      processed through the original payment method where
+                      possible.
+                    </p>
+                  </>
+                ),
+              },
+              {
+                icon: MapPin,
+                title: "Delivery & Campus Pickup Policy",
+                content: (
+                  <>
+                    <p>
+                      EU Hardwarestore currently provides campus-based pickup
+                      for orders placed through the platform.
+                    </p>
+
+                    <p className="mt-3">
+                      After successful payment verification, your order will
+                      be prepared by the lab team. Customers should provide
+                      their Order ID when collecting their items.
+                    </p>
+
+                    <p className="mt-3">
+                      Customers are responsible for collecting their orders
+                      within the applicable pickup period communicated by the
+                      laboratory or platform.
+                    </p>
+                  </>
+                ),
+              },
+              {
+                icon: CheckCircle2,
+                title: "Payment Policy",
+                content: (
+                  <>
+                    <p>
+                      Payments are processed through our supported payment
+                      provider. An order is considered paid only after the
+                      payment has been successfully verified.
+                    </p>
+
+                    <p className="mt-3">
+                      Customers should not make duplicate payments for the same
+                      order. If you experience a payment issue, please contact
+                      support with your transaction or order reference.
+                    </p>
+                  </>
+                ),
+              },
+            ].map((policy, index) => (
+              <PolicyAccordion
+                key={policy.title}
+                icon={policy.icon}
+                title={policy.title}
+                content={policy.content}
+                defaultOpen={index === 0}
+              />
+            ))}
+          </div>
+
+          {/* Support message */}
+          <Reveal delay={0.2} className="mt-8">
+            <div className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-brand-navy/10 bg-brand-navy px-6 py-5 text-center shadow-lg shadow-brand-navy/10 sm:flex-row sm:text-left">
+              <div>
+                <p className="font-semibold text-white">
+                  Need help with an order or payment?
+                </p>
+
+                <p className="mt-1 text-sm text-slate-400">
+                  Contact our support team for assistance with your order.
+                </p>
+              </div>
+
+              <a
+                href="mailto:support@euhardwarestore.com"
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-brand-navy transition-all hover:bg-slate-100 active:scale-95"
+              >
+                Contact Support
+                <ArrowRight className="size-4" />
+              </a>
+            </div>
+          </Reveal>
+        </div>
+      </section>
     </NavAppShell>
   );
 }
 
-function Stat({ label, value, suffix }: { label: string; value: number; suffix?: string }) {
+function Stat({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  suffix?: string;
+}) {
   return (
     <div className="text-center">
       <div className="text-3xl md:text-4xl font-bold text-brand-navy tracking-tight">
         <AnimatedCounter value={value} suffix={suffix} />
       </div>
-      <div className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mt-1">{label}</div>
+
+      <div className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mt-1">
+        {label}
+      </div>
     </div>
   );
 }
 
-function FakeOrder({ name, initials, items, status, color }: { name: string; initials: string; items: string; status: string; color: "amber" | "green" }) {
-  const palette = color === "amber"
-    ? "bg-amber-500/10 text-amber-500"
-    : "bg-green-500/10 text-green-500";
-  const avatar = color === "amber" ? "bg-brand-accent/20 text-brand-accent" : "bg-brand-gold/20 text-brand-gold";
+function FakeOrder({
+  name,
+  initials,
+  items,
+  status,
+  color,
+}: {
+  name: string;
+  initials: string;
+  items: string;
+  status: string;
+  color: "amber" | "green";
+}) {
+  const palette =
+    color === "amber"
+      ? "bg-amber-500/10 text-amber-500"
+      : "bg-green-500/10 text-green-500";
+
+  const avatar =
+    color === "amber"
+      ? "bg-brand-accent/20 text-brand-accent"
+      : "bg-brand-gold/20 text-brand-gold";
+
   return (
     <div className="flex items-center justify-between rounded-lg bg-white/5 p-4">
       <div className="flex items-center gap-4">
-        <div className={`size-10 rounded-full grid place-items-center text-xs font-bold ${avatar}`}>{initials}</div>
+        <div
+          className={`size-10 rounded-full grid place-items-center text-xs font-bold ${avatar}`}
+        >
+          {initials}
+        </div>
+
         <div>
           <p className="text-sm font-medium">{name}</p>
           <p className="text-xs text-slate-500">{items}</p>
         </div>
       </div>
-      <span className={`rounded px-2 py-1 text-[10px] font-bold ${palette}`}>{status}</span>
+
+      <span
+        className={`rounded px-2 py-1 text-[10px] font-bold ${palette}`}
+      >
+        {status}
+      </span>
     </div>
   );
 }
