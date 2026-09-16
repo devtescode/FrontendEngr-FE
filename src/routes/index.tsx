@@ -683,7 +683,7 @@ function Stat({
       <div className="text-3xl md:text-4xl font-bold text-brand-navy tracking-tight">
         <AnimatedCounter value={value} suffix={suffix} />
       </div>
-
+3
       <div className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mt-1">
         {label}
       </div>
