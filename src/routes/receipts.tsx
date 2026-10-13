@@ -5,12 +5,14 @@ import {
   Loader2,
   AlertCircle,
   ShoppingBag,
-  ArrowRight,
+  ChevronRight,
   CheckCircle2,
   Calendar,
   Hash,
+  TrendingUp,
+  Wallet,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -76,11 +78,20 @@ function ReceiptsIndexPage() {
     };
   }, []);
 
+  const stats = useMemo(() => {
+    const total = orders.reduce((a, o) => a + o.total, 0);
+    const units = orders.reduce(
+      (a, o) => a + o.items.reduce((b, i) => b + i.quantity, 0),
+      0
+    );
+    return { total, count: orders.length, units };
+  }, [orders]);
+
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl px-6 py-12">
         {/* HEADER */}
-        <div className="mb-10">
+        <div className="mb-8">
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-brand-navy/5 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-brand-navy">
             <ReceiptIcon className="size-3" />
             Purchase Receipts
@@ -89,9 +100,31 @@ function ReceiptsIndexPage() {
             Order Receipts
           </h1>
           <p className="mt-2 text-slate-500">
-            Every successful payment, ready to view, share, or print.
+            Every successful payment — ready to view, share, or print.
           </p>
         </div>
+
+        {/* STATS STRIP */}
+        {!loading && !error && orders.length > 0 && (
+          <div className="mb-8 grid gap-3 sm:grid-cols-3">
+            <StatCard
+              icon={<ReceiptIcon className="size-4" />}
+              label="Receipts"
+              value={String(stats.count)}
+            />
+            <StatCard
+              icon={<Hash className="size-4" />}
+              label="Items Bought"
+              value={String(stats.units)}
+            />
+            <StatCard
+              icon={<Wallet className="size-4" />}
+              label="Total Spent"
+              value={formatNaira(stats.total)}
+              highlight
+            />
+          </div>
+        )}
 
         {/* LOADING */}
         {loading && (
@@ -120,8 +153,7 @@ function ReceiptsIndexPage() {
               No receipts yet
             </h2>
             <p className="mt-2 text-slate-500">
-              Once you complete a payment, your receipt will
-              appear here.
+              Once you complete a payment, your receipt will appear here.
             </p>
             <Link
               to="/components"
@@ -143,25 +175,30 @@ function ReceiptsIndexPage() {
                 transition={{ delay: index * 0.04 }}
               >
                 <Link
-                  to="/receipts" 
+                  to="/receipts/$id"
                   params={{ id: order.id }}
-                  className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 transition-all hover:border-brand-navy hover:shadow-md"
+                  className="group flex items-center gap-4 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 transition-all hover:border-brand-navy hover:shadow-lg"
                 >
-                  {/* ICON */}
-                  <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-navy/5 text-brand-navy transition group-hover:bg-brand-navy group-hover:text-white">
-                    <ReceiptIcon className="size-5" />
+                  {/* LEFT ICON BLOCK */}
+                  <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-navy to-slate-800 text-white shadow-sm">
+                    <ReceiptIcon className="size-6" />
                   </div>
 
                   {/* INFO */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-green-600">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-green-700 ring-1 ring-green-200/60">
                         <CheckCircle2 className="size-3" />
                         Paid
                       </span>
+                      {order.channel && (
+                        <span className="text-[10px] uppercase tracking-widest text-slate-400">
+                          {order.channel.replace("_", " ")}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="mt-1 truncate font-mono text-xs text-slate-500">
+                    <div className="mt-1.5 truncate font-mono text-[11px] text-slate-500">
                       {order.reference}
                     </div>
 
@@ -172,10 +209,7 @@ function ReceiptsIndexPage() {
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <Hash className="size-3" />
-                        {order.items.reduce(
-                          (a, i) => a + i.quantity,
-                          0
-                        )}{" "}
+                        {order.items.reduce((a, i) => a + i.quantity, 0)}{" "}
                         items
                       </span>
                     </div>
@@ -186,13 +220,13 @@ function ReceiptsIndexPage() {
                     <div className="text-[10px] uppercase tracking-widest text-slate-400">
                       Total
                     </div>
-                    <div className="font-bold text-brand-navy">
+                    <div className="text-lg font-bold text-brand-navy">
                       {formatNaira(order.total)}
                     </div>
                   </div>
 
-                  {/* ARROW */}
-                  <ArrowRight className="size-4 shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-brand-navy" />
+                  {/* CHEVRON */}
+                  <ChevronRight className="size-5 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-navy" />
                 </Link>
               </motion.div>
             ))}
@@ -200,5 +234,56 @@ function ReceiptsIndexPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+/* ============================================================
+   STAT CARD
+============================================================ */
+
+function StatCard({
+  icon,
+  label,
+  value,
+  highlight = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${
+        highlight
+          ? "border-brand-navy bg-brand-navy text-white"
+          : "border-slate-200 bg-white"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <div
+          className={`grid size-8 place-items-center rounded-lg ${
+            highlight ? "bg-white/10 text-white" : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {icon}
+        </div>
+        <span
+          className={`text-[10px] font-medium uppercase tracking-widest ${
+            highlight ? "text-white/70" : "text-slate-400"
+          }`}
+        >
+          {label}
+        </span>
+      </div>
+
+      <div
+        className={`mt-3 text-xl font-bold ${
+          highlight ? "text-white" : "text-brand-navy"
+        }`}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
