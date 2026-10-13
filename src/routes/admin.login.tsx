@@ -6,7 +6,9 @@
   import { useEffect, useState } from "react";
   import logoImg from "../components/Assets/image.webp";
 
-  const BASE_URL = "http://localhost:4500";
+
+  const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:4500";
 
   const SESSION_USER = "admin_user";
   const SESSION_TOKEN = "admin_token";
@@ -37,7 +39,7 @@
 
       const checkAdmin = async () => {
         try {
-          const res = await fetch(`${BASE_URL}/admin/exists`);
+          const res = await fetch(`${API_URL}/admin/exists`);
 
           if (!res.ok) {
             throw new Error(`HTTP ${res.status}`);
@@ -89,7 +91,7 @@
     // ----------------------------------
     if (isCreatingAdmin) {
       const registerRes = await fetch(
-        `${BASE_URL}/admin/register`,
+        `${API_URL}/admin/register`,
         {
           method: "POST",
           headers: {
@@ -123,7 +125,7 @@
       console.log("Admin created successfully. Logging in...");
 
       const loginRes = await fetch(
-        `${BASE_URL}/admin/login`,
+        `${API_URL}/admin/login`,
         {
           method: "POST",
           headers: {
@@ -203,7 +205,7 @@
     // NORMAL ADMIN LOGIN
     // ----------------------------------
     const loginRes = await fetch(
-      `${BASE_URL}/admin/login`,
+      `${API_URL}/admin/login`,
       {
         method: "POST",
         headers: {
