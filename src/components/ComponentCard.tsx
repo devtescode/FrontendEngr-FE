@@ -11,9 +11,9 @@ import { useEffect, useState } from "react";
 
 import type { BackendComponent } from "@/lib/api";
 import { socket } from "@/lib/socket";
-import { API_URLS } from "@/utils/apiConfig";
-
-const BASE_URL = "http://localhost:4500";
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:4500";
 
 export function ComponentCard({
   c,
@@ -53,45 +53,44 @@ export function ComponentCard({
 
 
   useEffect(() => {
-  const loadCartQuantity = async () => {
-    const token = sessionStorage.getItem(
-      "pulselab_token"
-    );
-
-    if (!token || !componentId) {
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        // `${BASE_URL}/engineering/cart`,
-        API_URLS.cart,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+    const loadCartQuantity = async () => {
+      const token = sessionStorage.getItem(
+        "pulselab_token"
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to load cart");
+      if (!token || !componentId) {
+        return;
       }
 
-      const cart = await response.json();
+      try {
+        const response = await fetch(
+          `${ API_URL}/engineering/cart`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
-      updateQuantityFromCart(cart);
+        if (!response.ok) {
+          throw new Error("Failed to load cart");
+        }
 
-    } catch (error) {
-      console.error(
-        "Failed to restore cart quantity:",
-        error
-      );
-    }
-  };
+        const cart = await response.json();
 
-  loadCartQuantity();
-}, [componentId]);
+        updateQuantityFromCart(cart);
+
+      } catch (error) {
+        console.error(
+          "Failed to restore cart quantity:",
+          error
+        );
+      }
+    };
+
+    loadCartQuantity();
+  }, [componentId]);
   /*
    * =====================================================
    * CHECK COMPONENT ID
@@ -174,7 +173,7 @@ export function ComponentCard({
       setLoading(true);
 
       const response = await fetch(
-        `${API_URLS.addtocart}`,
+        `${API_URL}/engineering/addtocart`,
         {
           method: "POST",
 
@@ -216,7 +215,7 @@ export function ComponentCard({
 
       alert(
         error.message ||
-          "Failed to add item to cart"
+        "Failed to add item to cart"
       );
     } finally {
       setLoading(false);
@@ -250,7 +249,7 @@ export function ComponentCard({
       setLoading(true);
 
       const response = await fetch(
-        `${API_URLS.addtocart}`,
+        `${API_URL}/engineering/addtocart`,
         {
           method: "POST",
 
@@ -273,7 +272,7 @@ export function ComponentCard({
       if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to increase quantity"
+          "Failed to increase quantity"
         );
       }
 
@@ -291,7 +290,7 @@ export function ComponentCard({
 
       alert(
         error.message ||
-          "Failed to increase quantity"
+        "Failed to increase quantity"
       );
     } finally {
       setLoading(false);
@@ -332,7 +331,7 @@ export function ComponentCard({
 
       if (quantity === 1) {
         const response = await fetch(
-          `${API_URLS.cart}/${componentId}`,
+          `${API_URL}/engineering/cart/${componentId}`,
           {
             method: "DELETE",
 
@@ -349,7 +348,7 @@ export function ComponentCard({
         if (!response.ok) {
           throw new Error(
             data.message ||
-              "Failed to remove item"
+            "Failed to remove item"
           );
         }
 
@@ -372,7 +371,7 @@ export function ComponentCard({
       const newQuantity = quantity - 1;
 
       const response = await fetch(
-        `${API_URLS.cart}/${componentId}`,
+        `${API_URL}/engineering/cart/${componentId}`,
         {
           method: "PUT",
 
@@ -397,7 +396,7 @@ export function ComponentCard({
       if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to decrease quantity"
+          "Failed to decrease quantity"
         );
       }
 
@@ -415,7 +414,7 @@ export function ComponentCard({
 
       alert(
         error.message ||
-          "Failed to decrease quantity"
+        "Failed to decrease quantity"
       );
     } finally {
       setLoading(false);
@@ -548,13 +547,12 @@ export function ComponentCard({
             </p>
 
             <p
-              className={`mt-1 text-sm font-semibold ${
-                isOutOfStock
+              className={`mt-1 text-sm font-semibold ${isOutOfStock
                   ? "text-red-500"
                   : isLowStock
                     ? "text-amber-600"
                     : "text-emerald-600"
-              }`}
+                }`}
             >
               {c.stock} units
             </p>

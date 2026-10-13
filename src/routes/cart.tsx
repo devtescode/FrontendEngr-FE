@@ -17,9 +17,11 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
 import { RequireAuth } from "@/components/RequireAuth";
-import { API_URLS } from "@/utils/apiConfig";
 
-const BASE_URL = "http://localhost:4500";
+
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:4500";
 
 const CART_STORAGE_KEY = "pulselab_cart";
 
@@ -277,7 +279,7 @@ function CartPage() {
 
       const response = await fetch(
         // `${BASE_URL}/engineering/cart`,
-        API_URLS.cart,
+        `${API_URL}/engineering/cart`,
         {
           method: "GET",
           headers: {
@@ -475,7 +477,7 @@ function CartPage() {
       setUpdating(componentId);
 
       const response = await fetch(
-        `${API_URLS.cart}/${componentId}`,
+        `${API_URL}/engineering/cart/${componentId}`,
         {
           method: "DELETE",
           headers: {
@@ -566,7 +568,7 @@ function CartPage() {
       setUpdating(componentId);
 
       const response = await fetch(
-        `${API_URLS.addtocart}`,
+        `${API_URL}/engineering/addtocart`,
         {
           method: "POST",
           headers: {
@@ -652,7 +654,7 @@ function CartPage() {
       if (item.quantity <= 1) {
         const response =
           await fetch(
-            `${API_URLS.cart}/${componentId}`,
+            `${API_URL}/engineering/cart/${componentId}`,
             {
               method: "DELETE",
               headers: {
@@ -693,7 +695,7 @@ function CartPage() {
 
       const response =
         await fetch(
-          `${API_URLS.cart}/${componentId}`,
+          `${API_URL}/engineering/cart/${componentId}`,
           {
             method: "PUT",
             headers: {

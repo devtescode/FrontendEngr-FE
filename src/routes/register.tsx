@@ -18,7 +18,7 @@ import {
   Phone,
   Loader2
 } from "lucide-react";
-import { API_URLS } from "@/utils/apiConfig";
+// import { API_URLS } from "@/utils/apiConfig";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -26,6 +26,9 @@ export const Route = createFileRoute("/register")({
   }),
   component: RegisterPage,
 });
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:4500";
 
 function RegisterPage() {
   const register = useStore((s) => s.register);
@@ -40,69 +43,71 @@ function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+
+
   const submit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError(null);
-  setLoading(true);
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-  const formattedMatric = matric.trim().toUpperCase();
+    const formattedMatric = matric.trim().toUpperCase();
 
-  const matricRegex = /^EU\d{6}-\d{4}$/i;
+    const matricRegex = /^EU\d{6}-\d{4}$/i;
 
-  if (!matricRegex.test(formattedMatric)) {
-    setLoading(false);
-    return setError(
-      "Matric number must be in the format EU250102-4768"
-    );
-  }
-
-  if (!phoneNumber.trim()) {
-    setLoading(false);
-    return setError("Phone number is required.");
-  }
-
-  if (!gender) {
-    setLoading(false);
-    return setError("Please select your gender.");
-  }
-
-  if (password.length < 6) {
-    setLoading(false);
-    return setError("Password must be at least 6 characters.");
-  }
-
-  try {
-    const response = await fetch(
-      API_URLS.usersignup,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fullName,
-          email,
-          matric: formattedMatric,
-          phoneNumber,
-          gender,
-          password,
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
+    if (!matricRegex.test(formattedMatric)) {
       setLoading(false);
-      return setError(data.message || "Registration failed");
+      return setError(
+        "Matric number must be in the format EU250102-4768"
+      );
     }
 
-    navigate({ to: "/login" });
-  } catch (error) {
-    setLoading(false);
-    setError("Unable to connect to server");
-  }
-};
+    if (!phoneNumber.trim()) {
+      setLoading(false);
+      return setError("Phone number is required.");
+    }
+
+    if (!gender) {
+      setLoading(false);
+      return setError("Please select your gender.");
+    }
+
+    if (password.length < 6) {
+      setLoading(false);
+      return setError("Password must be at least 6 characters.");
+    }
+
+    try {
+      const response = await fetch(
+        `${API_URL}/engineering/usersignup`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fullName,
+            email,
+            matric: formattedMatric,
+            phoneNumber,
+            gender,
+            password,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setLoading(false);
+        return setError(data.message || "Registration failed");
+      }
+
+      navigate({ to: "/login" });
+    } catch (error) {
+      setLoading(false);
+      setError("Unable to connect to server");
+    }
+  };
   return (
     <div className="min-h-screen flex items-center justify-center px-2 bg-slate-50">
       <motion.div
@@ -195,11 +200,10 @@ function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-              loading
+            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${loading
                 ? "bg-slate-400 text-white cursor-not-allowed"
                 : "bg-brand-navy text-white hover:bg-slate-800"
-            }`}
+              }`}
           >
             {loading ? (
               <>

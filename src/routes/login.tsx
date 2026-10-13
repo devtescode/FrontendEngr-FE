@@ -14,7 +14,7 @@ import {
 import { useCurrentUser, useStore } from "@/lib/store";
 import { connectUserSocket } from "@/lib/socket";
 import { Mail, Lock, Loader2 } from "lucide-react";
-import {API_URLS} from "@/utils/apiConfig";
+// import { API_URLS } from "@/utils/apiConfig";
 
 // const BASE_URL = API_URLS.userlogin;
 
@@ -24,6 +24,10 @@ export const Route = createFileRoute("/login")({
   }),
   component: LoginPage,
 });
+
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:4500";
 
 function LoginPage() {
   const user = useCurrentUser();
@@ -100,8 +104,7 @@ function LoginPage() {
 
     try {
       const response = await fetch(
-        // `${BASE_URL}/engineering/userlogin`,
-        API_URLS.userlogin,
+        `${API_URL}/engineering/userlogin`,
         {
           method: "POST",
           headers: {
@@ -135,7 +138,7 @@ function LoginPage() {
       if (!response.ok) {
         setError(
           data?.message ||
-            "Invalid email or password."
+          "Invalid email or password."
         );
         return;
       }
@@ -286,11 +289,10 @@ function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-              loading
+            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${loading
                 ? "bg-slate-400 text-white cursor-not-allowed"
                 : "bg-brand-navy text-white hover:bg-slate-800"
-            }`}
+              }`}
           >
             {loading ? (
               <>
@@ -360,11 +362,10 @@ export function Field({
           }}
           placeholder={placeholder}
           required
-          className={`w-full h-11 rounded-sm border border-slate-200 bg-white text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-accent/10 focus:border-brand-accent transition ${
-            icon
+          className={`w-full h-11 rounded-sm border border-slate-200 bg-white text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-accent/10 focus:border-brand-accent transition ${icon
               ? "pl-10 pr-3"
               : "px-3"
-          }`}
+            }`}
         />
       </div>
     </label>
