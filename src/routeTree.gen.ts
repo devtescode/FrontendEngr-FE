@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ReceiptsRouteImport } from './routes/receipts'
+import { Route as ReceiptsIdRouteImport } from './routes/receipts.$id'
 import { Route as PaymentCallbackRouteImport } from './routes/payment.callback'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -40,6 +41,11 @@ const ReceiptsRoute = ReceiptsRouteImport.update({
   id: '/receipts',
   path: '/receipts',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptsIdRoute = ReceiptsIdRouteImport.update({
+  id: '/receipts/$id',
+  path: '/$id',
+  getParentRoute: () => ReceiptsRoute,
 } as any)
 const PaymentCallbackRoute = PaymentCallbackRouteImport.update({
   id: '/payment/callback',
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
+  '/receipts/$id': typeof ReceiptsIdRoute
   '/register': typeof RegisterRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
+  '/receipts/$id': typeof ReceiptsIdRoute
   '/register': typeof RegisterRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
+  '/receipts/$id': typeof ReceiptsIdRoute
   '/register': typeof RegisterRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/payment/callback'
     | '/receipts'
+    | '/receipts/$id'
     | '/register'
     | '/admin/components'
     | '/admin/login'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/payment/callback'
     | '/receipts'
+    | '/receipts/$id'
     | '/register'
     | '/admin/components'
     | '/admin/login'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/payment/callback'
     | '/receipts'
+    | '/receipts/$id'
     | '/register'
     | '/admin/components'
     | '/admin/login'
@@ -230,7 +242,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OrdersRoute: typeof OrdersRoute
   PaymentCallbackRoute: typeof PaymentCallbackRoute
-  ReceiptsRoute: typeof ReceiptsRoute
+  ReceiptsRoute: typeof ReceiptsRouteWithChildren
   RegisterRoute: typeof RegisterRoute
   AdminUsersRoute: typeof AdminUsersRoute
 }
@@ -257,6 +269,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/receipts'
       preLoaderRoute: typeof ReceiptsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/receipts/$id': {
+      id: '/receipts/$id'
+      path: '/$id'
+      fullPath: '/receipts/$id'
+      preLoaderRoute: typeof ReceiptsIdRouteImport
+      parentRoute: typeof ReceiptsRoute
     }
     '/payment/callback': {
       id: '/payment/callback'
@@ -352,6 +371,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ReceiptsRouteChildren {
+  ReceiptsIdRoute: typeof ReceiptsIdRoute
+}
+
+const ReceiptsRouteChildren: ReceiptsRouteChildren = {
+  ReceiptsIdRoute: ReceiptsIdRoute,
+}
+
+const ReceiptsRouteWithChildren = ReceiptsRoute._addFileChildren(ReceiptsRouteChildren)
+
 interface AdminRouteChildren {
   AdminComponentsRoute: typeof AdminComponentsRoute
   AdminLoginRoute: typeof AdminLoginRoute
@@ -380,7 +409,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OrdersRoute: OrdersRoute,
   PaymentCallbackRoute: PaymentCallbackRoute,
-  ReceiptsRoute: ReceiptsRoute,
+  ReceiptsRoute: ReceiptsRouteWithChildren,
   RegisterRoute: RegisterRoute,
 }
 export const routeTree = rootRouteImport
