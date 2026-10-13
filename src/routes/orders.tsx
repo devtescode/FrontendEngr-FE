@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
-import { socket } from "@/lib/socket";
+import { socket, connectUserSocket } from "@/lib/socket";
 
 const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:4500";
@@ -86,8 +86,6 @@ function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Track new orders that arrive via socket so we can
-  // animate/highlight them briefly.
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(
     new Set()
   );
@@ -102,6 +100,7 @@ function OrdersPage() {
   // ===================================================
   const loadOrders = async (opts?: { silent?: boolean }) => {
     const token = getToken();
+    console.log("🔵 loadOrders called, token:", token ? "yes" : "no");
 
     if (!token) {
       setError("Please login first.");
@@ -115,20 +114,24 @@ function OrdersPage() {
     }
 
     try {
-      const response = await fetch(
-        `${API_URL}/engineering/getorders`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const url = `${API_URL}/engineering/getorders`;
+      console.log("🔵 Fetching:", url);
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      console.log("🔵 Response status:", response.status);
 
       const rawText = await response.text();
+      console.log("🔵 Raw response:", rawText.slice(0, 500));
+
       let data: any = null;
       try {
         data = rawText ? JSON.parse(rawText) : null;
-      } catch {
+      } catch (e) {
         throw new Error(
-          `Orders endpoint returned non-JSON (HTTP ${response.status}).`
+          `Non-JSON response (HTTP ${response.status}): ${rawText.slice(0, 200)}`
         );
       }
 
@@ -136,41 +139,18 @@ function OrdersPage() {
         throw new Error(data?.message || "Unable to load orders.");
       }
 
+      console.log("🔵 Parsed data:", data);
+
       const nextOrders: Order[] = Array.isArray(data?.orders)
         ? data.orders
         : [];
 
-      // Detect new orders that weren't there before
-      // so we can highlight them.
-      if (hasLoadedOnce.current) {
-        setOrders((prev) => {
-          const prevIds = new Set(prev.map((o) => o.id));
-          const newIds = new Set<string>();
-
-          nextOrders.forEach((o) => {
-            if (!prevIds.has(o.id)) newIds.add(o.id);
-          });
-
-          if (newIds.size > 0) {
-            setHighlightedIds(newIds);
-
-            // Clear highlight after 4 seconds.
-            setTimeout(() => {
-              setHighlightedIds(new Set());
-            }, 4000);
-          }
-
-          return nextOrders;
-        });
-      } else {
-        setOrders(nextOrders);
-        hasLoadedOnce.current = true;
-      }
+      setOrders(nextOrders);
+      hasLoadedOnce.current = true;
     } catch (err: any) {
+      console.error("🔴 loadOrders error:", err);
       if (!opts?.silent) {
         setError(err?.message || "Unable to load orders.");
-      } else {
-        console.error("Silent orders refresh failed:", err);
       }
     } finally {
       if (!opts?.silent) setLoading(false);
@@ -188,46 +168,34 @@ function OrdersPage() {
   // REAL-TIME UPDATES VIA SOCKET
   // ===================================================
   //
-  // The backend should emit "orders:updated" (or
-  // "cart:updated" after payment completes) to the
-  // user's room. We listen and silently refetch.
+  // - connectUserSocket() decodes the JWT, joins the
+  //   user's room, AND re-joins automatically on every
+  //   socket reconnect.
+  // - We listen for "orders:updated" and "cart:updated"
+  //   and silently refetch the list.
   //
   useEffect(() => {
     const token = getToken();
     if (!token) return;
 
-    // =================================================
-    // JOIN THE USER'S ROOM
-    // =================================================
-    // Your server joins socket rooms by userId. We need
-    // to know the userId — it's stored in sessionStorage
-    // by your auth flow, so pull it from there.
-    //
-    const userId =
-      sessionStorage.getItem("pulselab_userId") ||
-      sessionStorage.getItem("pulselab_user_id");
+    // Join the user's room (handles reconnects internally).
+    const cleanupJoin = connectUserSocket();
 
-    if (userId) {
-      socket.emit("user:join", { userId });
-    }
-
-    const handleOrderUpdate = () => {
-      console.log("🟢 orders:updated received — refetching silently");
+    const handleUpdate = (event: string) => () => {
+      console.log(`🟢 ${event} received — refetching orders`);
       loadOrders({ silent: true });
     };
 
-    socket.on("orders:updated", handleOrderUpdate);
-    // Also refetch when the cart is cleared after payment.
-    socket.on("cart:updated", handleOrderUpdate);
+    const onOrdersUpdated = handleUpdate("orders:updated");
+    const onCartUpdated = handleUpdate("cart:updated");
 
-    // If already connected, join immediately.
-    if (socket.connected && userId) {
-      socket.emit("user:join", { userId });
-    }
+    socket.on("orders:updated", onOrdersUpdated);
+    socket.on("cart:updated", onCartUpdated);
 
     return () => {
-      socket.off("orders:updated", handleOrderUpdate);
-      socket.off("cart:updated", handleOrderUpdate);
+      cleanupJoin();
+      socket.off("orders:updated", onOrdersUpdated);
+      socket.off("cart:updated", onCartUpdated);
     };
   }, []);
 
@@ -276,6 +244,13 @@ function OrdersPage() {
               Couldn't load orders
             </p>
             <p className="mt-1 text-sm text-red-600">{error}</p>
+
+            <button
+              onClick={() => loadOrders()}
+              className="mt-5 rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+            >
+              Try again
+            </button>
           </div>
         )}
 
@@ -327,9 +302,7 @@ function OrdersPage() {
                     transition={{ delay: index * 0.04 }}
                     className="overflow-hidden rounded-2xl border border-slate-200 bg-white transition-shadow hover:shadow-lg"
                   >
-                    {/* ====================================
-                        HEADER STRIP
-                    ==================================== */}
+                    {/* HEADER STRIP */}
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="grid size-11 place-items-center rounded-xl bg-brand-navy text-white shadow-sm">
@@ -364,9 +337,7 @@ function OrdersPage() {
                       </div>
                     </div>
 
-                    {/* ====================================
-                        ITEMS WITH IMAGES
-                    ==================================== */}
+                    {/* ITEMS */}
                     <div className="px-6 py-5">
                       <div className="mb-4 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-slate-400">
                         <Package className="size-3.5" />
@@ -379,7 +350,6 @@ function OrdersPage() {
                             key={`${order.id}-${idx}`}
                             className="flex items-center gap-4 py-3"
                           >
-                            {/* ITEM IMAGE */}
                             <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-50 ring-1 ring-slate-100">
                               {item.image ? (
                                 <img
@@ -393,7 +363,6 @@ function OrdersPage() {
                               )}
                             </div>
 
-                            {/* NAME + META */}
                             <div className="min-w-0 flex-1">
                               <div className="truncate font-semibold text-brand-navy">
                                 {item.name}
@@ -414,7 +383,6 @@ function OrdersPage() {
                               </div>
                             </div>
 
-                            {/* LINE TOTAL */}
                             <div className="shrink-0 text-right font-bold text-brand-navy">
                               {formatNaira(item.price * item.quantity)}
                             </div>
@@ -423,9 +391,7 @@ function OrdersPage() {
                       </ul>
                     </div>
 
-                    {/* ====================================
-                        FOOTER / META + TOTAL
-                    ==================================== */}
+                    {/* FOOTER / META + TOTAL */}
                     <div className="grid gap-4 border-t border-slate-100 bg-slate-50/40 px-6 py-4 sm:grid-cols-3">
                       <div className="flex items-center gap-2 text-xs text-slate-500">
                         <Calendar className="size-4 text-slate-400" />
@@ -464,9 +430,7 @@ function OrdersPage() {
                       </div>
                     </div>
 
-                    {/* ====================================
-                        PICKUP BANNER
-                    ==================================== */}
+                    {/* PICKUP BANNER */}
                     <div className="border-t border-slate-100 bg-brand-gold/5 px-6 py-3">
                       <div className="flex flex-wrap items-center gap-3 text-xs">
                         <CheckCircle2 className="size-4 text-brand-gold" />
