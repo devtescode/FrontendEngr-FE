@@ -42,7 +42,6 @@ export const Route = createFileRoute("/receipts")({
     </RequireAuth>
   ),
 });
-
 const BRAND = {
   name: "PulseLab",
   tagline: "Engineering Components Store",
