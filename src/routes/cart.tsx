@@ -482,6 +482,7 @@ function CartPage() {
   // to FRONTEND_URL/payment/callback?reference=...
   //
   const handleCheckout = async () => {
+    console.log("💳 Initiating checkout...to Tescode Checkout");
     // Prevent double-initiation (double clicks, re-renders)
     if (isRedirecting || hasInitialized) return;
 
