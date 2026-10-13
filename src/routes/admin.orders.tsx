@@ -22,7 +22,8 @@ export const Route = createFileRoute("/admin/orders")({
   component: AdminCarts,
 });
 
-const BASE_URL = "http://localhost:4500";
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 type CartItem = {
   componentId: {
@@ -98,7 +99,7 @@ function AdminCarts() {
           sessionStorage.getItem("pulselab_token");
 
         const response = await fetch(
-          `${BASE_URL}/admin/getallcarts`,
+          `${API_URL}/admin/getallcarts`,
           {
             headers: {
               Authorization: `Bearer ${token}`,

@@ -21,7 +21,8 @@ export const Route = createFileRoute("/admin/users")({
   component: AdminUsers,
 });
 
-const BASE_URL = "http://localhost:4500";
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 type UserType = {
   _id: string;
@@ -61,7 +62,7 @@ function AdminUsers() {
         );
 
       const response = await fetch(
-        `${BASE_URL}/admin/getallusers`,
+        `${API_URL}/admin/getallusers`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
