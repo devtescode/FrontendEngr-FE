@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -6,6 +6,7 @@ import {
   Trash2,
   Loader2,
   ShoppingCart,
+  AlertCircle,
 } from "lucide-react";
 import {
   useEffect,
@@ -18,7 +19,6 @@ import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
 import { RequireAuth } from "@/components/RequireAuth";
 
-
 const API_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:4500";
@@ -29,13 +29,12 @@ export const Route = createFileRoute("/cart")({
   head: () => ({
     meta: [{ title: "Cart — PulseLab" }],
   }),
-  // component: CartPage,
 
-   component: () => (
-      <RequireAuth role="student">
-        <CartPage />
-      </RequireAuth>
-    ),
+  component: () => (
+    <RequireAuth role="student">
+      <CartPage />
+    </RequireAuth>
+  ),
 });
 
 // =====================================================
@@ -69,272 +68,147 @@ type CartData = {
 // =====================================================
 
 function CartPage() {
-  // ===================================================
-  // INITIAL CART
-  // ===================================================
-  //
-  // IMPORTANT:
-  // We load the previous cart from localStorage
-  // immediately.
-  //
-  // This prevents:
-  //
-  // "Your cart is empty"
-  //
-  // from flashing before the backend responds.
-  //
+  const location = useLocation();
+
   const [cart, setCart] = useState<CartData>(() => {
     try {
-      const savedCart =
-        localStorage.getItem(CART_STORAGE_KEY);
-
+      const savedCart = localStorage.getItem(CART_STORAGE_KEY);
       if (savedCart) {
         const parsedCart = JSON.parse(savedCart);
-
-        if (
-          parsedCart &&
-          Array.isArray(parsedCart.items)
-        ) {
+        if (parsedCart && Array.isArray(parsedCart.items)) {
           return parsedCart;
         }
       }
     } catch (error) {
-      console.error(
-        "Failed to load saved cart:",
-        error
-      );
+      console.error("Failed to load saved cart:", error);
     }
-
-    return {
-      items: [],
-    };
+    return { items: [] };
   });
 
-  // ===================================================
-  // UPDATE STATE
-  // ===================================================
-  //
-  // This is ONLY used when the user clicks +, -, delete.
-  //
-  // It is NOT used when entering the page.
-  //
-  const [updating, setUpdating] =
-    useState<string | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
 
   // ===================================================
-  // PREVENT DUPLICATE FETCH
+  // PAYMENT STATE
   // ===================================================
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   const hasFetched = useRef(false);
 
-  // ===================================================
-  // GET TOKEN
-  // ===================================================
-
   const getToken = () => {
-    return sessionStorage.getItem(
-      "pulselab_token"
-    );
+    return sessionStorage.getItem("pulselab_token");
   };
+
+  // ===================================================
+  // RESET PAYMENT STATE WHEN RETURNING TO /cart
+  // ===================================================
+  //
+  // When the user cancels on Paystack and Paystack
+  // redirects them back (either directly to /cart
+  // or via /payment/callback → /cart), the CartPage
+  // may NOT remount if it's a soft client-side
+  // navigation. So we must reset the payment flags
+  // whenever the location becomes "/cart".
+  //
+  // This ensures the Pay button is clickable again.
+  //
+  useEffect(() => {
+    // Reset every time we land on /cart
+    setIsRedirecting(false);
+    setHasInitialized(false);
+
+    // Clear any stale pending reference from a
+    // previous cancelled attempt.
+    sessionStorage.removeItem("pulselab_pending_reference");
+  }, [location.pathname]);
 
   // ===================================================
   // NORMALIZE CART
   // ===================================================
 
-  const normalizeCart = (
-    data: any
-  ): CartData => {
-    if (!data) {
-      return {
-        items: [],
-      };
-    }
-
-    // Backend:
-    // { items: [...] }
+  const normalizeCart = (data: any): CartData => {
+    if (!data) return { items: [] };
 
     if (Array.isArray(data.items)) {
-      return {
-        ...data,
-        items: data.items,
-      };
+      return { ...data, items: data.items };
     }
 
-    // Backend:
-    // { cart: { items: [...] } }
-
-    if (
-      data.cart &&
-      Array.isArray(data.cart.items)
-    ) {
-      return {
-        ...data.cart,
-        items: data.cart.items,
-      };
+    if (data.cart && Array.isArray(data.cart.items)) {
+      return { ...data.cart, items: data.cart.items };
     }
-
-    // Backend:
-    // [...]
 
     if (Array.isArray(data)) {
-      return {
-        items: data,
-      };
+      return { items: data };
     }
 
-    return {
-      items: [],
-    };
+    return { items: [] };
   };
 
   // ===================================================
   // SAVE CART LOCALLY
   // ===================================================
-  //
-  // Every time we receive the latest cart,
-  // save it locally.
-  //
-  // Next time the user opens /cart,
-  // the cart is available immediately.
-  //
-  const saveCartLocally = (
-    updatedCart: CartData
-  ) => {
+
+  const saveCartLocally = (updatedCart: CartData) => {
     try {
       localStorage.setItem(
         CART_STORAGE_KEY,
         JSON.stringify(updatedCart)
       );
     } catch (error) {
-      console.error(
-        "Failed to save cart locally:",
-        error
-      );
+      console.error("Failed to save cart locally:", error);
     }
   };
 
-  // ===================================================
-  // UPDATE CART
-  // ===================================================
-  //
-  // One function handles both:
-  //
-  // 1. React state
-  // 2. Local storage
-  //
-  const updateCart = (
-    updatedCart: CartData
-  ) => {
+  const updateCart = (updatedCart: CartData) => {
     setCart(updatedCart);
-
     saveCartLocally(updatedCart);
   };
 
-  // ===================================================
-  // GET COMPONENT ID
-  // ===================================================
-
   const getComponentId = (
-    componentId:
-      | ComponentData
-      | string
+    componentId: ComponentData | string
   ): string => {
-    if (typeof componentId === "string") {
-      return componentId;
-    }
-
+    if (typeof componentId === "string") return componentId;
     return componentId?._id || "";
   };
 
   // ===================================================
   // FETCH CART SILENTLY
   // ===================================================
-  //
-  // IMPORTANT:
-  //
-  // There is NO loading state here.
-  //
-  // The page already has the cached cart.
-  //
-  // The backend request happens in the background.
-  //
+
   const fetchCartSilently = async () => {
     const token = getToken();
+    if (!token) return;
 
-    if (!token) {
-      return;
-    }
-
-    const controller =
-      new AbortController();
-
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, 10000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
     try {
-      console.log(
-        "🛒 SILENTLY FETCHING CART..."
-      );
+      console.log("🛒 SILENTLY FETCHING CART...");
 
-      const response = await fetch(
-        // `${BASE_URL}/engineering/cart`,
-        `${API_URL}/engineering/cart`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          signal: controller.signal,
-        }
-      );
+      const response = await fetch(`${API_URL}/engineering/cart`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
 
-      const data =
-        await response.json();
-
-      console.log(
-        "🛒 GET CART RESPONSE:",
-        data
-      );
+      const data = await response.json();
+      console.log("🛒 GET CART RESPONSE:", data);
 
       if (!response.ok) {
-        throw new Error(
-          data?.message ||
-          "Failed to load cart"
-        );
+        throw new Error(data?.message || "Failed to load cart");
       }
 
-      const normalizedCart =
-        normalizeCart(data);
+      const normalizedCart = normalizeCart(data);
+      console.log("🛒 SILENT CART:", normalizedCart);
 
-      console.log(
-        "🛒 SILENT CART:",
-        normalizedCart
-      );
-
-      // Update only when backend responds.
       updateCart(normalizedCart);
     } catch (error: any) {
-      if (
-        error?.name ===
-        "AbortError"
-      ) {
-        console.error(
-          "🛒 Silent cart request timed out."
-        );
+      if (error?.name === "AbortError") {
+        console.error("🛒 Silent cart request timed out.");
       } else {
-        console.error(
-          "🛒 Silent cart fetch error:",
-          error
-        );
+        console.error("🛒 Silent cart fetch error:", error);
       }
-
-      // IMPORTANT:
-      //
-      // Do NOT clear the existing cart here.
-      //
-      // If the network temporarily fails,
-      // keep showing the cached cart.
     } finally {
       clearTimeout(timeout);
     }
@@ -345,14 +219,8 @@ function CartPage() {
   // ===================================================
 
   useEffect(() => {
-    if (hasFetched.current) {
-      return;
-    }
-
+    if (hasFetched.current) return;
     hasFetched.current = true;
-
-    // The page is already displaying the cached cart.
-    // This request happens silently in the background.
     fetchCartSilently();
   }, []);
 
@@ -361,94 +229,34 @@ function CartPage() {
   // ===================================================
 
   useEffect(() => {
-    const handleCartUpdated = (
-      updatedCart: any
-    ) => {
-      console.log(
-        "🛒🔥 REAL-TIME CART UPDATE:",
-        updatedCart
-      );
-
-      const normalizedCart =
-        normalizeCart(updatedCart);
-
-      // Immediately update UI + cache.
+    const handleCartUpdated = (updatedCart: any) => {
+      console.log("🛒🔥 REAL-TIME CART UPDATE:", updatedCart);
+      const normalizedCart = normalizeCart(updatedCart);
       updateCart(normalizedCart);
     };
 
     const handleConnect = () => {
-      console.log(
-        "🟢 Cart socket connected:",
-        socket.id
-      );
-
-      // =================================================
-      // ASK SERVER FOR CURRENT CART
-      // =================================================
-      //
-      // Your backend should listen for:
-      //
-      // "cart:request"
-      //
-      // and respond with:
-      //
-      // "cart:updated"
-      //
-      // containing the user's current cart.
-      //
+      console.log("🟢 Cart socket connected:", socket.id);
       socket.emit("cart:request");
     };
 
-    const handleDisconnect = (
-      reason: string
-    ) => {
-      console.log(
-        "🔴 Cart socket disconnected:",
-        reason
-      );
+    const handleDisconnect = (reason: string) => {
+      console.log("🔴 Cart socket disconnected:", reason);
     };
 
-    socket.on(
-      "cart:updated",
-      handleCartUpdated
-    );
+    socket.on("cart:updated", handleCartUpdated);
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
 
-    socket.on(
-      "connect",
-      handleConnect
-    );
-
-    socket.on(
-      "disconnect",
-      handleDisconnect
-    );
-
-    // Socket might already be connected.
     if (socket.connected) {
-      console.log(
-        "🟢 Socket already connected:",
-        socket.id
-      );
-
-      // Ask for latest cart.
+      console.log("🟢 Socket already connected:", socket.id);
       socket.emit("cart:request");
     }
 
     return () => {
-      socket.off(
-        "cart:updated",
-        handleCartUpdated
-      );
-
-      socket.off(
-        "connect",
-        handleConnect
-      );
-
-      socket.off(
-        "disconnect",
-        handleDisconnect
-      );
+      socket.off("cart:updated", handleCartUpdated);
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
     };
   }, []);
 
@@ -456,20 +264,14 @@ function CartPage() {
   // REMOVE ITEM
   // ===================================================
 
-  const removeItem = async (
-    componentId: string
-  ) => {
+  const removeItem = async (componentId: string) => {
     const token = getToken();
-
     if (!token) {
       alert("Please login first.");
       return;
     }
-
     if (!componentId) {
-      alert(
-        "Component ID is missing."
-      );
+      alert("Component ID is missing.");
       return;
     }
 
@@ -480,41 +282,21 @@ function CartPage() {
         `${API_URL}/engineering/cart/${componentId}`,
         {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      const data =
-        await response.json();
-
-      console.log(
-        "🗑️ REMOVE CART RESPONSE:",
-        data
-      );
+      const data = await response.json();
+      console.log("🗑️ REMOVE CART RESPONSE:", data);
 
       if (!response.ok) {
-        throw new Error(
-          data?.message ||
-          "Failed to remove item"
-        );
+        throw new Error(data?.message || "Failed to remove item");
       }
 
-      const normalizedCart =
-        normalizeCart(data);
-
-      updateCart(normalizedCart);
+      updateCart(normalizeCart(data));
     } catch (error: any) {
-      console.error(
-        "Remove cart item error:",
-        error
-      );
-
-      alert(
-        error?.message ||
-        "Failed to remove item"
-      );
+      console.error("Remove cart item error:", error);
+      alert(error?.message || "Failed to remove item");
     } finally {
       setUpdating(null);
     }
@@ -524,94 +306,49 @@ function CartPage() {
   // INCREASE QUANTITY
   // ===================================================
 
-  const increaseQuantity = async (
-    item: CartItem
-  ) => {
+  const increaseQuantity = async (item: CartItem) => {
     const token = getToken();
-
     if (!token) {
       alert("Please login first.");
       return;
     }
 
-    const componentId =
-      getComponentId(
-        item.componentId
-      );
-
+    const componentId = getComponentId(item.componentId);
     if (!componentId) {
-      alert(
-        "Component ID is missing."
-      );
+      alert("Component ID is missing.");
       return;
     }
 
-    // =================================================
-    // CHECK STOCK
-    // =================================================
-
     if (
-      typeof item.componentId !==
-      "string" &&
-      item.componentId.stock !==
-      undefined
+      typeof item.componentId !== "string" &&
+      item.componentId.stock !== undefined
     ) {
-      if (
-        item.quantity >=
-        item.componentId.stock
-      ) {
-        return;
-      }
+      if (item.quantity >= item.componentId.stock) return;
     }
 
     try {
       setUpdating(componentId);
 
-      const response = await fetch(
-        `${API_URL}/engineering/addtocart`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            componentId,
-            quantity: 1,
-          }),
-        }
-      );
+      const response = await fetch(`${API_URL}/engineering/addtocart`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ componentId, quantity: 1 }),
+      });
 
-      const data =
-        await response.json();
-
-      console.log(
-        "➕ INCREASE CART RESPONSE:",
-        data
-      );
+      const data = await response.json();
+      console.log("➕ INCREASE CART RESPONSE:", data);
 
       if (!response.ok) {
-        throw new Error(
-          data?.message ||
-          "Failed to increase quantity"
-        );
+        throw new Error(data?.message || "Failed to increase quantity");
       }
 
-      const normalizedCart =
-        normalizeCart(data);
-
-      updateCart(normalizedCart);
+      updateCart(normalizeCart(data));
     } catch (error: any) {
-      console.error(
-        "Increase quantity error:",
-        error
-      );
-
-      alert(
-        error?.message ||
-        "Failed to increase quantity"
-      );
+      console.error("Increase quantity error:", error);
+      alert(error?.message || "Failed to increase quantity");
     } finally {
       setUpdating(null);
     }
@@ -621,124 +358,67 @@ function CartPage() {
   // DECREASE QUANTITY
   // ===================================================
 
-  const decreaseQuantity = async (
-    item: CartItem
-  ) => {
+  const decreaseQuantity = async (item: CartItem) => {
     const token = getToken();
-
     if (!token) {
       alert("Please login first.");
       return;
     }
 
-    const componentId =
-      getComponentId(
-        item.componentId
-      );
-
+    const componentId = getComponentId(item.componentId);
     if (!componentId) {
-      alert(
-        "Component ID is missing."
-      );
+      alert("Component ID is missing.");
       return;
     }
 
     try {
       setUpdating(componentId);
 
-      // =================================================
-      // QUANTITY = 1
-      // REMOVE ITEM
-      // =================================================
-
       if (item.quantity <= 1) {
-        const response =
-          await fetch(
-            `${API_URL}/engineering/cart/${componentId}`,
-            {
-              method: "DELETE",
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-
-        const data =
-          await response.json();
-
-        console.log(
-          "🗑️ REMOVE FROM DECREASE:",
-          data
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            data?.message ||
-            "Failed to remove item"
-          );
-        }
-
-        const normalizedCart =
-          normalizeCart(data);
-
-        updateCart(normalizedCart);
-
-        return;
-      }
-
-      // =================================================
-      // DECREASE BY 1
-      // =================================================
-
-      const newQuantity =
-        item.quantity - 1;
-
-      const response =
-        await fetch(
+        const response = await fetch(
           `${API_URL}/engineering/cart/${componentId}`,
           {
-            method: "PUT",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              quantity:
-                newQuantity,
-            }),
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
           }
         );
 
-      const data =
-        await response.json();
+        const data = await response.json();
+        console.log("🗑️ REMOVE FROM DECREASE:", data);
 
-      console.log(
-        "➖ DECREASE CART RESPONSE:",
-        data
-      );
+        if (!response.ok) {
+          throw new Error(data?.message || "Failed to remove item");
+        }
 
-      if (!response.ok) {
-        throw new Error(
-          data?.message ||
-          "Failed to decrease quantity"
-        );
+        updateCart(normalizeCart(data));
+        return;
       }
 
-      const normalizedCart =
-        normalizeCart(data);
+      const newQuantity = item.quantity - 1;
 
-      updateCart(normalizedCart);
+      const response = await fetch(
+        `${API_URL}/engineering/cart/${componentId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ quantity: newQuantity }),
+        }
+      );
+
+      const data = await response.json();
+      console.log("➖ DECREASE CART RESPONSE:", data);
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Failed to decrease quantity");
+      }
+
+      updateCart(normalizeCart(data));
     } catch (error: any) {
-      console.error(
-        "Decrease quantity error:",
-        error
-      );
-
-      alert(
-        error?.message ||
-        "Failed to decrease quantity"
-      );
+      console.error("Decrease quantity error:", error);
+      alert(error?.message || "Failed to decrease quantity");
     } finally {
       setUpdating(null);
     }
@@ -749,92 +429,138 @@ function CartPage() {
   // ===================================================
 
   const total = useMemo(() => {
-    if (
-      !Array.isArray(
-        cart?.items
-      )
-    ) {
-      return 0;
-    }
+    if (!Array.isArray(cart?.items)) return 0;
 
-    return cart.items.reduce(
-      (sum, item) => {
-        const component =
-          item.componentId;
+    return cart.items.reduce((sum, item) => {
+      const component = item.componentId;
+      if (!component || typeof component === "string") return sum;
 
-        if (
-          !component ||
-          typeof component ===
-          "string"
-        ) {
-          return sum;
-        }
-
-        const price =
-          Number(
-            component.price
-          ) || 0;
-
-        const quantity =
-          Number(
-            item.quantity
-          ) || 0;
-
-        return (
-          sum +
-          price * quantity
-        );
-      },
-      0
-    );
+      const price = Number(component.price) || 0;
+      const quantity = Number(item.quantity) || 0;
+      return sum + price * quantity;
+    }, 0);
   }, [cart]);
 
   // ===================================================
   // TOTAL QUANTITY
   // ===================================================
 
-  const totalQuantity =
-    useMemo(() => {
-      if (
-        !Array.isArray(
-          cart?.items
-        )
-      ) {
-        return 0;
-      }
+  const totalQuantity = useMemo(() => {
+    if (!Array.isArray(cart?.items)) return 0;
 
-      return cart.items.reduce(
-        (sum, item) =>
-          sum +
-          (Number(
-            item.quantity
-          ) || 0),
-        0
-      );
-    }, [cart]);
+    return cart.items.reduce(
+      (sum, item) => sum + (Number(item.quantity) || 0),
+      0
+    );
+  }, [cart]);
 
   // ===================================================
   // FORMAT NAIRA
   // ===================================================
 
-  const formatNaira = (
-    amount: number
-  ) => {
-    return `₦${amount.toLocaleString(
-      "en-NG"
-    )}`;
+  const formatNaira = (amount: number) => {
+    return `₦${amount.toLocaleString("en-NG")}`;
   };
 
   // ===================================================
   // SAFE CART ITEMS
   // ===================================================
 
-  const cartItems =
-    Array.isArray(
-      cart?.items
-    )
-      ? cart.items
-      : [];
+  const cartItems = Array.isArray(cart?.items) ? cart.items : [];
+
+  // ===================================================
+  // HANDLE CHECKOUT (PAYSTACK)
+  // ===================================================
+  //
+  // 1. Ask backend to create a PaymentOrder and
+  //    initialize a Paystack transaction.
+  // 2. Backend returns an authorizationUrl.
+  // 3. Redirect the browser to Paystack.
+  //
+  // After payment OR cancellation, Paystack redirects
+  // to FRONTEND_URL/payment/callback?reference=...
+  //
+  const handleCheckout = async () => {
+    // Prevent double-initiation (double clicks, re-renders)
+    if (isRedirecting || hasInitialized) return;
+
+    setCheckoutError(null);
+
+    const token = getToken();
+    if (!token) {
+      setCheckoutError("Please login first.");
+      return;
+    }
+
+    if (!cartItems.length) {
+      setCheckoutError("Your cart is empty.");
+      return;
+    }
+
+    // Mark as initialized BEFORE the network call so any
+    // re-render or double-click cannot trigger a second one.
+    setHasInitialized(true);
+    setIsRedirecting(true);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/paystack/initialize`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const rawText = await response.text();
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        console.error(
+          "Non-JSON response from paystack initialize:",
+          rawText.slice(0, 300)
+        );
+        throw new Error(
+          response.ok
+            ? "Server returned an invalid response."
+            : `Payment endpoint not found (HTTP ${response.status}).`
+        );
+      }
+
+      if (!response.ok || !data?.authorizationUrl) {
+        throw new Error(
+          data?.message || "Unable to initialize payment"
+        );
+      }
+
+      // Persist the reference so the callback page can
+      // identify this attempt if the user cancels.
+      if (data.reference) {
+        sessionStorage.setItem(
+          "pulselab_pending_reference",
+          data.reference
+        );
+      }
+
+      // Redirect to Paystack.
+      window.location.href = data.authorizationUrl;
+
+      // IMPORTANT: Do NOT reset isRedirecting here.
+      // The page is about to unmount due to navigation.
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      setCheckoutError(
+        error?.message || "Unable to start payment. Please try again."
+      );
+
+      // Only reset on error — user stays on cart page.
+      setIsRedirecting(false);
+      setHasInitialized(false);
+    }
+  };
 
   // ===================================================
   // PAGE
@@ -843,370 +569,217 @@ function CartPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-12">
-
         {/* HEADER */}
-
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-brand-navy">
             Your Cart
           </h1>
-
           <p className="mt-2 text-sm text-slate-500">
             {totalQuantity}{" "}
-            {totalQuantity === 1
-              ? "item"
-              : "items"}{" "}
-            in your cart
+            {totalQuantity === 1 ? "item" : "items"} in your cart
           </p>
         </div>
 
-        {/* =================================================
-            IMPORTANT
-
-            There is NO loading cart here.
-
-            There is also NO "Updating cart..."
-            when the page first opens.
-
-            Updating only appears when the user
-            actually clicks +, -, or delete.
-        ================================================= */}
-
-        {/* {updating && (
-          <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
-            <Loader2 className="size-4 animate-spin" />
-
-            <span>
-              Updating cart...
-            </span>
-          </div>
-        )} */}
-
-        {/* =================================================
-            EMPTY CART
-        ================================================= */}
-
+        {/* EMPTY CART */}
         {cartItems.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center">
-
             <ShoppingCart className="mx-auto mb-5 h-12 w-12 text-slate-300" />
-
             <h2 className="text-xl font-semibold text-brand-navy">
               Your cart is empty
             </h2>
-
             <p className="mt-2 text-slate-500">
-              You haven't added any
-              components yet.
+              You haven't added any components yet.
             </p>
-
             <Link
               to="/components"
               className="mt-6 inline-block rounded-lg bg-brand-navy px-6 py-3 font-semibold text-white transition-colors hover:bg-slate-800"
             >
               Browse components
             </Link>
-
           </div>
         ) : (
-
-          /* =================================================
-             CART + SUMMARY
-          ================================================= */
-
           <div className="grid gap-8 lg:grid-cols-3">
-
             {/* CART ITEMS */}
-
             <div className="space-y-3 lg:col-span-2">
-
               <AnimatePresence mode="popLayout">
+                {cartItems.map((item, index) => {
+                  if (
+                    !item.componentId ||
+                    typeof item.componentId === "string"
+                  ) {
+                    return null;
+                  }
 
-                {cartItems.map(
-                  (
-                    item,
-                    index
-                  ) => {
+                  const component = item.componentId;
+                  const componentId = component._id;
+                  if (!componentId) return null;
 
-                    // Make sure component is populated.
+                  const isUpdating = updating === componentId;
+                  const itemTotal =
+                    (Number(component.price) || 0) *
+                    (Number(item.quantity) || 0);
 
-                    if (
-                      !item.componentId ||
-                      typeof item.componentId ===
-                      "string"
-                    ) {
-                      return null;
-                    }
+                  return (
+                    <motion.div
+                      key={`${componentId}-${index}`}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -40 }}
+                      className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"
+                    >
+                      {/* IMAGE */}
+                      <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-50">
+                        {component.image ? (
+                          <img
+                            src={component.image}
+                            alt={component.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-2xl">📦</span>
+                        )}
+                      </div>
 
-                    const component =
-                      item.componentId;
+                      {/* DETAILS */}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold text-brand-navy">
+                          {component.name}
+                        </div>
+                        <div className="mt-1 font-mono text-xs text-slate-500">
+                          SKU: {component.sku}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          {formatNaira(Number(component.price) || 0)} each
+                        </div>
+                      </div>
 
-                    const componentId =
-                      component._id;
+                      {/* QUANTITY */}
+                      <div className="flex items-center self-start rounded-lg border border-slate-200 sm:self-auto">
+                        <button
+                          type="button"
+                          disabled={isUpdating}
+                          onClick={() => decreaseQuantity(item)}
+                          className="grid size-9 place-items-center transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus className="size-3.5" />
+                        </button>
 
-                    if (
-                      !componentId
-                    ) {
-                      return null;
-                    }
-
-                    const isUpdating =
-                      updating ===
-                      componentId;
-
-                    const itemTotal =
-                      (Number(
-                        component.price
-                      ) || 0) *
-                      (Number(
-                        item.quantity
-                      ) || 0);
-
-                    return (
-                      <motion.div
-                        key={`${componentId}-${index}`}
-                        layout
-                        initial={{
-                          opacity: 0,
-                          y: 10,
-                        }}
-                        animate={{
-                          opacity: 1,
-                          y: 0,
-                        }}
-                        exit={{
-                          opacity: 0,
-                          x: -40,
-                        }}
-                        className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"
-                      >
-
-                        {/* IMAGE */}
-
-                        <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-50">
-
-                          {component.image ? (
-                            <img
-                              src={
-                                component.image
-                              }
-                              alt={
-                                component.name
-                              }
-                              className="h-full w-full object-cover"
-                            />
+                        <span className="flex w-10 items-center justify-center text-sm font-semibold">
+                          {isUpdating ? (
+                            <Loader2 className="size-4 animate-spin" />
                           ) : (
-                            <span className="text-2xl">
-                              📦
-                            </span>
+                            item.quantity
                           )}
-
-                        </div>
-
-                        {/* DETAILS */}
-
-                        <div className="min-w-0 flex-1">
-
-                          <div className="truncate font-semibold text-brand-navy">
-                            {
-                              component.name
-                            }
-                          </div>
-
-                          <div className="mt-1 font-mono text-xs text-slate-500">
-                            SKU:{" "}
-                            {
-                              component.sku
-                            }
-                          </div>
-
-                          <div className="mt-1 text-sm text-slate-500">
-                            {formatNaira(
-                              Number(
-                                component.price
-                              ) || 0
-                            )}{" "}
-                            each
-                          </div>
-
-                        </div>
-
-                        {/* QUANTITY */}
-
-                        <div className="flex items-center self-start rounded-lg border border-slate-200 sm:self-auto">
-
-                          {/* MINUS */}
-
-                          <button
-                            type="button"
-                            disabled={
-                              isUpdating
-                            }
-                            onClick={() =>
-                              decreaseQuantity(
-                                item
-                              )
-                            }
-                            className="grid size-9 place-items-center transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label="Decrease quantity"
-                          >
-                            <Minus className="size-3.5" />
-                          </button>
-
-                          {/* NUMBER */}
-
-                          <span className="flex w-10 items-center justify-center text-sm font-semibold">
-
-                            {isUpdating ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                              item.quantity
-                            )}
-
-                          </span>
-
-                          {/* PLUS */}
-
-                          <button
-                            type="button"
-                            disabled={
-                              isUpdating ||
-                              item.quantity >=
-                              component.stock
-                            }
-                            onClick={() =>
-                              increaseQuantity(
-                                item
-                              )
-                            }
-                            className="grid size-9 place-items-center transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label="Increase quantity"
-                          >
-                            <Plus className="size-3.5" />
-                          </button>
-
-                        </div>
-
-                        {/* PRICE */}
-
-                        <div className="w-full text-left font-bold text-brand-navy sm:w-28 sm:text-right">
-                          {formatNaira(
-                            itemTotal
-                          )}
-                        </div>
-
-                        {/* DELETE */}
+                        </span>
 
                         <button
                           type="button"
                           disabled={
-                            isUpdating
+                            isUpdating ||
+                            item.quantity >= component.stock
                           }
-                          onClick={() =>
-                            removeItem(
-                              componentId
-                            )
-                          }
-                          className="grid size-9 shrink-0 place-items-center self-start rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 sm:self-auto"
-                          aria-label={`Remove ${component.name}`}
+                          onClick={() => increaseQuantity(item)}
+                          className="grid size-9 place-items-center transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label="Increase quantity"
                         >
-                          <Trash2 className="size-4" />
+                          <Plus className="size-3.5" />
                         </button>
+                      </div>
 
-                      </motion.div>
-                    );
-                  }
-                )}
+                      {/* PRICE */}
+                      <div className="w-full text-left font-bold text-brand-navy sm:w-28 sm:text-right">
+                        {formatNaira(itemTotal)}
+                      </div>
 
+                      {/* DELETE */}
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => removeItem(componentId)}
+                        className="grid size-9 shrink-0 place-items-center self-start rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 sm:self-auto"
+                        aria-label={`Remove ${component.name}`}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
-
             </div>
 
             {/* ORDER SUMMARY */}
-
             <div className="sticky top-24 h-fit rounded-2xl border border-slate-200 bg-white p-6">
-
               <h3 className="mb-4 font-mono text-[10px] uppercase tracking-widest text-slate-400">
                 Order Summary
               </h3>
 
               <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Items</span>
+                  <span className="font-semibold">{totalQuantity}</span>
+                </div>
 
                 <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    Items
-                  </span>
-
+                  <span className="text-slate-500">Subtotal</span>
                   <span className="font-semibold">
-                    {totalQuantity}
+                    {formatNaira(total)}
                   </span>
                 </div>
 
                 <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    Subtotal
-                  </span>
-
-                  <span className="font-semibold">
-                    {formatNaira(
-                      total
-                    )}
-                  </span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    Pickup
-                  </span>
-
+                  <span className="text-slate-500">Pickup</span>
                   <span className="font-semibold text-green-600">
                     Free
                   </span>
                 </div>
-
               </div>
 
               {/* TOTAL */}
-
               <div className="mt-4 flex justify-between border-t border-slate-100 pt-4 text-lg">
-
-                <span className="font-bold text-brand-navy">
-                  Total
-                </span>
-
+                <span className="font-bold text-brand-navy">Total</span>
                 <motion.span
                   key={total}
-                  initial={{
-                    scale: 0.9,
-                    opacity: 0.5,
-                  }}
-                  animate={{
-                    scale: 1,
-                    opacity: 1,
-                  }}
+                  initial={{ scale: 0.9, opacity: 0.5 }}
+                  animate={{ scale: 1, opacity: 1 }}
                   className="font-bold text-brand-navy"
                 >
-                  {formatNaira(
-                    total
-                  )}
+                  {formatNaira(total)}
                 </motion.span>
-
               </div>
 
-              {/* CHECKOUT */}
+              {/* ERROR */}
+              {checkoutError && (
+                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <span>{checkoutError}</span>
+                </div>
+              )}
 
-              <Link
-                to="/checkout"
-                className="mt-6 block h-12 w-full rounded-lg bg-brand-navy text-center font-semibold leading-[3rem] text-white transition hover:bg-slate-800 active:scale-[0.98]"
+              {/* PAY BUTTON */}
+              <button
+                type="button"
+                onClick={handleCheckout}
+                disabled={isRedirecting || cartItems.length === 0}
+                className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-brand-navy font-semibold text-white transition hover:bg-slate-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Checkout
-              </Link>
+                {isRedirecting ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Redirecting to Paystack...
+                  </>
+                ) : (
+                  <>Pay {formatNaira(total)}</>
+                )}
+              </button>
 
+              <p className="mt-3 text-center text-[11px] text-slate-400">
+                Secure payment powered by Paystack
+              </p>
             </div>
-
           </div>
         )}
-
       </div>
     </AppShell>
   );

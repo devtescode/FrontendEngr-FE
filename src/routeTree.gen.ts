@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as OrdersRouteImport } from './routes/orders'
+import { Route as PaymentCallbackRouteImport } from './routes/payment.callback'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ComponentsRouteImport } from './routes/components'
@@ -32,6 +33,11 @@ const RegisterRoute = RegisterRouteImport.update({
 const OrdersRoute = OrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PaymentCallbackRoute = PaymentCallbackRouteImport.update({
+  id: '/payment/callback',
+  path: '/payment/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
+  '/payment/callback': typeof PaymentCallbackRoute
   '/register': typeof RegisterRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
+  '/payment/callback': typeof PaymentCallbackRoute
   '/register': typeof RegisterRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
+  '/payment/callback': typeof PaymentCallbackRoute
   '/register': typeof RegisterRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/orders'
+    | '/payment/callback'
     | '/register'
     | '/admin/components'
     | '/admin/login'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/orders'
+    | '/payment/callback'
     | '/register'
     | '/admin/components'
     | '/admin/login'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/orders'
+    | '/payment/callback'
     | '/register'
     | '/admin/components'
     | '/admin/login'
@@ -205,6 +217,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   OrdersRoute: typeof OrdersRoute
+  PaymentCallbackRoute: typeof PaymentCallbackRoute
   RegisterRoute: typeof RegisterRoute
   AdminUsersRoute: typeof AdminUsersRoute
 }
@@ -223,6 +236,13 @@ declare module '@tanstack/react-router' {
       path: '/orders'
       fullPath: '/orders'
       preLoaderRoute: typeof OrdersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/payment/callback': {
+      id: '/payment/callback'
+      path: '/payment/callback'
+      fullPath: '/payment/callback'
+      preLoaderRoute: typeof PaymentCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -339,6 +359,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   OrdersRoute: OrdersRoute,
+  PaymentCallbackRoute: PaymentCallbackRoute,
   RegisterRoute: RegisterRoute,
 }
 export const routeTree = rootRouteImport
