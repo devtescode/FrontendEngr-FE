@@ -1,4 +1,6 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import {  useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, type LinkProps } from "@tanstack/react-router";
+
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -153,13 +155,14 @@ export function Navbar() {
             <NavLink to="/components">
               Components
             </NavLink>
-
+{/* 
             <NavLink to="/change-password">
               Change Password
-            </NavLink>
+            </NavLink> */}
 
-            <NavLink to="/receipt">
-              Order Receipt
+            <NavLink to="/receipts"
+            >
+              Order Receipts
             </NavLink>
 
             <NavLink to="/cart">
@@ -610,15 +613,15 @@ export function Navbar() {
                     Components
                   </MobileNavLink>
 
-                  <MobileNavLink
+                  {/* <MobileNavLink
                     to="/change-password"
                     onClick={closeMobileMenu}
                   >
                     Change Password
-                  </MobileNavLink>
+                  </MobileNavLink> */}
 
                   <MobileNavLink
-                    to="/receipt"
+                    to="/receipts"
                     onClick={closeMobileMenu}
                   >
                     Order Receipt
@@ -731,27 +734,21 @@ export function Navbar() {
    DESKTOP NAV LINK
 ============================================================ */
 
-function NavLink({
-  to,
-  children,
-}: {
-  to: string;
-  children: React.ReactNode;
-}) {
+
+function NavLink(props: LinkProps) {
   return (
     <Link
-      to={to}
+      {...props}
       className="
         text-slate-500
         transition-colors
         hover:text-brand-navy
       "
       activeProps={{
-        className:
-          "text-brand-navy font-semibold",
+        className: "text-brand-navy font-semibold",
       }}
     >
-      {children}
+      {props.children}
     </Link>
   );
 }
@@ -760,18 +757,14 @@ function NavLink({
    MOBILE NAV LINK
 ============================================================ */
 
+
 function MobileNavLink({
-  to,
-  children,
   onClick,
-}: {
-  to: string;
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
+  ...props
+}: LinkProps & { onClick: () => void }) {
   return (
     <Link
-      to={to}
+      {...props}
       onClick={onClick}
       className="
         rounded-xl
@@ -796,7 +789,7 @@ function MobileNavLink({
         `,
       }}
     >
-      {children}
+      {props.children}
     </Link>
   );
 }

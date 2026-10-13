@@ -193,9 +193,12 @@ function OrdersPage() {
         `${API_URL}/engineering/getorders`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
+      // const data = await response.json();
+      
+      
       const rawText = await response.text();
       const data = rawText ? JSON.parse(rawText) : null;
+      console.log("🔍 FULL RESPONSE:", data);
 
       if (!response.ok) return;
 
