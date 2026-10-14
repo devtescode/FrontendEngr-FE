@@ -102,10 +102,11 @@ export type Order = {
   items: OrderItem[];
   total: number;
   currency: string;
-  status: "Paid";
+  status: "Paid" | "Ready" | "Collected";
   channel: string | null;
   paidAt: string;
   createdAt: string;
+  collectedAt?: string | null;
 };
 
 // =====================================================
@@ -165,7 +166,12 @@ function normalizeOrder(raw: any): Order {
     items,
     total: Number(raw?.total ?? 0),
     currency: String(raw?.currency ?? "NGN"),
-    status: "Paid",
+
+    // ⬇️ THE FIX — read status from backend, don't
+    // hardcode. Defaults to "Paid" if the field is
+    // somehow missing.
+    status: raw?.status ?? "Paid",
+
     channel: raw?.channel ?? null,
     paidAt: String(
       raw?.paidAt ?? raw?.createdAt ?? new Date().toISOString()
@@ -173,7 +179,6 @@ function normalizeOrder(raw: any): Order {
     createdAt: String(raw?.createdAt ?? ""),
   };
 }
-
 // =====================================================
 // LOAD ORDERS
 // =====================================================
