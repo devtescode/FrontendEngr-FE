@@ -96,7 +96,7 @@ function AdminCarts() {
         setError("");
 
         const token =
-          sessionStorage.getItem("pulselab_token");
+          sessionStorage.getItem("admin_token");
 
         const response = await fetch(
           `${API_URL}/admin/getallcarts`,

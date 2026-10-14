@@ -58,7 +58,7 @@ function AdminUsers() {
 
       const token =
         sessionStorage.getItem(
-          "pulselab_token"
+          "admin_token"
         );
 
       const response = await fetch(
