@@ -1,5 +1,6 @@
 import {  useNavigate, useRouterState } from "@tanstack/react-router";
 import { Link, type LinkProps } from "@tanstack/react-router";
+import { resetOrdersCache } from "@/lib/ordersStore";
 
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -64,10 +65,11 @@ export function Navbar() {
 
   // const navigate = useNavigate();
   const Logout = () => {
-    navigate({ to: "/login" });
+    resetOrdersCache();  
     logout();
     sessionStorage.clear();
     // localStorage.clear();
+    navigate({ to: "/login" });
   }
 
   return (

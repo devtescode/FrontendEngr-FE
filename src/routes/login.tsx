@@ -12,11 +12,9 @@ import {
   type SyntheticEvent,
 } from "react";
 import { useCurrentUser, useStore } from "@/lib/store";
-import { connectUserSocket } from "@/lib/socket";
+import { connectUserSocket, socket } from "@/lib/socket";
+import { resetOrdersCache } from "@/lib/ordersStore";
 import { Mail, Lock, Loader2 } from "lucide-react";
-// import { API_URLS } from "@/utils/apiConfig";
-
-// const BASE_URL = API_URLS.userlogin;
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -26,8 +24,7 @@ export const Route = createFileRoute("/login")({
 });
 
 const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4500";
+  import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 function LoginPage() {
   const user = useCurrentUser();
@@ -137,8 +134,7 @@ function LoginPage() {
 
       if (!response.ok) {
         setError(
-          data?.message ||
-          "Invalid email or password."
+          data?.message || "Invalid email or password."
         );
         return;
       }
@@ -164,9 +160,7 @@ function LoginPage() {
         userData.userId;
 
       if (!userId) {
-        setError(
-          "User ID was not returned by the server."
-        );
+        setError("User ID was not returned by the server.");
         return;
       }
 
@@ -184,6 +178,24 @@ function LoginPage() {
 
       console.log("Logged in user:", userData);
 
+      // =================================================
+      // CLEAR PREVIOUS USER'S CACHES
+      // =================================================
+      // A new login means we're switching users (or
+      // re-authenticating the same user). Reset all
+      // session-scoped caches BEFORE storing the new
+      // token, so no component can read stale data
+      // from the previous user.
+      //
+      resetOrdersCache();
+
+      // If a socket is already connected as the previous
+      // user, tear it down before joining the new room.
+      // (connectUserSocket will reconnect below.)
+      if (socket.connected) {
+        socket.disconnect();
+      }
+
       // --------------------------------
       // SAVE SESSION
       // --------------------------------
@@ -195,10 +207,8 @@ function LoginPage() {
         })
       );
 
-      sessionStorage.setItem(
-        "pulselab_token",
-        token
-      );
+      sessionStorage.setItem("pulselab_token", token);
+      sessionStorage.setItem("pulselab_userId", String(userId));
 
       // --------------------------------
       // UPDATE ZUSTAND
@@ -210,6 +220,12 @@ function LoginPage() {
       // --------------------------------
       // CONNECT SOCKET
       // --------------------------------
+      // Reconnect and join the room under the new
+      // user's ID. `connectUserSocket` reads the token
+      // from sessionStorage, so it must run AFTER we
+      // store the token above.
+      //
+      socket.connect();
       connectUserSocket();
 
       // --------------------------------
@@ -240,14 +256,8 @@ function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-2 bg-slate-50">
       <motion.div
-        initial={{
-          opacity: 0,
-          y: 20,
-        }}
-        animate={{
-          opacity: 1,
-          y: 0,
-        }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md rounded-sm bg-white p-6 shadow-sm"
       >
         <h1 className="text-3xl font-bold text-brand-navy">
@@ -281,25 +291,21 @@ function LoginPage() {
           />
 
           {error && (
-            <p className="text-sm text-red-600">
-              {error}
-            </p>
+            <p className="text-sm text-red-600">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${loading
+            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+              loading
                 ? "bg-slate-400 text-white cursor-not-allowed"
                 : "bg-brand-navy text-white hover:bg-slate-800"
-              }`}
+            }`}
           >
             {loading ? (
               <>
-                <Loader2
-                  size={18}
-                  className="animate-spin"
-                />
+                <Loader2 size={18} className="animate-spin" />
                 <span>Signing in...</span>
               </>
             ) : (
@@ -362,10 +368,9 @@ export function Field({
           }}
           placeholder={placeholder}
           required
-          className={`w-full h-11 rounded-sm border border-slate-200 bg-white text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-accent/10 focus:border-brand-accent transition ${icon
-              ? "pl-10 pr-3"
-              : "px-3"
-            }`}
+          className={`w-full h-11 rounded-sm border border-slate-200 bg-white text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-accent/10 focus:border-brand-accent transition ${
+            icon ? "pl-10 pr-3" : "px-3"
+          }`}
         />
       </div>
     </label>

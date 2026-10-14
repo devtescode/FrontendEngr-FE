@@ -25,7 +25,7 @@ function AdminLayout() {
 const NAV: { to: string; label: string; icon: any; exact?: boolean }[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { to: "/admin/components", label: "Inventory", icon: Boxes },
-  { to: "/admin/orders", label: "Orders", icon: ClipboardList },
+  { to: "/admin/orders", label: "User Carts", icon: ClipboardList },
   { to: "/admin/pickup", label: "Pickup", icon: Hand },
   { to: "/admin/users", label: "Users", icon: Users },
 ];

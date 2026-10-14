@@ -333,15 +333,9 @@ function AdminCarts() {
 
         {/* SUMMARY */}
 
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
-          <SummaryCard
-            icon={
-              <ShoppingCart className="h-5 w-5" />
-            }
-            label="Active Carts"
-            value={carts.length}
-          />
+          
 
           <SummaryCard
             icon={
