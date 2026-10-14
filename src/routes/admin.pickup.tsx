@@ -16,8 +16,9 @@ import {
   Receipt,
   Copy,
   Check,
+  ShieldCheck,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/admin/pickup")({
   head: () => ({
@@ -58,6 +59,11 @@ type PickupOrder = {
   status: "Paid" | "Ready" | "Collected";
 };
 
+type PendingConfirm = {
+  order: PickupOrder;
+  nextStatus: PickupOrder["status"];
+} | null;
+
 // =====================================================
 // HELPERS
 // =====================================================
@@ -96,6 +102,11 @@ function PickupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+
+  // Confirmation modal state
+  const [pendingConfirm, setPendingConfirm] =
+    useState<PendingConfirm>(null);
+  const [updating, setUpdating] = useState(false);
 
   // ===================================================
   // SEARCH
@@ -173,17 +184,30 @@ function PickupPage() {
   };
 
   // ===================================================
-  // UPDATE STATUS (optimistic)
+  // REQUEST STATUS CHANGE (opens confirmation modal)
   // ===================================================
-  const updateStatus = async (
-    orderId: string,
-    newStatus: PickupOrder["status"]
+  const requestStatusChange = (
+    order: PickupOrder,
+    nextStatus: PickupOrder["status"]
   ) => {
+    setPendingConfirm({ order, nextStatus });
+  };
+
+  // ===================================================
+  // CONFIRM STATUS CHANGE (fires the API call)
+  // ===================================================
+  const confirmStatusChange = async () => {
+    if (!pendingConfirm) return;
+
+    const { order, nextStatus } = pendingConfirm;
+
     const token = getToken();
     if (!token) {
       alert("Please log in as admin.");
       return;
     }
+
+    setUpdating(true);
 
     const previous = results;
 
@@ -191,21 +215,21 @@ function PickupPage() {
     setResults((prev) =>
       prev
         ? prev.map((o) =>
-            o.id === orderId ? { ...o, status: newStatus } : o
+            o.id === order.id ? { ...o, status: nextStatus } : o
           )
         : prev
     );
 
     try {
       const response = await fetch(
-        `${API_URL}/admin/pickup/${orderId}/status`,
+        `${API_URL}/admin/pickup/${order.id}/status`,
         {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ status: newStatus }),
+          body: JSON.stringify({ status: nextStatus }),
         }
       );
 
@@ -213,14 +237,46 @@ function PickupPage() {
         const data = await response.json().catch(() => null);
         throw new Error(data?.message || "Failed to update status");
       }
+
+      // Success — close modal
+      setPendingConfirm(null);
     } catch (err: any) {
       console.error("Update status failed:", err);
       alert(err?.message || "Failed to update status");
 
-      // Revert to the previous state on failure
+      // Revert on failure
       setResults(previous);
+    } finally {
+      setUpdating(false);
     }
   };
+
+  // ===================================================
+  // ESC KEY CLOSES MODAL
+  // ===================================================
+  useEffect(() => {
+    if (!pendingConfirm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !updating) {
+        setPendingConfirm(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pendingConfirm, updating]);
+
+  // ===================================================
+  // BODY SCROLL LOCK WHILE MODAL IS OPEN
+  // ===================================================
+  useEffect(() => {
+    if (pendingConfirm) {
+      const orig = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = orig;
+      };
+    }
+  }, [pendingConfirm]);
 
   // ===================================================
   // RENDER
@@ -300,7 +356,6 @@ function PickupPage() {
 
         {/* RESULTS */}
         <AnimatePresence mode="wait">
-          {/* ERROR */}
           {error && (
             <motion.div
               key="error"
@@ -323,7 +378,6 @@ function PickupPage() {
             </motion.div>
           )}
 
-          {/* NOT FOUND */}
           {!loading &&
             !error &&
             searched &&
@@ -364,7 +418,6 @@ function PickupPage() {
               </motion.div>
             )}
 
-          {/* ORDERS FOUND */}
           {!loading &&
             !error &&
             Array.isArray(results) &&
@@ -376,20 +429,259 @@ function PickupPage() {
                 exit={{ opacity: 0, y: -12 }}
                 className="space-y-5"
               >
-                {/* STUDENT PROFILE */}
                 <StudentProfileCard orders={results} />
 
-                {/* ORDER CARDS */}
                 {results.map((order) => (
                   <PickupOrderCard
                     key={order.id}
                     order={order}
-                    updateStatus={updateStatus}
+                    onRequestStatus={requestStatusChange}
                   />
                 ))}
               </motion.div>
             )}
         </AnimatePresence>
+      </div>
+
+      {/* =====================================================
+          CONFIRMATION MODAL
+      ===================================================== */}
+      <AnimatePresence>
+        {pendingConfirm && (
+          <>
+            {/* BLURRED BACKDROP */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
+              animate={{ opacity: 1, backdropFilter: "blur(8px)" }}
+              exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
+              transition={{ duration: 0.25 }}
+              onClick={() => {
+                if (!updating) setPendingConfirm(null);
+              }}
+              className="fixed inset-0 z-50 bg-slate-950/60"
+            />
+
+            {/* MODAL CARD */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                key="modal"
+                initial={{
+                  opacity: 0,
+                  y: 24,
+                  scale: 0.94,
+                }}
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                  scale: 1,
+                }}
+                exit={{
+                  opacity: 0,
+                  y: 24,
+                  scale: 0.94,
+                }}
+                transition={{
+                  duration: 0.3,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl"
+              >
+                <ConfirmContent
+                  order={pendingConfirm.order}
+                  nextStatus={pendingConfirm.nextStatus}
+                  updating={updating}
+                  onCancel={() => setPendingConfirm(null)}
+                  onConfirm={confirmStatusChange}
+                />
+              </motion.div>
+            </div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* =====================================================
+   CONFIRM MODAL CONTENT
+===================================================== */
+
+function ConfirmContent({
+  order,
+  nextStatus,
+  updating,
+  onCancel,
+  onConfirm,
+}: {
+  order: PickupOrder;
+  nextStatus: PickupOrder["status"];
+  updating: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isReady = nextStatus === "Ready";
+
+  const accent = isReady
+    ? {
+        ring: "ring-brand-accent/20",
+        bg: "bg-brand-accent/10",
+        text: "text-brand-accent",
+        button: "bg-brand-accent hover:opacity-90",
+        title: "Mark this order ready?",
+        description:
+          "Confirm the student details before marking this order ready for pickup.",
+        confirmLabel: "Yes, Mark as Ready",
+        icon: Package,
+      }
+    : {
+        ring: "ring-green-500/20",
+        bg: "bg-green-500/10",
+        text: "text-green-400",
+        button: "bg-green-500 hover:bg-green-600",
+        title: "Hand over this order?",
+        description:
+          "Confirm the student details before marking this order as collected.",
+        confirmLabel: "Yes, Mark as Collected",
+        icon: CheckCircle2,
+      };
+
+  const Icon = accent.icon;
+  const totalUnits = order.items.reduce(
+    (a, i) => a + i.quantity,
+    0
+  );
+
+  return (
+    <div className="p-6">
+      {/* ICON */}
+      <div className="mb-5 flex justify-center">
+        <motion.div
+          initial={{ scale: 0.7, rotate: -8 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{
+            delay: 0.05,
+            type: "spring",
+            stiffness: 320,
+            damping: 20,
+          }}
+          className={`grid size-14 place-items-center rounded-2xl ring-4 ${accent.bg} ${accent.ring}`}
+        >
+          <Icon className={`size-7 ${accent.text}`} />
+        </motion.div>
+      </div>
+
+      {/* TITLE */}
+      <h2 className="text-center text-xl font-bold text-white">
+        {accent.title}
+      </h2>
+
+      <p className="mt-1 text-center text-sm text-slate-400">
+        {accent.description}
+      </p>
+
+      {/* STUDENT CONFIRMATION CARD */}
+      <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+        <div className="flex items-center gap-3">
+          <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-accent/10 text-brand-accent">
+            <User className="size-5" />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Student
+            </p>
+            <p className="mt-0.5 truncate text-base font-bold text-white">
+              {order.userName || "Unknown"}
+            </p>
+            {order.matric && (
+              <p className="mt-0.5 font-mono text-xs font-semibold text-brand-accent">
+                {order.matric}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ORDER SUMMARY */}
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Reference
+            </p>
+            <p className="mt-1 truncate font-mono text-xs text-slate-300">
+              {order.reference}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Total
+            </p>
+            <p className="mt-1 text-sm font-bold text-white">
+              {formatNaira(order.total)}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Items
+            </p>
+            <p className="mt-1 text-sm font-semibold text-white">
+              {totalUnits} {totalUnits === 1 ? "unit" : "units"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              Paid on
+            </p>
+            <p className="mt-1 text-xs text-slate-300">
+              {formatDateTime(order.paidAt)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* WARNING */}
+      <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-amber-400" />
+        <p className="text-xs text-amber-200/90">
+          {isReady
+            ? "The student will be notified that this order is ready for pickup."
+            : "This action is final. The order will be marked as collected and cannot be undone from this screen."}
+        </p>
+      </div>
+
+      {/* ACTION BUTTONS */}
+      <div className="mt-6 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={updating}
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={updating}
+          className={`flex h-12 items-center justify-center gap-2 rounded-2xl font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${accent.button}`}
+        >
+          {updating ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Updating...
+            </>
+          ) : (
+            <>
+              <Check className="size-4" />
+              {accent.confirmLabel}
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -408,8 +700,6 @@ function StudentProfileCard({ orders }: { orders: PickupOrder[] }) {
     0
   );
 
-  // Show how many distinct students matched — important
-  // when the admin searches by suffix and gets multiple.
   const distinctStudents = new Set(
     orders.map((o) => o.userId).filter(Boolean)
   ).size;
@@ -417,7 +707,6 @@ function StudentProfileCard({ orders }: { orders: PickupOrder[] }) {
   return (
     <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl md:p-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        {/* STUDENT */}
         <div className="flex items-center gap-4">
           <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand-accent/10 text-brand-accent">
             <User className="h-6 w-6" />
@@ -453,7 +742,6 @@ function StudentProfileCard({ orders }: { orders: PickupOrder[] }) {
           </div>
         </div>
 
-        {/* STATS */}
         <div className="grid grid-cols-3 gap-3">
           <StatPill label="Orders" value={String(orders.length)} />
           <StatPill label="Items" value={String(totalUnits)} />
@@ -506,11 +794,11 @@ function StatPill({
 
 function PickupOrderCard({
   order,
-  updateStatus,
+  onRequestStatus,
 }: {
   order: PickupOrder;
-  updateStatus: (
-    id: string,
+  onRequestStatus: (
+    order: PickupOrder,
     status: PickupOrder["status"]
   ) => void;
 }) {
@@ -646,7 +934,7 @@ function PickupOrderCard({
       <div className="border-t border-white/10 bg-white/[0.02] p-5 md:p-6">
         {order.status === "Ready" && (
           <button
-            onClick={() => updateStatus(order.id, "Collected")}
+            onClick={() => onRequestStatus(order, "Collected")}
             className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-green-500 font-bold text-white transition hover:bg-green-600"
           >
             <CheckCircle2 className="h-5 w-5" />
@@ -663,7 +951,7 @@ function PickupOrderCard({
 
         {order.status === "Paid" && (
           <button
-            onClick={() => updateStatus(order.id, "Ready")}
+            onClick={() => onRequestStatus(order, "Ready")}
             className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-brand-accent font-bold text-white transition hover:opacity-90"
           >
             <Package className="h-5 w-5" />
