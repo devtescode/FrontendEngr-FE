@@ -26,6 +26,7 @@ import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminComponentsRouteImport } from './routes/admin.components'
 import { Route as AdminUsersRouteImport } from './routes/admin.users.tsx'
+import { Route as AdminCollectedRouteImport } from './routes/admin.collected'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -113,6 +114,11 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminCollectedRoute = AdminCollectedRouteImport.update({
+  id: '/collected',
+  path: '/collected',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pickup': typeof AdminPickupRoute
   '/admin/users': typeof AdminUsersRoute  
+  '/admin/collected': typeof AdminCollectedRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pickup': typeof AdminPickupRoute
   '/admin/users': typeof AdminUsersRoute
+  '/admin/collected': typeof AdminCollectedRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -171,6 +179,7 @@ export interface FileRoutesById {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pickup': typeof AdminPickupRoute
   '/admin/users': typeof AdminUsersRoute
+  '/admin/collected': typeof AdminCollectedRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pickup'
     | '/admin/users'
+    | '/admin/collected'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pickup'
     | '/admin/users'
+    | '/admin/collected'
   id:
     | '__root__'
     | '/'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pickup'
     | '/admin/users'
+    | '/admin/collected'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -245,6 +257,7 @@ export interface RootRouteChildren {
   ReceiptsRoute: typeof ReceiptsRouteWithChildren
   RegisterRoute: typeof RegisterRoute
   AdminUsersRoute: typeof AdminUsersRoute
+  AdminCollectedRoute: typeof AdminCollectedRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -368,6 +381,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/collected': {
+      id: '/admin/collected'
+      path: '/collected'
+      fullPath: '/admin/collected'
+      preLoaderRoute: typeof AdminCollectedRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
@@ -395,6 +415,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminOrdersRoute: AdminOrdersRoute,
   AdminPickupRoute: AdminPickupRoute,
   AdminUsersRoute: AdminUsersRoute,
+  AdminCollectedRoute: AdminCollectedRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)

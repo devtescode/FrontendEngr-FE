@@ -28,6 +28,7 @@ const NAV: { to: string; label: string; icon: any; exact?: boolean }[] = [
   { to: "/admin/orders", label: "User Carts", icon: ClipboardList },
   { to: "/admin/pickup", label: "Pickup", icon: Hand },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/collected", label: "Collected", icon: Users },
 ];
 
 function AdminShell() {
