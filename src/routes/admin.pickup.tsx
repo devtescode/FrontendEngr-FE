@@ -82,7 +82,9 @@ const formatDateTime = (iso: string) => {
 };
 
 const getToken = () =>
-  sessionStorage.getItem("admin_token") 
+  sessionStorage.getItem("admin_token") ||
+  sessionStorage.getItem("pulselab_admin_token") ||
+  sessionStorage.getItem("pulselab_token");
 
 // =====================================================
 // PAGE
@@ -103,7 +105,9 @@ function PickupPage() {
 
     const q = query.trim();
     if (!q) {
-      setError("Please enter a matric number or order reference.");
+      setError(
+        "Enter a matric number, its last 4 digits, or an order reference."
+      );
       return;
     }
 
@@ -181,6 +185,8 @@ function PickupPage() {
       return;
     }
 
+    const previous = results;
+
     // Optimistic update
     setResults((prev) =>
       prev
@@ -211,16 +217,8 @@ function PickupPage() {
       console.error("Update status failed:", err);
       alert(err?.message || "Failed to update status");
 
-      // Revert on failure
-      setResults((prev) =>
-        prev
-          ? prev.map((o) =>
-              o.id === orderId
-                ? { ...o, status: "Paid" }
-                : o
-            )
-          : prev
-      );
+      // Revert to the previous state on failure
+      setResults(previous);
     }
   };
 
@@ -242,9 +240,8 @@ function PickupPage() {
           </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            Search by student matric number or by order
-            reference to view paid orders and hand over
-            components.
+            Search by full matric number, the last 4 digits of the
+            matric, or the order reference.
           </p>
         </div>
 
@@ -260,7 +257,7 @@ function PickupPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Matric number or order reference..."
+                placeholder="Matric number, last 4 digits, or reference..."
                 className="h-14 w-full rounded-2xl border border-white/10 bg-slate-950 pl-12 pr-4 text-base font-medium text-white outline-none placeholder:text-slate-600 transition focus:border-brand-accent/50 focus:ring-2 focus:ring-brand-accent/10"
                 autoFocus
               />
@@ -288,11 +285,15 @@ function PickupPage() {
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1">
               <Hash className="h-3 w-3" />
-              2023/CSC/001
+              Full: 2023/CSC/001
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Hash className="h-3 w-3" />
+              Last 4: C001
             </span>
             <span className="inline-flex items-center gap-1">
               <Receipt className="h-3 w-3" />
-              EUH-11223904-...
+              Ref: EUH-...
             </span>
           </div>
         </div>
@@ -407,6 +408,12 @@ function StudentProfileCard({ orders }: { orders: PickupOrder[] }) {
     0
   );
 
+  // Show how many distinct students matched — important
+  // when the admin searches by suffix and gets multiple.
+  const distinctStudents = new Set(
+    orders.map((o) => o.userId).filter(Boolean)
+  ).size;
+
   return (
     <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl md:p-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -418,22 +425,28 @@ function StudentProfileCard({ orders }: { orders: PickupOrder[] }) {
 
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-600">
-              Student
+              {distinctStudents > 1 ? "Students" : "Student"}
             </p>
 
             <h2 className="mt-1 truncate text-xl font-bold text-white">
-              {first.userName || "Unknown"}
+              {distinctStudents > 1
+                ? `${distinctStudents} matched`
+                : first.userName || "Unknown"}
             </h2>
 
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-              {first.matric && (
+              {distinctStudents === 1 && first.matric && (
                 <span className="font-semibold text-brand-accent">
                   {first.matric}
                 </span>
               )}
-              {first.email && (
+              {distinctStudents === 1 && first.email && (
+                <span className="text-slate-500">{first.email}</span>
+              )}
+              {distinctStudents > 1 && (
                 <span className="text-slate-500">
-                  {first.email}
+                  Multiple students match this search — check
+                  each order's matric below.
                 </span>
               )}
             </div>
