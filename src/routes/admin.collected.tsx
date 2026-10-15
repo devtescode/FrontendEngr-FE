@@ -496,15 +496,12 @@ function CollectedRow({
       transition={{ delay: index * 0.03 }}
       className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70 shadow-xl transition-colors hover:border-green-500/20"
     >
-      {/* ============================================
-          SUMMARY ROW (always visible)
-      ============================================ */}
+      {/* SUMMARY ROW */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         className="flex w-full flex-col gap-4 p-5 text-left transition hover:bg-white/[0.02] sm:flex-row sm:items-center md:p-6"
       >
-        {/* ICON + USER */}
         <div className="flex min-w-0 flex-1 items-center gap-4">
           <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-green-500/10 text-green-400">
             <PackageCheck className="size-6" />
@@ -517,7 +514,8 @@ function CollectedRow({
                 Collected
               </span>
               <span className="text-[10px] uppercase tracking-widest text-slate-500">
-                {formatDate(order.collectedAt || order.paidAt)}
+                {formatDate(order.collectedAt)}{" "}
+                {/* ← no fallback */}
               </span>
             </div>
 
@@ -538,15 +536,13 @@ function CollectedRow({
           </div>
         </div>
 
-        {/* MIDDLE STATS */}
         <div className="grid shrink-0 grid-cols-2 gap-3 sm:gap-6">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               Items
             </p>
             <p className="mt-0.5 text-sm font-bold text-white">
-              {totalUnits}{" "}
-              {totalUnits === 1 ? "unit" : "units"}
+              {totalUnits} {totalUnits === 1 ? "unit" : "units"}
             </p>
           </div>
 
@@ -560,7 +556,6 @@ function CollectedRow({
           </div>
         </div>
 
-        {/* CHEVRON */}
         <motion.div
           animate={{ rotate: expanded ? 180 : 0 }}
           transition={{ duration: 0.2 }}
@@ -570,9 +565,7 @@ function CollectedRow({
         </motion.div>
       </button>
 
-      {/* ============================================
-          EXPANDED DETAILS
-      ============================================ */}
+      {/* EXPANDED */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -584,7 +577,6 @@ function CollectedRow({
             className="overflow-hidden border-t border-white/10"
           >
             <div className="bg-white/[0.02] p-5 md:p-6">
-              {/* META GRID */}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <MetaCell
                   icon={<User className="h-3.5 w-3.5" />}
@@ -599,9 +591,7 @@ function CollectedRow({
                 <MetaCell
                   icon={<Clock className="h-3.5 w-3.5" />}
                   label="Collected At"
-                  value={formatDateTime(
-                    order.collectedAt || order.paidAt
-                  )}
+                  value={formatDateTime(order.collectedAt)}
                 />
                 <MetaCell
                   icon={
@@ -705,7 +695,6 @@ function CollectedRow({
                 </div>
               </div>
 
-              {/* CONFIRMATION FOOTER */}
               <div className="mt-5 flex items-start gap-2 rounded-2xl border border-green-500/20 bg-green-500/5 p-3">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-green-400" />
                 <p className="text-xs text-green-200/90">
