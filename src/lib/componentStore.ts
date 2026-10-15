@@ -74,6 +74,7 @@ export function normalizeComponent(
     category: component.category,
     price: component.price,
     stock: component.stock,
+    soldCount: component.soldCount ?? 0,
     description: component.description,
     details: component.details,
     image: component.image || "",

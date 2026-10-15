@@ -14,6 +14,7 @@ export interface Component {
   category: Category;
   price: number;
   stock: number;
+  soldCount?: number;
   description: string;
   details: string;
   image?: string;

@@ -5,16 +5,13 @@ import {
 } from "@tanstack/react-router";
 
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { ComponentCard } from "@/components/ComponentCard";
 import { RequireAuth } from "@/components/RequireAuth";
 
-import type {
-  Category,
-  Component,
-} from "@/lib/data";
+import type { Category, Component } from "@/lib/data";
 
 import { socket } from "@/lib/socket";
 
@@ -91,19 +88,9 @@ type BackendComponent = {
 };
 
 function CatalogIndex() {
-  /*
-   * =====================================================
-   * COMPONENTS
-   * =====================================================
-   *
-   * Start immediately with whatever is already inside
-   * componentStore.
-   *
-   * There is NO localStorage here.
-   */
-
-  const [components, setComponents] =
-    useState<Component[]>(() => componentsCache);
+  const [components, setComponents] = useState<Component[]>(
+    () => componentsCache
+  );
 
   const [error, setError] = useState("");
 
@@ -115,41 +102,27 @@ function CatalogIndex() {
   const [sort, setSort] =
     useState<(typeof SORTS)[number]["id"]>("popular");
 
-  /*
-   * =====================================================
-   * LOAD COMPONENTS
-   * =====================================================
-   *
-   * loadComponents() uses the componentStore cache.
-   *
-   * If data already exists:
-   *     it returns it immediately.
-   *
-   * If data does not exist:
-   *     it fetches from backend once.
-   */
+  // Track socket connection status for a subtle live indicator
+  const [isLive, setIsLive] = useState(socket.connected);
 
+  // Prevent double socket setup in React StrictMode
+  const socketSetupRef = useRef(false);
+
+  // =====================================================
+  // LOAD COMPONENTS
+  // =====================================================
   useEffect(() => {
     let mounted = true;
 
     loadComponents()
       .then((data) => {
         if (!mounted) return;
-
         setComponents(data);
       })
-      .catch((error: any) => {
+      .catch((err: any) => {
         if (!mounted) return;
-
-        console.error(
-          "Failed to fetch components:",
-          error
-        );
-
-        setError(
-          error?.message ||
-            "Failed to load components"
-        );
+        console.error("Failed to fetch components:", err);
+        setError(err?.message || "Failed to load components");
       });
 
     return () => {
@@ -157,109 +130,72 @@ function CatalogIndex() {
     };
   }, []);
 
-  /*
-   * =====================================================
-   * SOCKET.IO
-   * =====================================================
-   *
-   * Admin changes update the page immediately.
-   */
-
+  // =====================================================
+  // SOCKET.IO
+  // =====================================================
   useEffect(() => {
-    console.log(
-      "Connecting to component realtime events..."
-    );
+    if (socketSetupRef.current) return;
+    socketSetupRef.current = true;
 
-    /*
-     * =================================================
-     * CREATED
-     * =================================================
-     */
+    console.log("🔌 Component realtime events connected");
 
-    const handleCreated = (
-      component: BackendComponent
-    ) => {
-      console.log(
-        "Component created:",
-        component
-      );
+    // ---------------------------------------------------
+    // CREATED
+    // ---------------------------------------------------
+    const handleCreated = (component: BackendComponent) => {
+      console.log("🟢 Component created:", component);
 
-      const normalized =
-        normalizeComponent(component);
+      const normalized = normalizeComponent(component);
 
       setComponents((current) => {
-        /*
-         * Prevent duplicate component.
-         */
-
         const exists = current.some(
-          (item) =>
-            item.id === normalized.id
+          (item) => item.id === normalized.id
         );
 
-        if (exists) {
-          return current;
+        if (exists) return current;
+
+        const updated = [normalized, ...current];
+        setComponentsCache(updated);
+        return updated;
+      });
+    };
+
+    // ---------------------------------------------------
+    // UPDATED (this fires when stock is reduced)
+    // ---------------------------------------------------
+    const handleUpdated = (component: BackendComponent) => {
+      console.log("🟡 Component updated:", component);
+
+      const normalized = normalizeComponent(component);
+
+      setComponents((current) => {
+        const exists = current.some(
+          (item) => item.id === normalized.id
+        );
+
+        // If the component isn't in the list yet
+        // (e.g., user is viewing a filtered view),
+        // just add it.
+        if (!exists) {
+          const updated = [normalized, ...current];
+          setComponentsCache(updated);
+          return updated;
         }
 
-        const updated = [
-          normalized,
-          ...current,
-        ];
-
-        /*
-         * Update shared store.
-         */
-
-        setComponentsCache(updated);
-
-        return updated;
-      });
-    };
-
-    /*
-     * =================================================
-     * UPDATED
-     * =================================================
-     */
-
-    const handleUpdated = (
-      component: BackendComponent
-    ) => {
-      console.log(
-        "Component updated:",
-        component
-      );
-
-      const normalized =
-        normalizeComponent(component);
-
-      setComponents((current) => {
-        const updated = current.map(
-          (item) =>
-            item.id === normalized.id
-              ? normalized
-              : item
+        const updated = current.map((item) =>
+          item.id === normalized.id ? normalized : item
         );
 
         setComponentsCache(updated);
-
         return updated;
       });
     };
 
-    /*
-     * =================================================
-     * DELETED
-     * =================================================
-     */
-
-    const handleDeleted = (
-      component: BackendComponent
-    ) => {
-      console.log(
-        "Component deleted:",
-        component
-      );
+    // ---------------------------------------------------
+    // DELETED
+    // ---------------------------------------------------
+    const handleDeleted = (component: BackendComponent) => {
+      console.log("🔴 Component deleted:", component);
 
       const id = component._id;
 
@@ -271,254 +207,204 @@ function CatalogIndex() {
         );
 
         setComponentsCache(updated);
-
         return updated;
       });
     };
 
-    /*
-     * =================================================
-     * SOCKET LISTENERS
-     * =================================================
-     */
+    // ---------------------------------------------------
+    // CONNECTION STATE (for the live indicator)
+    // ---------------------------------------------------
+    const handleConnect = () => {
+      console.log("🟢 Socket connected");
+      setIsLive(true);
+    };
 
-    socket.on(
-      "component:created",
-      handleCreated
-    );
+    const handleDisconnect = () => {
+      console.log("🔴 Socket disconnected");
+      setIsLive(false);
+    };
 
-    socket.on(
-      "component:updated",
-      handleUpdated
-    );
+    // ---------------------------------------------------
+    // REGISTER LISTENERS
+    // ---------------------------------------------------
+    socket.on("component:created", handleCreated);
+    socket.on("component:updated", handleUpdated);
+    socket.on("component:deleted", handleDeleted);
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
 
-    socket.on(
-      "component:deleted",
-      handleDeleted
-    );
+    // Sync the live indicator with the actual socket state
+    setIsLive(socket.connected);
 
-    /*
-     * =================================================
-     * CLEANUP
-     * =================================================
-     */
-
+    // ---------------------------------------------------
+    // CLEANUP
+    // ---------------------------------------------------
     return () => {
-      socket.off(
-        "component:created",
-        handleCreated
-      );
-
-      socket.off(
-        "component:updated",
-        handleUpdated
-      );
-
-      socket.off(
-        "component:deleted",
-        handleDeleted
-      );
+      socket.off("component:created", handleCreated);
+      socket.off("component:updated", handleUpdated);
+      socket.off("component:deleted", handleDeleted);
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socketSetupRef.current = false;
     };
   }, []);
 
-  /*
-   * =====================================================
-   * FILTER + SEARCH + SORT
-   * =====================================================
-   */
-
+  // =====================================================
+  // FILTER + SEARCH + SORT
+  // =====================================================
   const filtered = useMemo(() => {
-    let result = components.filter(
-      (component) => {
-        const matchesCategory =
-          cat === "All" ||
-          component.category === cat;
+    const search = q.trim().toLowerCase();
 
-        const search =
-          q.trim().toLowerCase();
+    let result = components.filter((component) => {
+      const matchesCategory =
+        cat === "All" || component.category === cat;
 
-        const matchesSearch =
-          search === "" ||
-          (
-            component.name +
-            " " +
-            component.description +
-            " " +
-            component.sku
-          )
-            .toLowerCase()
-            .includes(search);
+      const matchesSearch =
+        search === "" ||
+        (
+          component.name +
+          " " +
+          component.description +
+          " " +
+          component.sku
+        )
+          .toLowerCase()
+          .includes(search);
 
-        return (
-          matchesCategory &&
-          matchesSearch
-        );
-      }
-    );
-
-    /*
-     * PRICE LOW → HIGH
-     */
+      return matchesCategory && matchesSearch;
+    });
 
     if (sort === "price-asc") {
-      result = [...result].sort(
-        (a, b) =>
-          a.price - b.price
-      );
+      result = [...result].sort((a, b) => a.price - b.price);
     }
-
-    /*
-     * PRICE HIGH → LOW
-     */
 
     if (sort === "price-desc") {
-      result = [...result].sort(
-        (a, b) =>
-          b.price - a.price
-      );
+      result = [...result].sort((a, b) => b.price - a.price);
     }
 
-    /*
-     * MOST STOCKED
-     */
-
     if (sort === "popular") {
-      result = [...result].sort(
-        (a, b) =>
-          b.stock - a.stock
-      );
+      result = [...result].sort((a, b) => b.stock - a.stock);
     }
 
     return result;
-  }, [
-    components,
-    q,
-    cat,
-    sort,
-  ]);
+  }, [components, q, cat, sort]);
 
-  /*
-   * =====================================================
-   * UI
-   * =====================================================
-   */
-
+  // =====================================================
+  // UI
+  // =====================================================
   return (
     <AppShell>
       <div className="mx-auto max-w-7xl px-6 py-12">
-
         {/* HEADER */}
-
         <motion.div
-          initial={{
-            opacity: 0,
-            y: 12,
-          }}
-          animate={{
-            opacity: 1,
-            y: 0,
-          }}
-          className="mb-8"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 flex flex-wrap items-end justify-between gap-4"
         >
-          <h1 className="text-4xl font-bold text-brand-navy">
-            Component Catalog
-          </h1>
+          <div>
+            <h1 className="text-4xl font-bold text-brand-navy">
+              Component Catalog
+            </h1>
 
-          <p className="text-slate-500 mt-2">
-            {components.length} item
-            {components.length !== 1 && "s"} available.
-          </p>
+            <p className="mt-2 text-slate-500">
+              {components.length} item
+              {components.length !== 1 && "s"} available.
+            </p>
+          </div>
+
+          {/* LIVE INDICATOR */}
+          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5">
+            <span
+              className={`size-1.5 rounded-full ${
+                isLive
+                  ? "animate-pulse bg-emerald-500"
+                  : "bg-slate-300"
+              }`}
+            />
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+              {isLive ? "Live" : "Offline"}
+            </span>
+          </div>
         </motion.div>
 
         {/* ERROR */}
-
         {error && (
-          <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-600">
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-600">
             {error}
           </div>
         )}
 
         {/* SEARCH + SORT */}
-
-        <div className="flex flex-col md:flex-row gap-4 mb-8">
-
+        <div className="mb-8 flex flex-col gap-4 md:flex-row">
           <input
             value={q}
-            onChange={(e) =>
-              setQ(e.target.value)
-            }
+            onChange={(e) => setQ(e.target.value)}
             placeholder="Search components, SKUs..."
-            className="flex-1 h-11 px-4 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+            className="h-11 flex-1 rounded-lg border border-slate-200 bg-white px-4 focus:border-brand-accent/40 focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
           />
 
           <select
             value={sort}
             onChange={(e) =>
-              setSort(
-                e.target.value as typeof sort
-              )
+              setSort(e.target.value as typeof sort)
             }
-            className="h-11 px-3 rounded-lg border border-slate-200 bg-white"
+            className="h-11 rounded-lg border border-slate-200 bg-white px-3"
           >
             {SORTS.map((s) => (
-              <option
-                key={s.id}
-                value={s.id}
-              >
+              <option key={s.id} value={s.id}>
                 {s.label}
               </option>
             ))}
           </select>
-
         </div>
 
         {/* CATEGORIES */}
-
-        <div className="flex flex-wrap gap-2 mb-10">
-
-          {CATEGORIES.map(
-            (category) => (
-              <button
-                key={category}
-                onClick={() =>
-                  setCat(category)
-                }
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  cat === category
-                    ? "bg-brand-navy text-white"
-                    : "bg-white border border-slate-200 text-slate-600 hover:border-slate-300"
-                }`}
-              >
-                {category}
-              </button>
-            )
-          )}
-
+        <div className="mb-10 flex flex-wrap gap-2">
+          {CATEGORIES.map((category) => (
+            <button
+              key={category}
+              onClick={() => setCat(category)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+                cat === category
+                  ? "bg-brand-navy text-white"
+                  : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              {category}
+            </button>
+          ))}
         </div>
 
-        {/* =================================================
-            PRODUCTS
-            ================================================= */}
-
-        {filtered.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-
-            {filtered.map(
-              (component, index) => (
-                <ComponentCard
-                  key={
-                    component.id ??
-                    component._id
-                  }
-                  c={component}
-                  index={index}
-                />
-              )
-            )}
-
+        {/* EMPTY STATE */}
+        {filtered.length === 0 && components.length > 0 && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center">
+            <p className="text-slate-500">
+              No components match your search.
+            </p>
+            <button
+              onClick={() => {
+                setQ("");
+                setCat("All");
+              }}
+              className="mt-5 rounded-lg border border-slate-200 bg-white px-5 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              Clear filters
+            </button>
           </div>
         )}
 
+        {/* PRODUCTS */}
+        {filtered.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((component, index) => (
+              <ComponentCard
+                key={component.id ?? component._id}
+                c={component}
+                index={index}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </AppShell>
   );
