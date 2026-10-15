@@ -15,6 +15,8 @@ import {
   PackageX,
   TrendingDown,
   ShoppingBag,
+  CheckCircle2,
+  Info,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -51,12 +53,27 @@ type SaveData = {
 
 type StockFilter = "all" | "in-stock" | "low" | "out";
 
+type ToastKind = "success" | "error" | "info";
+
+type Toast = {
+  id: string;
+  kind: ToastKind;
+  message: string;
+};
+
 // =====================================================
 // HELPERS
 // =====================================================
 
 function getComponentId(c: any): string {
   return String(c?._id ?? c?.id ?? "");
+}
+
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 // =====================================================
@@ -127,9 +144,31 @@ function AdminComponents() {
     BackendComponent | "new" | null
   >(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+
+  // Toasts
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // Confirm-delete modal
+  const [pendingDelete, setPendingDelete] =
+    useState<BackendComponent | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // =====================================================
+  // TOASTS
+  // =====================================================
+  const pushToast = (kind: ToastKind, message: string) => {
+    const id = `t_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev, { id, kind, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   // =====================================================
   // FETCH
@@ -137,13 +176,15 @@ function AdminComponents() {
   const fetchComponents = async () => {
     try {
       setLoading(true);
-      setError("");
 
       const response = await componentApi.getAll();
       setComponents(response);
     } catch (error: any) {
       console.error("Fetch components error:", error);
-      setError(error?.message || "Failed to load components");
+      pushToast(
+        "error",
+        error?.message || "Failed to load components"
+      );
     } finally {
       setLoading(false);
     }
@@ -151,6 +192,7 @@ function AdminComponents() {
 
   useEffect(() => {
     fetchComponents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // =====================================================
@@ -200,6 +242,7 @@ function AdminComponents() {
       socket.off("component:deleted", handleDeleted);
     };
   }, []);
+  
 
   // =====================================================
   // COUNTS
@@ -267,19 +310,19 @@ function AdminComponents() {
   // =====================================================
   const handleSave = async ({ data, imageFile }: SaveData) => {
     try {
-      setError("");
-
       if (editing === "new") {
         const generatedSKU = generateSKU(data.name, components);
 
         if (!generatedSKU) {
-          setError("Please enter a valid component name.");
-          throw new Error("Invalid component name");
+          throw new Error(
+            "Please enter a valid component name."
+          );
         }
 
         if (skuExists(generatedSKU, components)) {
-          setError(`SKU ${generatedSKU} already exists. Please try again.`);
-          throw new Error("Duplicate SKU");
+          throw new Error(
+            `SKU ${generatedSKU} already exists. Try a different name.`
+          );
         }
 
         const created = await componentApi.create(
@@ -294,14 +337,17 @@ function AdminComponents() {
           );
         }
 
-        // Insert locally only if it's not already there
-        // (the socket event may have arrived first).
         setComponents((prev) => {
           const exists = prev.some(
             (c) => getComponentId(c) === createdId
           );
           return exists ? prev : [created, ...prev];
         });
+
+        pushToast(
+          "success",
+          `${created.name} added to inventory`
+        );
       } else if (editing) {
         const editingId = getComponentId(editing);
 
@@ -316,13 +362,15 @@ function AdminComponents() {
         );
 
         if (!generatedSKU) {
-          setError("Please enter a valid component name.");
-          throw new Error("Invalid component name");
+          throw new Error(
+            "Please enter a valid component name."
+          );
         }
 
         if (skuExists(generatedSKU, components, editingId)) {
-          setError(`SKU ${generatedSKU} already exists.`);
-          throw new Error("Duplicate SKU");
+          throw new Error(
+            `SKU ${generatedSKU} already exists.`
+          );
         }
 
         const updated = await componentApi.update(
@@ -336,19 +384,20 @@ function AdminComponents() {
             getComponentId(c) === editingId ? updated : c
           )
         );
+
+        pushToast(
+          "success",
+          `${updated.name} updated`
+        );
       }
 
       setEditing(null);
     } catch (error: any) {
       console.error("Save component error:", error);
-
-      if (
-        error?.message !== "Duplicate SKU" &&
-        error?.message !== "Invalid component name"
-      ) {
-        setError(error?.message || "Failed to save component");
-      }
-
+      pushToast(
+        "error",
+        error?.message || "Failed to save component"
+      );
       throw error;
     }
   };
@@ -356,28 +405,52 @@ function AdminComponents() {
   // =====================================================
   // DELETE
   // =====================================================
-  const handleDelete = async (component: BackendComponent) => {
+  const requestDelete = (component: BackendComponent) => {
     const id = getComponentId(component);
 
     if (!id) {
-      setError(
-        "This component is missing an ID and cannot be deleted. Refresh the page."
+      pushToast(
+        "error",
+        "This component is missing an ID. Refresh the page."
       );
       return;
     }
 
-    const confirmed = window.confirm(`Delete ${component.name}?`);
-    if (!confirmed) return;
+    setPendingDelete(component);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+
+    const id = getComponentId(pendingDelete);
+    if (!id) {
+      setPendingDelete(null);
+      return;
+    }
 
     try {
-      setError("");
+      setDeleting(true);
+
       await componentApi.delete(id);
+
       setComponents((prev) =>
         prev.filter((item) => getComponentId(item) !== id)
       );
+
+      pushToast(
+        "success",
+        `${pendingDelete.name} deleted`
+      );
+
+      setPendingDelete(null);
     } catch (error: any) {
       console.error("Delete component error:", error);
-      setError(error?.message || "Failed to delete component");
+      pushToast(
+        "error",
+        error?.message || "Failed to delete component"
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -451,21 +524,6 @@ function AdminComponents() {
           onClick={() => setStockFilter("low")}
         />
       </div>
-
-      {/* ERROR */}
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400"
-          >
-            <AlertTriangle className="size-4" />
-            <span>{error}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* SEARCH + FILTER PILLS */}
       <div className="mb-6 flex flex-col gap-3 lg:flex-row">
@@ -648,13 +706,12 @@ function AdminComponents() {
                       <td className="px-5 py-4 text-center">
                         <div className="inline-flex flex-col items-center gap-1">
                           <span
-                            className={`text-lg font-bold tabular-nums ${
-                              isOut
-                                ? "text-red-400"
-                                : isLow
-                                  ? "text-amber-400"
-                                  : "text-emerald-400"
-                            }`}
+                            className={`text-lg font-bold tabular-nums ${isOut
+                              ? "text-red-400"
+                              : isLow
+                                ? "text-amber-400"
+                                : "text-emerald-400"
+                              }`}
                           >
                             {stock}
                           </span>
@@ -683,7 +740,7 @@ function AdminComponents() {
                           </button>
 
                           <button
-                            onClick={() => handleDelete(c)}
+                            onClick={() => requestDelete(c)}
                             className="grid size-9 place-items-center rounded-lg text-slate-400 transition hover:bg-red-500/10 hover:text-red-400"
                             title="Delete component"
                           >
@@ -700,7 +757,7 @@ function AdminComponents() {
         )}
       </div>
 
-      {/* DIALOG */}
+      {/* DIALOG — ADD / EDIT */}
       <AnimatePresence>
         {editing && (
           <ComponentDialog
@@ -708,10 +765,233 @@ function AdminComponents() {
             components={components}
             onClose={() => setEditing(null)}
             onSave={handleSave}
+            onInvalid={(msg) => pushToast("error", msg)}
           />
         )}
       </AnimatePresence>
+
+      {/* DIALOG — DELETE CONFIRMATION */}
+      <AnimatePresence>
+        {pendingDelete && (
+          <DeleteConfirmDialog
+            component={pendingDelete}
+            deleting={deleting}
+            onCancel={() => {
+              if (!deleting) setPendingDelete(null);
+            }}
+            onConfirm={confirmDelete}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* TOASTS */}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
+  );
+}
+
+// =====================================================
+// DELETE CONFIRM DIALOG
+// =====================================================
+
+function DeleteConfirmDialog({
+  component,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  component: BackendComponent;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onCancel}
+      className="fixed inset-0 z-[60] grid place-items-center bg-black/70 p-4 backdrop-blur-sm sm:p-6"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.94, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94, y: 12 }}
+        transition={{ type: "spring", stiffness: 320, damping: 26 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl"
+      >
+        <div className="p-6">
+          <div className="mb-5 flex justify-center">
+            <motion.div
+              initial={{ scale: 0.6, rotate: -12 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{
+                delay: 0.05,
+                type: "spring",
+                stiffness: 300,
+                damping: 18,
+              }}
+              className="grid size-14 place-items-center rounded-2xl bg-red-500/10 ring-4 ring-red-500/10"
+            >
+              <Trash2 className="size-6 text-red-400" />
+            </motion.div>
+          </div>
+
+          <h3 className="text-center text-lg font-bold text-white">
+            Delete this component?
+          </h3>
+
+          <p className="mt-2 text-center text-sm text-slate-400">
+            This will permanently remove it from your inventory. This
+            action cannot be undone.
+          </p>
+
+          <div className="mt-5 flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            {component.image ? (
+              <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-white/10 bg-white/5">
+                <img
+                  src={component.image}
+                  alt={component.name}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="grid size-11 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/5">
+                <Package className="size-5 text-slate-600" />
+              </div>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-white">
+                {component.name}
+              </p>
+              <p className="mt-0.5 font-mono text-xs text-slate-500">
+                {component.sku}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={deleting}
+              className="h-11 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={deleting}
+              className="flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 text-sm font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-4" />
+                  Delete
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// =====================================================
+// TOAST STACK
+// =====================================================
+
+function ToastStack({
+  toasts,
+  onDismiss,
+}: {
+  toasts: Toast[];
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-5 z-[70] flex flex-col items-center gap-2 px-4">
+      <AnimatePresence>
+        {toasts.map((t) => (
+          <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ToastItem({
+  toast,
+  onDismiss,
+}: {
+  toast: Toast;
+  onDismiss: (id: string) => void;
+}) {
+  const config = {
+    success: {
+      icon: CheckCircle2,
+      ring: "ring-emerald-500/30",
+      bg: "bg-emerald-500/10",
+      text: "text-emerald-300",
+      iconColor: "text-emerald-400",
+    },
+    error: {
+      icon: AlertTriangle,
+      ring: "ring-red-500/30",
+      bg: "bg-red-500/10",
+      text: "text-red-300",
+      iconColor: "text-red-400",
+    },
+    info: {
+      icon: Info,
+      ring: "ring-blue-500/30",
+      bg: "bg-blue-500/10",
+      text: "text-blue-300",
+      iconColor: "text-blue-400",
+    },
+  }[toast.kind];
+
+  const Icon = config.icon;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -16, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -16, scale: 0.94 }}
+      transition={{ type: "spring", stiffness: 320, damping: 26 }}
+      className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border border-white/10 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur-md ring-1 ${config.ring}`}
+    >
+      <div
+        className={`grid size-8 shrink-0 place-items-center rounded-lg ${config.bg}`}
+      >
+        <Icon className={`size-4 ${config.iconColor}`} />
+      </div>
+
+      <p
+        className={`min-w-0 flex-1 pt-1 text-sm font-medium ${config.text}`}
+      >
+        {toast.message}
+      </p>
+
+      <button
+        type="button"
+        onClick={() => onDismiss(toast.id)}
+        className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-500 transition hover:bg-white/5 hover:text-white"
+        aria-label="Dismiss"
+      >
+        <X className="size-3.5" />
+      </button>
+    </motion.div>
   );
 }
 
@@ -763,11 +1043,10 @@ function StatCard({
       onClick={onClick}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`rounded-2xl border p-5 text-left transition-all ${
-        active
-          ? `border-transparent bg-slate-800/80 ring-2 ${a.ring}`
-          : "border-white/10 bg-slate-900 hover:border-white/20"
-      } ${clickable ? "cursor-pointer" : "cursor-default"}`}
+      className={`rounded-2xl border p-5 text-left transition-all ${active
+        ? `border-transparent bg-slate-800/80 ring-2 ${a.ring}`
+        : "border-white/10 bg-slate-900 hover:border-white/20"
+        } ${clickable ? "cursor-pointer" : "cursor-default"}`}
     >
       <div className="flex items-center justify-between">
         <div
@@ -830,20 +1109,18 @@ function FilterPill({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition-all ${
-        active
-          ? `${t.active} border-transparent ring-1`
-          : "border-white/10 bg-slate-900 text-slate-400 hover:border-white/20 hover:text-white"
-      }`}
+      className={`inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition-all ${active
+        ? `${t.active} border-transparent ring-1`
+        : "border-white/10 bg-slate-900 text-slate-400 hover:border-white/20 hover:text-white"
+        }`}
     >
       {tone !== "slate" && (
         <span className={`size-1.5 rounded-full ${t.dot}`} />
       )}
       <span>{label}</span>
       <span
-        className={`rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${
-          active ? "bg-white/10" : "bg-white/5"
-        }`}
+        className={`rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${active ? "bg-white/10" : "bg-white/5"
+          }`}
       >
         {count}
       </span>
@@ -964,11 +1241,13 @@ function ComponentDialog({
   components,
   onClose,
   onSave,
+  onInvalid,
 }: {
   initial: BackendComponent | null;
   components: BackendComponent[];
   onClose: () => void;
   onSave: (data: SaveData) => Promise<void>;
+  onInvalid: (message: string) => void;
 }) {
   const initialId = getComponentId(initial);
 
@@ -999,6 +1278,7 @@ function ComponentDialog({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState(initial?.image || "");
   const [saving, setSaving] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const generatedSKU = useMemo(
     () => generateSKU(c.name, components, initialId || undefined),
@@ -1013,17 +1293,18 @@ function ComponentDialog({
     setC((prev) => ({ ...prev, sku: generatedSKU }));
   }, [generatedSKU]);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // =====================================================
+  // IMAGE HELPERS
+  // =====================================================
 
+  const processImageFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      alert("Please select a valid image.");
+      onInvalid("Please select a valid image (PNG, JPG, or WebP).");
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be less than 5MB.");
+      onInvalid("Image must be less than 5MB.");
       return;
     }
 
@@ -1036,11 +1317,53 @@ function ComponentDialog({
     setImagePreview(URL.createObjectURL(file));
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processImageFile(file);
+
+    // Reset the input value so selecting the same file twice
+    // still triggers onChange.
+    e.target.value = "";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    processImageFile(file);
+  };
+
+  const handleRemoveImage = () => {
+    if (imagePreview && imagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreview);
+    }
+    setImageFile(null);
+    setImagePreview("");
+  };
+
+  // =====================================================
+  // SUBMIT
+  // =====================================================
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!c.name.trim()) {
-      alert("Please enter the component name.");
+      onInvalid("Please enter the component name.");
       return;
     }
 
@@ -1051,12 +1374,14 @@ function ComponentDialog({
     );
 
     if (!finalSKU) {
-      alert("Unable to generate SKU. Please check the component name.");
+      onInvalid(
+        "Unable to generate SKU. Please check the component name."
+      );
       return;
     }
 
     if (skuExists(finalSKU, components, initialId || undefined)) {
-      alert(`SKU ${finalSKU} already exists.`);
+      onInvalid(`SKU ${finalSKU} already exists.`);
       return;
     }
 
@@ -1073,6 +1398,10 @@ function ComponentDialog({
     }
   };
 
+  // =====================================================
+  // CLEANUP BLOB URLs
+  // =====================================================
+
   useEffect(() => {
     return () => {
       if (imagePreview && imagePreview.startsWith("blob:")) {
@@ -1080,6 +1409,10 @@ function ComponentDialog({
       }
     };
   }, [imagePreview]);
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <motion.div
@@ -1204,58 +1537,126 @@ function ComponentDialog({
             />
           </div>
 
+          {/* PRODUCT IMAGE */}
           <div className="mt-4">
-            <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                Product image
-              </span>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp"
-                onChange={handleImageChange}
-                className="mt-2 block w-full rounded-lg border border-white/10 bg-slate-950 p-3 text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-accent file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-blue-600"
-              />
-            </label>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
+              Product image
+            </span>
 
-            {imagePreview && (
-              <div className="mt-4">
-                <p className="mb-2 text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                  Preview
-                </p>
-                <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-950">
+            {!imagePreview ? (
+              <label
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`mt-2 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-slate-950/60 px-6 py-8 text-center transition-all duration-200 ${
+                  isDragging
+                    ? "border-brand-accent bg-brand-accent/10 scale-[1.01]"
+                    : "border-white/10 hover:border-white/20 hover:bg-slate-950"
+                }`}
+              >
+                <motion.div
+                  animate={
+                    isDragging
+                      ? { scale: 1.1, rotate: -4 }
+                      : { scale: 1, rotate: 0 }
+                  }
+                  transition={{ type: "spring", stiffness: 320, damping: 20 }}
+                  className={`grid size-12 place-items-center rounded-2xl ${
+                    isDragging
+                      ? "bg-brand-accent/20 text-brand-accent"
+                      : "bg-white/5 text-slate-500"
+                  }`}
+                >
+                  <ImagePlus className="size-5" />
+                </motion.div>
+
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    {isDragging
+                      ? "Drop image to upload"
+                      : "Click to upload or drag and drop"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    PNG, JPG, or WebP · Max 5MB
+                  </p>
+                </div>
+
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+              </label>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-slate-950/60"
+              >
+                <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
                   <img
                     src={imagePreview}
                     alt="Product preview"
-                    className="h-40 w-full object-contain"
+                    className="h-full w-full object-contain"
                   />
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    className="absolute right-3 top-3 grid size-9 place-items-center rounded-lg bg-slate-950/80 text-slate-300 backdrop-blur-sm transition hover:bg-red-500 hover:text-white"
+                    aria-label="Remove image"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
                 </div>
-              </div>
+
+                <div className="flex flex-wrap items-center gap-3 border-t border-white/5 bg-white/[0.02] px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-white">
+                      {imageFile?.name || "Current image"}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">
+                      {imageFile
+                        ? formatFileSize(imageFile.size)
+                        : "Uploaded previously"}
+                    </p>
+                  </div>
+
+                  <label className="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white">
+                    Replace
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      onChange={handleImageChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </motion.div>
             )}
           </div>
 
+          {/* SHORT DESCRIPTION */}
           <div className="mt-4">
-            <Inp
-              label="Short description"
-              value={c.description}
-              onChange={(v) => setC({ ...c, description: v })}
-            />
+            <label className="block">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
+                Short description
+              </span>
+
+              <textarea
+                rows={3}
+                value={c.description}
+                onChange={(e) =>
+                  setC({ ...c, description: e.target.value })
+                }
+                placeholder="A short description that appears on the product card..."
+                className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-slate-950 p-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-brand-accent/50 focus:ring-2 focus:ring-brand-accent/20"
+              />
+            </label>
           </div>
 
-          <label className="mt-4 block">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
-              Detailed specs
-            </span>
-            <textarea
-              rows={5}
-              value={c.details}
-              onChange={(e) =>
-                setC({ ...c, details: e.target.value })
-              }
-              placeholder="Enter detailed specifications..."
-              className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 p-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand-accent/50 focus:ring-2 focus:ring-brand-accent/20"
-            />
-          </label>
-
+          {/* ACTIONS */}
           <div className="mt-6 flex justify-end gap-3 border-t border-white/10 pt-5">
             <button
               type="button"
