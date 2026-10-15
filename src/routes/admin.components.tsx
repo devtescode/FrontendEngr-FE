@@ -15,7 +15,6 @@ import {
   PackageX,
   TrendingDown,
   ShoppingBag,
-  PackageCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -53,6 +52,14 @@ type SaveData = {
 type StockFilter = "all" | "in-stock" | "low" | "out";
 
 // =====================================================
+// HELPERS
+// =====================================================
+
+function getComponentId(c: any): string {
+  return String(c?._id ?? c?.id ?? "");
+}
+
+// =====================================================
 // SKU GENERATOR
 // =====================================================
 
@@ -74,7 +81,7 @@ function generateSKU(
 
   const existingNumbers = components
     .filter((component) => {
-      if (currentId && component._id === currentId) return false;
+      if (currentId && getComponentId(component) === currentId) return false;
       if (!component.sku) return false;
       return component.sku.trim().toUpperCase().startsWith(`${prefix}-`);
     })
@@ -103,7 +110,7 @@ function skuExists(
 ) {
   if (!sku) return false;
   return components.some((component) => {
-    if (currentId && component._id === currentId) return false;
+    if (currentId && getComponentId(component) === currentId) return false;
     return (
       component.sku?.trim().toUpperCase() === sku.trim().toUpperCase()
     );
@@ -151,25 +158,35 @@ function AdminComponents() {
   // =====================================================
   useEffect(() => {
     const handleUpdated = (component: BackendComponent) => {
+      const incomingId = getComponentId(component);
+      if (!incomingId) return;
+
       setComponents((current) =>
         current.map((item) =>
-          item._id === component._id ? component : item
+          getComponentId(item) === incomingId ? component : item
         )
       );
     };
 
     const handleCreated = (component: BackendComponent) => {
+      const incomingId = getComponentId(component);
+      if (!incomingId) return;
+
       setComponents((current) => {
-        const exists = current.some((item) => item._id === component._id);
+        const exists = current.some(
+          (item) => getComponentId(item) === incomingId
+        );
         if (exists) return current;
         return [component, ...current];
       });
     };
 
     const handleDeleted = (component: BackendComponent) => {
-      if (!component._id) return;
+      const id = getComponentId(component);
+      if (!id) return;
+
       setComponents((current) =>
-        current.filter((item) => item._id !== component._id)
+        current.filter((item) => getComponentId(item) !== id)
       );
     };
 
@@ -196,7 +213,7 @@ function AdminComponents() {
 
     for (const c of components) {
       const stock = Number(c.stock) || 0;
-      const sold = Number((c as any).soldCount) || 0;
+      const sold = Number(c.soldCount) || 0;
 
       totalStock += stock;
       totalSold += sold;
@@ -265,17 +282,37 @@ function AdminComponents() {
           throw new Error("Duplicate SKU");
         }
 
-        const response = await componentApi.create(
+        const created = await componentApi.create(
           { ...data, sku: generatedSKU },
           imageFile
         );
 
-        setComponents((prev) => [response, ...prev]);
-      } else if (editing?._id) {
+        const createdId = getComponentId(created);
+        if (!createdId) {
+          throw new Error(
+            "Server did not return the created component."
+          );
+        }
+
+        // Insert locally only if it's not already there
+        // (the socket event may have arrived first).
+        setComponents((prev) => {
+          const exists = prev.some(
+            (c) => getComponentId(c) === createdId
+          );
+          return exists ? prev : [created, ...prev];
+        });
+      } else if (editing) {
+        const editingId = getComponentId(editing);
+
+        if (!editingId) {
+          throw new Error("Invalid component ID.");
+        }
+
         const generatedSKU = generateSKU(
           data.name,
           components,
-          editing._id
+          editingId
         );
 
         if (!generatedSKU) {
@@ -283,19 +320,21 @@ function AdminComponents() {
           throw new Error("Invalid component name");
         }
 
-        if (skuExists(generatedSKU, components, editing._id)) {
+        if (skuExists(generatedSKU, components, editingId)) {
           setError(`SKU ${generatedSKU} already exists.`);
           throw new Error("Duplicate SKU");
         }
 
-        const response = await componentApi.update(
-          editing._id,
+        const updated = await componentApi.update(
+          editingId,
           { ...data, sku: generatedSKU },
           imageFile
         );
 
         setComponents((prev) =>
-          prev.map((c) => (c._id === editing._id ? response : c))
+          prev.map((c) =>
+            getComponentId(c) === editingId ? updated : c
+          )
         );
       }
 
@@ -318,16 +357,23 @@ function AdminComponents() {
   // DELETE
   // =====================================================
   const handleDelete = async (component: BackendComponent) => {
-    if (!component._id) return;
+    const id = getComponentId(component);
+
+    if (!id) {
+      setError(
+        "This component is missing an ID and cannot be deleted. Refresh the page."
+      );
+      return;
+    }
 
     const confirmed = window.confirm(`Delete ${component.name}?`);
     if (!confirmed) return;
 
     try {
       setError("");
-      await componentApi.delete(component._id);
+      await componentApi.delete(id);
       setComponents((prev) =>
-        prev.filter((item) => item._id !== component._id)
+        prev.filter((item) => getComponentId(item) !== id)
       );
     } catch (error: any) {
       console.error("Delete component error:", error);
@@ -340,9 +386,7 @@ function AdminComponents() {
   // =====================================================
   return (
     <div className="min-h-screen bg-slate-950 p-5 sm:p-8 lg:p-10">
-      {/* ============================================
-          HEADER
-      ============================================ */}
+      {/* HEADER */}
       <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -371,9 +415,7 @@ function AdminComponents() {
         </button>
       </div>
 
-      {/* ============================================
-          STATS — 4 cards
-      ============================================ */}
+      {/* STATS */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={<Boxes className="size-5" />}
@@ -410,9 +452,7 @@ function AdminComponents() {
         />
       </div>
 
-      {/* ============================================
-          ERROR
-      ============================================ */}
+      {/* ERROR */}
       <AnimatePresence>
         {error && (
           <motion.div
@@ -427,9 +467,7 @@ function AdminComponents() {
         )}
       </AnimatePresence>
 
-      {/* ============================================
-          SEARCH + FILTER PILLS
-      ============================================ */}
+      {/* SEARCH + FILTER PILLS */}
       <div className="mb-6 flex flex-col gap-3 lg:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
@@ -474,9 +512,7 @@ function AdminComponents() {
         </div>
       </div>
 
-      {/* ============================================
-          TABLE
-      ============================================ */}
+      {/* TABLE */}
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl">
         <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.02] px-5 py-4">
           <div>
@@ -550,14 +586,15 @@ function AdminComponents() {
 
               <tbody>
                 {filteredComponents.map((c, index) => {
+                  const id = getComponentId(c);
                   const stock = Number(c.stock) || 0;
-                  const sold = Number((c as any).soldCount) || 0;
+                  const sold = Number(c.soldCount) || 0;
                   const isOut = stock <= 0;
                   const isLow = stock > 0 && stock < 10;
 
                   return (
                     <motion.tr
-                      key={c._id}
+                      key={id}
                       initial={{ opacity: 0, y: 5 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.025 }}
@@ -608,7 +645,6 @@ function AdminComponents() {
                         </span>
                       </td>
 
-                      {/* IN STOCK — big number + pill */}
                       <td className="px-5 py-4 text-center">
                         <div className="inline-flex flex-col items-center gap-1">
                           <span
@@ -627,7 +663,6 @@ function AdminComponents() {
                         </div>
                       </td>
 
-                      {/* PURCHASED */}
                       <td className="px-5 py-4 text-center">
                         <span className="text-base font-semibold tabular-nums text-white">
                           {sold}
@@ -665,9 +700,7 @@ function AdminComponents() {
         )}
       </div>
 
-      {/* ============================================
-          DIALOG
-      ============================================ */}
+      {/* DIALOG */}
       <AnimatePresence>
         {editing && (
           <ComponentDialog
@@ -937,6 +970,8 @@ function ComponentDialog({
   onClose: () => void;
   onSave: (data: SaveData) => Promise<void>;
 }) {
+  const initialId = getComponentId(initial);
+
   const [c, setC] = useState<ComponentFormData>(
     initial
       ? {
@@ -966,8 +1001,8 @@ function ComponentDialog({
   const [saving, setSaving] = useState(false);
 
   const generatedSKU = useMemo(
-    () => generateSKU(c.name, components, initial?._id),
-    [c.name, components, initial?._id]
+    () => generateSKU(c.name, components, initialId || undefined),
+    [c.name, components, initialId]
   );
 
   useEffect(() => {
@@ -1009,14 +1044,18 @@ function ComponentDialog({
       return;
     }
 
-    const finalSKU = generateSKU(c.name, components, initial?._id);
+    const finalSKU = generateSKU(
+      c.name,
+      components,
+      initialId || undefined
+    );
 
     if (!finalSKU) {
       alert("Unable to generate SKU. Please check the component name.");
       return;
     }
 
-    if (skuExists(finalSKU, components, initial?._id)) {
+    if (skuExists(finalSKU, components, initialId || undefined)) {
       alert(`SKU ${finalSKU} already exists.`);
       return;
     }

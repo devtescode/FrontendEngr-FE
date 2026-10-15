@@ -25,10 +25,16 @@ type ComponentData = Omit<BackendComponent, "_id" | "image">;
 // =====================================================
 // AUTH
 // =====================================================
-const getToken = () =>
-  sessionStorage.getItem("admin_token") ||
-  sessionStorage.getItem("pulselab_admin_token") ||
-  sessionStorage.getItem("pulselab_token");
+function getToken(): string | null {
+  return (
+    sessionStorage.getItem("admin_token") ||
+    sessionStorage.getItem("pulselab_admin_token") ||
+    sessionStorage.getItem("pulselab_token") ||
+    localStorage.getItem("admin_token") ||
+    localStorage.getItem("pulselab_admin_token") ||
+    null
+  );
+}
 
 function authHeaders(): HeadersInit {
   const token = getToken();
@@ -70,8 +76,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 // =====================================================
-// FORMDATA BUILDER
+// FORMDATA
 // =====================================================
+// Do NOT set Content-Type manually — the browser adds
+// the multipart boundary when you pass a FormData body.
+//
 function createFormData(
   data: ComponentData,
   imageFile?: File | null
@@ -94,106 +103,224 @@ function createFormData(
 }
 
 // =====================================================
+// TIMEOUT HELPER
+// =====================================================
+// Wraps an AbortController with a timeout so a hung
+// request doesn't block the UI forever.
+//
+function withTimeout(ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+// =====================================================
 // API
 // =====================================================
 export const componentApi = {
-  // ================================================
-  // GET ALL COMPONENTS
-  // ================================================
+  // ==============================================
+  // GET ALL
+  // ==============================================
   getAll: async (): Promise<BackendComponent[]> => {
-    const res = await fetch(
-      `${API_URL}/admin/getcomponents`,
-      { headers: authHeaders() }
-    );
+    const { signal, clear } = withTimeout(15000);
 
-    const data = await handleResponse<
-      BackendComponent[] | { components: BackendComponent[] }
-    >(res);
+    try {
+      const res = await fetch(`${API_URL}/admin/getcomponents`, {
+        headers: authHeaders(),
+        signal,
+      });
 
-    // Support both response shapes.
-    if (Array.isArray(data)) return data;
+      const data = await handleResponse<
+        BackendComponent[] | { components: BackendComponent[] }
+      >(res);
 
-    if (data && Array.isArray(data.components)) {
-      return data.components;
+      // Handle both bare array and wrapped shape.
+      if (Array.isArray(data)) return data;
+
+      if (data && Array.isArray((data as any).components)) {
+        return (data as any).components;
+      }
+
+      // If neither shape matches, log it but don't crash.
+      console.warn(
+        "getAll: unexpected response shape",
+        data
+      );
+      return [];
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        throw new Error(
+          "Request timed out. Check your backend is running."
+        );
+      }
+      throw err;
+    } finally {
+      clear();
+    }
+  },
+
+  // ==============================================
+  // GET ONE
+  // ==============================================
+  getOne: async (id: string): Promise<BackendComponent> => {
+    if (!id || id === "undefined" || id === "null") {
+      throw new Error("Invalid component ID.");
     }
 
-    throw new Error("Unexpected components response shape");
+    const { signal, clear } = withTimeout(15000);
+
+    try {
+      const res = await fetch(
+        `${API_URL}/admin/getonecomponent/${id}`,
+        { headers: authHeaders(), signal }
+      );
+
+      return await handleResponse<BackendComponent>(res);
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        throw new Error("Request timed out.");
+      }
+      throw err;
+    } finally {
+      clear();
+    }
   },
 
-  // ================================================
-  // GET ONE COMPONENT
-  // ================================================
-  getOne: async (
-    id: string
-  ): Promise<BackendComponent> => {
-    const res = await fetch(
-      `${API_URL}/admin/getonecomponent/${id}`,
-      { headers: authHeaders() }
-    );
-
-    return handleResponse<BackendComponent>(res);
-  },
-
-  // ================================================
-  // CREATE COMPONENT
-  // ================================================
+  // ==============================================
+  // CREATE
+  // ==============================================
   create: async (
     data: ComponentData,
     imageFile?: File | null
   ): Promise<BackendComponent> => {
     const formData = createFormData(data, imageFile);
 
-    const res = await fetch(
-      `${API_URL}/admin/create-components`,
-      {
-        method: "POST",
-        headers: authHeaders(), // no Content-Type — browser sets it
-        body: formData,
-      }
-    );
+    const { signal, clear } = withTimeout(30000); // longer for image upload
 
-    return handleResponse<BackendComponent>(res);
+    try {
+      const res = await fetch(
+        `${API_URL}/admin/create-components`,
+        {
+          method: "POST",
+          headers: authHeaders(), // token only, no Content-Type
+          body: formData,
+          signal,
+        }
+      );
+
+      const response = await handleResponse<
+        BackendComponent | { component: BackendComponent }
+      >(res);
+
+      const component =
+        (response as any)?.component ??
+        (response as BackendComponent);
+
+      if (!component?._id) {
+        throw new Error(
+          "Server did not return the created component."
+        );
+      }
+
+      return component;
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        throw new Error("Upload timed out. Try a smaller image.");
+      }
+      throw err;
+    } finally {
+      clear();
+    }
   },
 
-  // ================================================
-  // UPDATE COMPONENT
-  // ================================================
+  // ==============================================
+  // UPDATE
+  // ==============================================
   update: async (
     id: string,
     data: ComponentData,
     imageFile?: File | null
   ): Promise<BackendComponent> => {
+    if (!id || id === "undefined" || id === "null") {
+      throw new Error("Invalid component ID.");
+    }
+
     const formData = createFormData(data, imageFile);
 
-    const res = await fetch(
-      `${API_URL}/admin/update-component/${id}`,
-      {
-        method: "PUT",
-        headers: authHeaders(),
-        body: formData,
-      }
-    );
+    const { signal, clear } = withTimeout(30000);
 
-    return handleResponse<BackendComponent>(res);
+    try {
+      const res = await fetch(
+        `${API_URL}/admin/update-component/${id}`,
+        {
+          method: "PUT",
+          headers: authHeaders(),
+          body: formData,
+          signal,
+        }
+      );
+
+      const response = await handleResponse<
+        BackendComponent | { component: BackendComponent }
+      >(res);
+
+      const component =
+        (response as any)?.component ??
+        (response as BackendComponent);
+
+      if (!component?._id) {
+        throw new Error(
+          "Server did not return the updated component."
+        );
+      }
+
+      return component;
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        throw new Error("Upload timed out. Try a smaller image.");
+      }
+      throw err;
+    } finally {
+      clear();
+    }
   },
 
-  // ================================================
-  // DELETE COMPONENT
-  // ================================================
+  // ==============================================
+  // DELETE
+  // ==============================================
   delete: async (
     id: string
   ): Promise<{
     message: string;
     component?: BackendComponent;
   }> => {
-    const res = await fetch(
-      `${API_URL}/admin/delete-component/${id}`,
-      {
-        method: "DELETE",
-        headers: authHeaders(),
-      }
-    );
+    if (!id || id === "undefined" || id === "null") {
+      throw new Error("Invalid component ID.");
+    }
 
-    return handleResponse(res);
+    const { signal, clear } = withTimeout(15000);
+
+    try {
+      const res = await fetch(
+        `${API_URL}/admin/delete-component/${id}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+          signal,
+        }
+      );
+
+      return await handleResponse(res);
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        throw new Error("Request timed out.");
+      }
+      throw err;
+    } finally {
+      clear();
+    }
   },
 };
