@@ -11,7 +11,6 @@ import {
   Calendar,
   Hash,
   Sparkles,
-  Clock,
   PackageCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -65,10 +64,6 @@ const formatDateTime = (iso: string) => {
 // STATUS CONFIG
 // =====================================================
 
-// =====================================================
-// STATUS CONFIG
-// =====================================================
-
 const STATUS = {
   Paid: {
     label: "Ready for Pickup",
@@ -85,8 +80,6 @@ const STATUS = {
     bannerIcon: "text-emerald-500",
   },
   Ready: {
-    // Kept as an alias so admin-set "Ready" still renders
-    // the same as paid. Merged visually with Paid.
     label: "Ready for Pickup",
     short: "Paid",
     description:
@@ -324,10 +317,6 @@ function OrdersPage() {
   // ===================================================
   // COUNTS
   // ===================================================
-  // "Paid" tab shows everything NOT yet collected —
-  // both "Paid" (being prepared) and "Ready" (packed,
-  // waiting for pickup).
-  //
   const counts = useMemo<Record<TabKey, number>>(() => {
     return {
       All: orders.length,
@@ -352,7 +341,6 @@ function OrdersPage() {
       );
     }
 
-    // activeTab === "Collected"
     return orders.filter(
       (o) => (o as any).status === "Collected"
     );
@@ -757,10 +745,15 @@ function OrderCard({
       </div>
 
       {/* FOOTER */}
-      <div className="grid gap-4 border-t border-slate-100 bg-slate-50/40 px-6 py-4 pl-7 sm:grid-cols-3">
+      <div
+        className={`grid gap-4 border-t border-slate-100 bg-slate-50/40 px-6 py-4 pl-7 ${
+          isCollected ? "sm:grid-cols-4" : "sm:grid-cols-3"
+        }`}
+      >
+        {/* PAID ON */}
         <div className="flex items-center gap-2 text-xs text-slate-500">
-          <Calendar className="size-4 text-slate-400" />
-          <div>
+          <Calendar className="size-4 shrink-0 text-slate-400" />
+          <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-widest text-slate-400">
               Paid on
             </div>
@@ -770,8 +763,26 @@ function OrderCard({
           </div>
         </div>
 
+        {/* COLLECTED ON */}
+        {isCollected && (
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <PackageCheck className="size-4 shrink-0 text-slate-400" />
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-widest text-slate-400">
+                Collected on
+              </div>
+              <div className="text-slate-700">
+                {order.collectedAt
+                  ? formatDateTime(order.collectedAt)
+                  : "—"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ITEMS */}
         <div className="flex items-center gap-2 text-xs text-slate-500">
-          <Hash className="size-4 text-slate-400" />
+          <Hash className="size-4 shrink-0 text-slate-400" />
           <div>
             <div className="text-[10px] uppercase tracking-widest text-slate-400">
               Items
@@ -783,6 +794,7 @@ function OrderCard({
           </div>
         </div>
 
+        {/* TOTAL */}
         <div className="flex items-center justify-end">
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-widest text-slate-400">
