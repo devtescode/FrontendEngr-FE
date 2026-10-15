@@ -600,7 +600,7 @@ function CollectedRow({
                   icon={<Clock className="h-3.5 w-3.5" />}
                   label="Collected At"
                   value={formatDateTime(
-                    order.collectedAt || order.paidAt
+                    order.collectedAt
                   )}
                 />
                 <MetaCell
