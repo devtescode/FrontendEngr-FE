@@ -17,6 +17,8 @@ import {
   Copy,
   Check,
   ShieldCheck,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -61,7 +63,6 @@ type PickupOrder = {
 
 type PendingConfirm = {
   order: PickupOrder;
-  nextStatus: PickupOrder["status"];
 } | null;
 
 // =====================================================
@@ -137,8 +138,6 @@ function PickupPage() {
         q
       )}`;
 
-      console.log("🔍 Pickup search:", url);
-
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -184,22 +183,19 @@ function PickupPage() {
   };
 
   // ===================================================
-  // REQUEST STATUS CHANGE (opens confirmation modal)
+  // REQUEST STATUS CHANGE
   // ===================================================
-  const requestStatusChange = (
-    order: PickupOrder,
-    nextStatus: PickupOrder["status"]
-  ) => {
-    setPendingConfirm({ order, nextStatus });
+  const requestHandover = (order: PickupOrder) => {
+    setPendingConfirm({ order });
   };
 
   // ===================================================
-  // CONFIRM STATUS CHANGE (fires the API call)
+  // CONFIRM HANDOVER
   // ===================================================
-  const confirmStatusChange = async () => {
+  const confirmHandover = async () => {
     if (!pendingConfirm) return;
 
-    const { order, nextStatus } = pendingConfirm;
+    const { order } = pendingConfirm;
 
     const token = getToken();
     if (!token) {
@@ -215,7 +211,9 @@ function PickupPage() {
     setResults((prev) =>
       prev
         ? prev.map((o) =>
-            o.id === order.id ? { ...o, status: nextStatus } : o
+            o.id === order.id
+              ? { ...o, status: "Collected" as const }
+              : o
           )
         : prev
     );
@@ -229,7 +227,7 @@ function PickupPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ status: nextStatus }),
+          body: JSON.stringify({ status: "Collected" }),
         }
       );
 
@@ -238,13 +236,10 @@ function PickupPage() {
         throw new Error(data?.message || "Failed to update status");
       }
 
-      // Success — close modal
       setPendingConfirm(null);
     } catch (err: any) {
       console.error("Update status failed:", err);
       alert(err?.message || "Failed to update status");
-
-      // Revert on failure
       setResults(previous);
     } finally {
       setUpdating(false);
@@ -266,7 +261,7 @@ function PickupPage() {
   }, [pendingConfirm, updating]);
 
   // ===================================================
-  // BODY SCROLL LOCK WHILE MODAL IS OPEN
+  // BODY SCROLL LOCK
   // ===================================================
   useEffect(() => {
     if (pendingConfirm) {
@@ -297,7 +292,8 @@ function PickupPage() {
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
             Search by full matric number, the last 4 digits of the
-            matric, or the order reference.
+            matric, or the order reference. Confirm the student
+            before handing over their components.
           </p>
         </div>
 
@@ -435,7 +431,7 @@ function PickupPage() {
                   <PickupOrderCard
                     key={order.id}
                     order={order}
-                    onRequestStatus={requestStatusChange}
+                    onRequestHandover={requestHandover}
                   />
                 ))}
               </motion.div>
@@ -462,25 +458,13 @@ function PickupPage() {
               className="fixed inset-0 z-50 bg-slate-950/60"
             />
 
-            {/* MODAL CARD */}
+            {/* MODAL */}
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
               <motion.div
                 key="modal"
-                initial={{
-                  opacity: 0,
-                  y: 24,
-                  scale: 0.94,
-                }}
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                  scale: 1,
-                }}
-                exit={{
-                  opacity: 0,
-                  y: 24,
-                  scale: 0.94,
-                }}
+                initial={{ opacity: 0, y: 24, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 24, scale: 0.94 }}
                 transition={{
                   duration: 0.3,
                   ease: [0.22, 1, 0.36, 1],
@@ -488,12 +472,11 @@ function PickupPage() {
                 onClick={(e) => e.stopPropagation()}
                 className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-slate-900 shadow-2xl"
               >
-                <ConfirmContent
+                <ConfirmHandoverContent
                   order={pendingConfirm.order}
-                  nextStatus={pendingConfirm.nextStatus}
                   updating={updating}
                   onCancel={() => setPendingConfirm(null)}
-                  onConfirm={confirmStatusChange}
+                  onConfirm={confirmHandover}
                 />
               </motion.div>
             </div>
@@ -508,180 +491,167 @@ function PickupPage() {
    CONFIRM MODAL CONTENT
 ===================================================== */
 
-function ConfirmContent({
+function ConfirmHandoverContent({
   order,
-  nextStatus,
   updating,
   onCancel,
   onConfirm,
 }: {
   order: PickupOrder;
-  nextStatus: PickupOrder["status"];
   updating: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const isReady = nextStatus === "Ready";
-
-  const accent = isReady
-    ? {
-        ring: "ring-brand-accent/20",
-        bg: "bg-brand-accent/10",
-        text: "text-brand-accent",
-        button: "bg-brand-accent hover:opacity-90",
-        title: "Mark this order ready?",
-        description:
-          "Confirm the student details before marking this order ready for pickup.",
-        confirmLabel: "Yes, Mark as Ready",
-        icon: Package,
-      }
-    : {
-        ring: "ring-green-500/20",
-        bg: "bg-green-500/10",
-        text: "text-green-400",
-        button: "bg-green-500 hover:bg-green-600",
-        title: "Hand over this order?",
-        description:
-          "Confirm the student details before marking this order as collected.",
-        confirmLabel: "Yes, Mark as Collected",
-        icon: CheckCircle2,
-      };
-
-  const Icon = accent.icon;
   const totalUnits = order.items.reduce(
     (a, i) => a + i.quantity,
     0
   );
 
   return (
-    <div className="p-6">
-      {/* ICON */}
-      <div className="mb-5 flex justify-center">
-        <motion.div
-          initial={{ scale: 0.7, rotate: -8 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{
-            delay: 0.05,
-            type: "spring",
-            stiffness: 320,
-            damping: 20,
-          }}
-          className={`grid size-14 place-items-center rounded-2xl ring-4 ${accent.bg} ${accent.ring}`}
-        >
-          <Icon className={`size-7 ${accent.text}`} />
-        </motion.div>
-      </div>
+    <div>
+      {/* CLOSE BUTTON */}
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={updating}
+        className="absolute right-4 top-4 grid size-9 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+        aria-label="Close"
+      >
+        <X className="size-4" />
+      </button>
 
-      {/* TITLE */}
-      <h2 className="text-center text-xl font-bold text-white">
-        {accent.title}
-      </h2>
-
-      <p className="mt-1 text-center text-sm text-slate-400">
-        {accent.description}
-      </p>
-
-      {/* STUDENT CONFIRMATION CARD */}
-      <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-        <div className="flex items-center gap-3">
-          <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-accent/10 text-brand-accent">
-            <User className="size-5" />
-          </div>
-
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-              Student
-            </p>
-            <p className="mt-0.5 truncate text-base font-bold text-white">
-              {order.userName || "Unknown"}
-            </p>
-            {order.matric && (
-              <p className="mt-0.5 font-mono text-xs font-semibold text-brand-accent">
-                {order.matric}
-              </p>
-            )}
-          </div>
+      <div className="p-6">
+        {/* ICON */}
+        <div className="mb-5 flex justify-center">
+          <motion.div
+            initial={{ scale: 0.7, rotate: -8 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{
+              delay: 0.05,
+              type: "spring",
+              stiffness: 320,
+              damping: 20,
+            }}
+            className="grid size-16 place-items-center rounded-full bg-amber-500/10 ring-4 ring-amber-500/20"
+          >
+            <AlertTriangle className="size-8 text-amber-400" />
+          </motion.div>
         </div>
 
-        {/* ORDER SUMMARY */}
-        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-              Reference
-            </p>
-            <p className="mt-1 truncate font-mono text-xs text-slate-300">
-              {order.reference}
-            </p>
-          </div>
+        {/* TITLE */}
+        <h2 className="text-center text-xl font-bold text-white">
+          Confirm hand over
+        </h2>
 
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-              Total
-            </p>
-            <p className="mt-1 text-sm font-bold text-white">
-              {formatNaira(order.total)}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-              Items
-            </p>
-            <p className="mt-1 text-sm font-semibold text-white">
-              {totalUnits} {totalUnits === 1 ? "unit" : "units"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-              Paid on
-            </p>
-            <p className="mt-1 text-xs text-slate-300">
-              {formatDateTime(order.paidAt)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* WARNING */}
-      <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-amber-400" />
-        <p className="text-xs text-amber-200/90">
-          {isReady
-            ? "The student will be notified that this order is ready for pickup."
-            : "This action is final. The order will be marked as collected and cannot be undone from this screen."}
+        <p className="mt-2 text-center text-sm text-slate-400">
+          Please verify the student details below before
+          handing over the components. This action will mark
+          the order as <span className="font-semibold text-white">Collected</span> and
+          cannot be undone.
         </p>
-      </div>
 
-      {/* ACTION BUTTONS */}
-      <div className="mt-6 grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={updating}
-          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Cancel
-        </button>
+        {/* STUDENT CONFIRMATION CARD */}
+        <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+          <div className="flex items-center gap-3">
+            <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-accent/10 text-brand-accent">
+              <User className="size-6" />
+            </div>
 
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={updating}
-          className={`flex h-12 items-center justify-center gap-2 rounded-2xl font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${accent.button}`}
-        >
-          {updating ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Updating...
-            </>
-          ) : (
-            <>
-              <Check className="size-4" />
-              {accent.confirmLabel}
-            </>
-          )}
-        </button>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                Confirm student is
+              </p>
+              <p className="mt-0.5 truncate text-lg font-bold text-white">
+                {order.userName || "Unknown"}
+              </p>
+              {order.matric && (
+                <p className="mt-0.5 font-mono text-sm font-semibold text-brand-accent">
+                  {order.matric}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* ORDER SUMMARY */}
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                Reference
+              </p>
+              <p className="mt-1 truncate font-mono text-xs text-slate-300">
+                {order.reference}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                Total paid
+              </p>
+              <p className="mt-1 text-sm font-bold text-white">
+                {formatNaira(order.total)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                Items
+              </p>
+              <p className="mt-1 text-sm font-semibold text-white">
+                {totalUnits} {totalUnits === 1 ? "unit" : "units"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                Paid on
+              </p>
+              <p className="mt-1 text-xs text-slate-300">
+                {formatDateTime(order.paidAt)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* WARNING */}
+        <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-amber-400" />
+          <p className="text-xs text-amber-200/90">
+            Only click "Confirm" if you are physically
+            handing over the components to this student right
+            now.
+          </p>
+        </div>
+
+        {/* ACTIONS */}
+        <div className="mt-6 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={updating}
+            className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={updating}
+            className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-green-500 font-bold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {updating ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Marking...
+              </>
+            ) : (
+              <>
+                <Check className="size-4" />
+                Yes, Confirm
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -794,13 +764,10 @@ function StatPill({
 
 function PickupOrderCard({
   order,
-  onRequestStatus,
+  onRequestHandover,
 }: {
   order: PickupOrder;
-  onRequestStatus: (
-    order: PickupOrder,
-    status: PickupOrder["status"]
-  ) => void;
+  onRequestHandover: (order: PickupOrder) => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -812,18 +779,36 @@ function PickupOrderCard({
     } catch {}
   };
 
+  const isCollected = order.status === "Collected";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70 shadow-xl"
+      className={`overflow-hidden rounded-3xl border shadow-xl transition-colors ${
+        isCollected
+          ? "border-white/5 bg-slate-900/40"
+          : "border-white/10 bg-slate-900/70"
+      }`}
     >
       {/* HEADER */}
-      <div className="border-b border-white/10 bg-white/[0.02] p-5 md:p-6">
+      <div
+        className={`border-b p-5 md:p-6 ${
+          isCollected
+            ? "border-white/5 bg-white/[0.01]"
+            : "border-white/10 bg-white/[0.02]"
+        }`}
+      >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Package className="h-4 w-4 shrink-0 text-brand-accent" />
+              <Package
+                className={`h-4 w-4 shrink-0 ${
+                  isCollected
+                    ? "text-slate-600"
+                    : "text-brand-accent"
+                }`}
+              />
 
               <span className="text-xs font-semibold uppercase tracking-widest text-slate-600">
                 Order Reference
@@ -832,7 +817,11 @@ function PickupOrderCard({
 
             <button
               onClick={copyRef}
-              className="mt-1.5 inline-flex items-center gap-2 font-mono text-sm font-semibold text-white transition hover:text-brand-accent"
+              className={`mt-1.5 inline-flex items-center gap-2 font-mono text-sm font-semibold transition ${
+                isCollected
+                  ? "text-slate-400 hover:text-slate-300"
+                  : "text-white hover:text-brand-accent"
+              }`}
             >
               <span className="truncate max-w-[280px]">
                 {order.reference}
@@ -868,7 +857,11 @@ function PickupOrderCard({
       </div>
 
       {/* META GRID */}
-      <div className="grid gap-4 border-b border-white/10 p-5 sm:grid-cols-3 md:p-6">
+      <div
+        className={`grid gap-4 border-b p-5 sm:grid-cols-3 md:p-6 ${
+          isCollected ? "border-white/5" : "border-white/10"
+        }`}
+      >
         <Info label="Student" value={order.userName || "—"} />
         <Info label="Matric Number" value={order.matric || "—"} />
         <Info label="Order Total" value={formatNaira(order.total)} />
@@ -898,7 +891,9 @@ function PickupOrderCard({
                     <img
                       src={item.image}
                       alt={item.name}
-                      className="h-full w-full object-cover"
+                      className={`h-full w-full object-cover ${
+                        isCollected ? "grayscale" : ""
+                      }`}
                     />
                   ) : (
                     <Package className="h-6 w-6 text-slate-700" />
@@ -906,7 +901,11 @@ function PickupOrderCard({
                 </div>
 
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-white">
+                  <p
+                    className={`truncate font-semibold ${
+                      isCollected ? "text-slate-400" : "text-white"
+                    }`}
+                  >
                     {item.name}
                   </p>
 
@@ -922,7 +921,13 @@ function PickupOrderCard({
                 </div>
               </div>
 
-              <div className="shrink-0 rounded-xl bg-brand-accent/10 px-3 py-2 text-sm font-bold text-brand-accent">
+              <div
+                className={`shrink-0 rounded-xl px-3 py-2 text-sm font-bold ${
+                  isCollected
+                    ? "bg-slate-800 text-slate-400"
+                    : "bg-brand-accent/10 text-brand-accent"
+                }`}
+              >
                 × {item.quantity}
               </div>
             </div>
@@ -930,32 +935,26 @@ function PickupOrderCard({
         </div>
       </div>
 
-      {/* FOOTER — PICKUP ACTION */}
-      <div className="border-t border-white/10 bg-white/[0.02] p-5 md:p-6">
-        {order.status === "Ready" && (
+      {/* FOOTER */}
+      <div
+        className={`border-t p-5 md:p-6 ${
+          isCollected
+            ? "border-white/5 bg-white/[0.01]"
+            : "border-white/10 bg-white/[0.02]"
+        }`}
+      >
+        {isCollected ? (
+          <div className="flex items-center justify-center gap-2 rounded-2xl bg-slate-800/60 px-4 py-4 text-sm font-medium text-slate-400">
+            <CheckCircle2 className="h-5 w-5 text-green-400" />
+            This order has already been handed over
+          </div>
+        ) : (
           <button
-            onClick={() => onRequestStatus(order, "Collected")}
-            className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-green-500 font-bold text-white transition hover:bg-green-600"
+            onClick={() => onRequestHandover(order)}
+            className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-green-500 font-bold text-white transition hover:bg-green-600 active:scale-[0.99]"
           >
             <CheckCircle2 className="h-5 w-5" />
-            Hand Over & Mark as Collected
-          </button>
-        )}
-
-        {order.status === "Collected" && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl bg-slate-800 px-4 py-4 text-sm font-medium text-slate-400">
-            <CheckCircle2 className="h-5 w-5 text-green-400" />
-            This order has already been collected
-          </div>
-        )}
-
-        {order.status === "Paid" && (
-          <button
-            onClick={() => onRequestStatus(order, "Ready")}
-            className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-brand-accent font-bold text-white transition hover:opacity-90"
-          >
-            <Package className="h-5 w-5" />
-            Mark as Ready for Pickup
+            Hand Over to Student
           </button>
         )}
       </div>
@@ -968,18 +967,19 @@ function PickupOrderCard({
 ===================================================== */
 
 function OrderStatus({ status }: { status: PickupOrder["status"] }) {
-  const styles =
-    status === "Ready"
-      ? "bg-green-500/10 text-green-400 border-green-500/20"
-      : status === "Collected"
-        ? "bg-slate-500/10 text-slate-400 border-slate-500/20"
-        : "bg-brand-accent/10 text-brand-accent border-brand-accent/20";
+  const isCollected = status === "Collected";
+
+  const styles = isCollected
+    ? "bg-slate-500/10 text-slate-400 border-slate-500/20"
+    : "bg-green-500/10 text-green-400 border-green-500/20";
+
+  const label = isCollected ? "Collected" : "Ready";
 
   return (
     <span
       className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-bold uppercase tracking-wider ${styles}`}
     >
-      {status}
+      {label}
     </span>
   );
 }
