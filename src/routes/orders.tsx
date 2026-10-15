@@ -65,26 +65,32 @@ const formatDateTime = (iso: string) => {
 // STATUS CONFIG
 // =====================================================
 
+// =====================================================
+// STATUS CONFIG
+// =====================================================
+
 const STATUS = {
   Paid: {
-    label: "Payment Received",
-    short: "Preparing",
+    label: "Ready for Pickup",
+    short: "Paid",
     description:
-      "We're preparing your order. You'll be notified when it's ready for pickup.",
-    icon: Clock,
-    pillBg: "bg-blue-50 text-blue-700 ring-blue-200/60",
-    pillDot: "bg-blue-500",
-    barBg: "bg-blue-500",
-    bannerBg: "bg-blue-50/60",
-    bannerBorder: "border-blue-100",
-    bannerText: "text-blue-700",
-    bannerIcon: "text-blue-500",
+      "Visit the FENG with your matric number to collect your order.",
+    icon: PackageCheck,
+    pillBg: "bg-emerald-50 text-emerald-700 ring-emerald-200/60",
+    pillDot: "bg-emerald-500",
+    barBg: "bg-emerald-500",
+    bannerBg: "bg-emerald-50/60",
+    bannerBorder: "border-emerald-100",
+    bannerText: "text-emerald-700",
+    bannerIcon: "text-emerald-500",
   },
   Ready: {
+    // Kept as an alias so admin-set "Ready" still renders
+    // the same as paid. Merged visually with Paid.
     label: "Ready for Pickup",
-    short: "Ready",
+    short: "Paid",
     description:
-      "Your order is packed and waiting. Bring your matric number to the lab.",
+      "Visit the FENG with your matric number to collect your order.",
     icon: PackageCheck,
     pillBg: "bg-emerald-50 text-emerald-700 ring-emerald-200/60",
     pillDot: "bg-emerald-500",
@@ -98,7 +104,7 @@ const STATUS = {
     label: "Collected",
     short: "Collected",
     description:
-      "This order has been handed over. Thanks for shopping with PulseLab.",
+      "You've picked up this order. Thanks for shopping with PulseLab.",
     icon: CheckCircle2,
     pillBg: "bg-slate-100 text-slate-600 ring-slate-200/60",
     pillDot: "bg-slate-400",
