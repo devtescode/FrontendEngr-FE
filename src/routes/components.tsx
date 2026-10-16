@@ -347,7 +347,7 @@ function CatalogIndex() {
             onChange={(e) =>
               setSort(e.target.value as typeof sort)
             }
-            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-brand-accent/40 focus:outline-none focus:ring-2 focus:ring-brand-accent/40 sm:w-auto"
+            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-base focus:border-brand-accent/40 focus:outline-none focus:ring-2 focus:ring-brand-accent/40 sm:w-auto sm:text-sm"
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
