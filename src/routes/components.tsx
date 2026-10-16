@@ -315,11 +315,10 @@ function CatalogIndex() {
           {/* LIVE INDICATOR */}
           <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5">
             <span
-              className={`size-1.5 rounded-full ${
-                isLive
+              className={`size-1.5 rounded-full ${isLive
                   ? "animate-pulse bg-emerald-500"
                   : "bg-slate-300"
-              }`}
+                }`}
             />
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               {isLive ? "Live" : "Offline"}
@@ -335,12 +334,12 @@ function CatalogIndex() {
         )}
 
         {/* SEARCH + SORT */}
-        <div className="mb-8 flex flex-col gap-4 md:flex-row">
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search components, SKUs..."
-            className="h-11 flex-1 rounded-lg border border-slate-200 bg-white px-4 focus:border-brand-accent/40 focus:outline-none focus:ring-2 focus:ring-brand-accent/40"
+            placeholder="Search components..."
+            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-brand-accent/40 focus:outline-none focus:ring-2 focus:ring-brand-accent/40 sm:flex-1 sm:px-4"
           />
 
           <select
@@ -348,7 +347,7 @@ function CatalogIndex() {
             onChange={(e) =>
               setSort(e.target.value as typeof sort)
             }
-            className="h-11 rounded-lg border border-slate-200 bg-white px-3"
+            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-brand-accent/40 focus:outline-none focus:ring-2 focus:ring-brand-accent/40 sm:w-auto"
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
@@ -364,11 +363,10 @@ function CatalogIndex() {
             <button
               key={category}
               onClick={() => setCat(category)}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
-                cat === category
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${cat === category
                   ? "bg-brand-navy text-white"
                   : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-              }`}
+                }`}
             >
               {category}
             </button>
