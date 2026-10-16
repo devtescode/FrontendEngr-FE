@@ -6,6 +6,9 @@ import {
   Bell,
   ClipboardList,
   AlertCircle,
+  PackageCheck,   // ← add
+  Calendar,       // ← add
+  Check,          // ← add
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 
@@ -122,22 +125,22 @@ function normalizeOrder(raw: any): Order {
 
   const items: OrderItem[] = Array.isArray(raw?.items)
     ? raw.items.map((it: any) => {
-        const populated =
-          it?.componentId && typeof it.componentId === "object"
-            ? it.componentId
-            : null;
+      const populated =
+        it?.componentId && typeof it.componentId === "object"
+          ? it.componentId
+          : null;
 
-        return {
-          componentId: String(
-            populated?._id ?? it?.componentId ?? ""
-          ),
-          name: String(it?.name ?? ""),
-          price: Number(it?.price ?? 0),
-          quantity: Number(it?.quantity ?? 0),
-          image: populated?.image ?? it?.image ?? null,
-          sku: populated?.sku ?? it?.sku ?? null,
-        };
-      })
+      return {
+        componentId: String(
+          populated?._id ?? it?.componentId ?? ""
+        ),
+        name: String(it?.name ?? ""),
+        price: Number(it?.price ?? 0),
+        quantity: Number(it?.quantity ?? 0),
+        image: populated?.image ?? it?.image ?? null,
+        sku: populated?.sku ?? it?.sku ?? null,
+      };
+    })
     : [];
 
   const status: Order["status"] =
@@ -339,6 +342,23 @@ function DashboardPage() {
     () => orders.filter((o) => o.status !== "Collected"),
     [orders]
   );
+  const collected = useMemo(
+    () => orders.filter((o) => o.status === "Collected"),
+    [orders]
+  );
+
+  const formatShortDate = (iso: string | null | undefined) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleString("en-NG", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
 
   const cartCount = useMemo(
     () =>
@@ -582,45 +602,138 @@ function DashboardPage() {
           </motion.section>
 
           {/* RECENT ACTIVITY */}
+          {/* RECENT COLLECTED */}
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             className="rounded-2xl border border-slate-200 bg-white p-6"
           >
-            <h2 className="mb-6 text-lg font-bold text-brand-navy">
-              Recent activity
-            </h2>
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-brand-navy">
+                  Recent collected
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Your last 3 pickups
+                </p>
+              </div>
 
-            {orders.length === 0 ? (
-              <p className="text-sm text-slate-400">
-                Your recent orders will appear here.
-              </p>
+              {collected.length > 0 && (
+                <Link
+                  to="/orders"
+                  className="text-sm font-semibold text-brand-accent"
+                >
+                  View all →
+                </Link>
+              )}
+            </div>
+
+            {collected.length === 0 ? (
+              <div className="py-10 text-center">
+                <div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-slate-100">
+                  <PackageCheck className="size-5 text-slate-400" />
+                </div>
+                <p className="text-sm text-slate-500">
+                  Nothing collected yet.
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Pickups will show up here once you collect them.
+                </p>
+              </div>
             ) : (
               <div className="space-y-3">
-                {orders.slice(0, 5).map((o) => {
-                  const isCollected = o.status === "Collected";
-                  return (
-                    <div
-                      key={o.id}
-                      className={`rounded-lg p-3 text-sm ${
-                        isCollected
-                          ? "bg-slate-50 text-slate-500"
-                          : "bg-brand-accent/5 text-brand-navy"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Package className="size-4 shrink-0 opacity-70" />
-                        <span className="truncate font-medium">
-                          {isCollected ? "Collected" : "Ready for pickup"}
-                        </span>
+                {collected.slice(0, 3).map((o, i) => (
+                  <motion.div
+                    key={o.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.25 + i * 0.05 }}
+                    className="group rounded-xl border border-slate-200 bg-slate-50/50 p-3 transition hover:border-slate-300 hover:bg-white hover:shadow-sm"
+                  >
+                    {/* TOP ROW — ICON + REFERENCE + AMOUNT */}
+                    <div className="flex items-start gap-3">
+                      {/* THUMBNAIL STACK */}
+                      <div className="flex shrink-0 -space-x-3">
+                        {o.items.slice(0, 2).map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="grid size-10 place-items-center overflow-hidden rounded-lg border-2 border-white bg-slate-100 shadow-sm"
+                            style={{ zIndex: 10 - idx }}
+                          >
+                            {item.image ? (
+                              <img
+                                src={item.image}
+                                alt={item.name}
+                                className="h-full w-full object-cover grayscale"
+                              />
+                            ) : (
+                              <Package className="size-4 text-slate-400" />
+                            )}
+                          </div>
+                        ))}
+                        {o.items.length > 2 && (
+                          <div className="grid size-10 place-items-center rounded-lg border-2 border-white bg-slate-200 text-[10px] font-bold text-slate-600 shadow-sm">
+                            +{o.items.length - 2}
+                          </div>
+                        )}
                       </div>
-                      <div className="mt-1 truncate font-mono text-[11px] opacity-70">
-                        {o.reference}
+
+                      {/* REFERENCE + STATUS */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-700 ring-1 ring-emerald-200/60">
+                            <Check className="size-3" />
+                            Collected
+                          </span>
+                        </div>
+
+                        <div className="mt-1.5 truncate font-mono text-xs text-slate-600">
+                          {o.reference}
+                        </div>
+                      </div>
+
+                      {/* AMOUNT */}
+                      <div className="shrink-0 text-right">
+                        <div className="font-bold text-brand-navy">
+                          {formatNaira(o.total)}
+                        </div>
+                        <div className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">
+                          Paid
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
+
+                    {/* BOTTOM ROW — DATES */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200/70 pt-3">
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <Calendar className="size-3 shrink-0 text-slate-400" />
+                        <div className="min-w-0">
+                          <div className="text-[9px] uppercase tracking-widest text-slate-400">
+                            Paid
+                          </div>
+                          <div className="truncate text-slate-600">
+                            {formatShortDate(o.paidAt)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <PackageCheck className="size-3 shrink-0 text-emerald-500" />
+                        <div className="min-w-0">
+                          <div className="text-[9px] uppercase tracking-widest text-slate-400">
+                            Collected
+                          </div>
+                          <div className="truncate text-slate-600">
+                            {o.collectedAt
+                              ? formatShortDate(o.collectedAt)
+                              : "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
               </div>
             )}
           </motion.section>
@@ -646,18 +759,16 @@ function StatCard({
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className={`rounded-2xl border p-5 ${
-        highlight
+      className={`rounded-2xl border p-5 ${highlight
           ? "border-transparent bg-brand-navy text-white"
           : "border-slate-200 bg-white"
-      }`}
+        }`}
     >
       <div
-        className={`mb-3 grid size-9 place-items-center rounded-lg ${
-          highlight
+        className={`mb-3 grid size-9 place-items-center rounded-lg ${highlight
             ? "bg-white/10"
             : "bg-brand-accent/10 text-brand-accent"
-        }`}
+          }`}
       >
         <Icon className="size-4" />
       </div>
@@ -667,9 +778,8 @@ function StatCard({
       </div>
 
       <div
-        className={`mt-1 font-mono text-[10px] uppercase tracking-widest ${
-          highlight ? "text-white/60" : "text-slate-400"
-        }`}
+        className={`mt-1 font-mono text-[10px] uppercase tracking-widest ${highlight ? "text-white/60" : "text-slate-400"
+          }`}
       >
         {label}
       </div>
@@ -691,9 +801,8 @@ export function StatusPill({ status }: { status: string }) {
 
   return (
     <span
-      className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold uppercase tracking-tight ${
-        palette[status] ?? "bg-slate-100 text-slate-600"
-      }`}
+      className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold uppercase tracking-tight ${palette[status] ?? "bg-slate-100 text-slate-600"
+        }`}
     >
       {label}
     </span>
