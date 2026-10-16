@@ -8,18 +8,12 @@ import {
   ShoppingCart,
   AlertCircle,
 } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
 import { RequireAuth } from "@/components/RequireAuth";
 import {
-  cartCache,
   pushToast,
   setCartCacheFromResponse,
 } from "@/components/ComponentCard";
@@ -74,16 +68,7 @@ type CartData = {
 function CartPage() {
   const location = useLocation();
 
-  // ===================================================
-  // BUILD INITIAL STATE FROM CACHE (fallback to localStorage)
-  // ===================================================
-  // The cart cache holds the most recent state known to
-  // the app — written by ComponentCard when the user
-  // increments/decrements there. Use it first so the
-  // cart page opens with fresh data.
-  //
   const [cart, setCart] = useState<CartData>(() => {
-    // 1) Try localStorage first
     try {
       const savedCart = localStorage.getItem(CART_STORAGE_KEY);
       if (savedCart) {
@@ -95,28 +80,22 @@ function CartPage() {
     } catch (error) {
       console.error("Failed to load saved cart:", error);
     }
-
-    // 2) Fall back to empty
     return { items: [] };
   });
 
   const [updating, setUpdating] = useState<string | null>(null);
 
-  // ===================================================
-  // PAYMENT STATE
-  // ===================================================
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
 
   const hasFetched = useRef(false);
 
-  const getToken = () => {
-    return sessionStorage.getItem("pulselab_token");
-  };
+  const getToken = () =>
+    sessionStorage.getItem("pulselab_token");
 
   // ===================================================
-  // RESET PAYMENT STATE WHEN RETURNING TO /cart
+  // RESET PAYMENT STATE ON ROUTE CHANGE
   // ===================================================
   useEffect(() => {
     setIsRedirecting(false);
@@ -127,7 +106,6 @@ function CartPage() {
   // ===================================================
   // NORMALIZE CART
   // ===================================================
-
   const normalizeCart = (data: any): CartData => {
     if (!data) return { items: [] };
 
@@ -147,8 +125,19 @@ function CartPage() {
   };
 
   // ===================================================
-  // SAVE CART LOCALLY
+  // APPLY CART UPDATE
   // ===================================================
+  // One helper for every mutation success path:
+  //   1. Update localStorage
+  //   2. Update local React state
+  //   3. Update the shared cart cache (for ComponentCard)
+  //
+  const applyCartUpdate = (rawData: any) => {
+    const normalized = normalizeCart(rawData);
+
+    updateCart(normalized);
+    setCartCacheFromResponse(rawData);
+  };
 
   const saveCartLocally = (updatedCart: CartData) => {
     try {
@@ -174,12 +163,8 @@ function CartPage() {
   };
 
   // ===================================================
-  // FETCH CART (FORCE, not silent-gated)
+  // FETCH CART (from server)
   // ===================================================
-  // Always hits the server. Used on mount and after
-  // every socket `cart:updated` so the page reconciles
-  // with the source of truth.
-  //
   const fetchCart = async (opts?: { silent?: boolean }) => {
     const token = getToken();
     if (!token) return;
@@ -188,7 +173,7 @@ function CartPage() {
     const timeout = setTimeout(() => controller.abort(), 10000);
 
     try {
-      console.log("🛒 FETCHING CART (cart page)...");
+      console.log("🛒 FETCHING CART...");
 
       const response = await fetch(`${API_URL}/engineering/cart`, {
         method: "GET",
@@ -203,21 +188,14 @@ function CartPage() {
         throw new Error(data?.message || "Failed to load cart");
       }
 
-      const normalizedCart = normalizeCart(data);
-      updateCart(normalizedCart);
-
-      // Keep the shared ComponentCard cache in sync so
-      // the components page reflects the same state.
-      setCartCacheFromResponse(data);
+      // Always apply through the same helper so cache
+      // and localStorage stay in sync.
+      applyCartUpdate(data);
     } catch (error: any) {
       if (error?.name === "AbortError") {
-        if (!opts?.silent) {
-          console.error("🛒 Cart request timed out.");
-        }
+        console.error("🛒 Cart request timed out.");
       } else {
-        if (!opts?.silent) {
-          console.error("🛒 Cart fetch error:", error);
-        }
+        console.error("🛒 Cart fetch error:", error);
       }
     } finally {
       clearTimeout(timeout);
@@ -230,58 +208,29 @@ function CartPage() {
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
-
-    // Fetch immediately. Do NOT wait — the initial
-    // state above already shows cached data, and this
-    // reconciles with the server.
     fetchCart();
   }, []);
 
   // ===================================================
-  // REFRESH CART ON ROUTE CHANGE
+  // REFETCH ON RETURN TO /cart
   // ===================================================
-  // If the user navigates away and back without a full
-  // page reload, the component may remount but the
-  // previous fetch may be stale. Refetch on every
-  // mount for the /cart path.
-  //
   useEffect(() => {
     if (location.pathname !== "/cart") return;
-
-    // Skip the very first run — the mount effect above
-    // already fetched.
     if (!hasFetched.current) return;
-
     fetchCart({ silent: true });
   }, [location.pathname]);
 
   // ===================================================
   // REAL-TIME CART UPDATE
   // ===================================================
-  // When the server broadcasts a cart update, both
-  // refresh from the server. This guarantees the cart
-  // page and the components page are always aligned.
-  //
   useEffect(() => {
-    const handleCartUpdated = async (updatedCart: any) => {
+    const handleCartUpdated = (updatedCart: any) => {
       console.log("🛒🔥 REAL-TIME CART UPDATE:", updatedCart);
-
-      // Update the local state immediately from the
-      // payload so the UI feels instant.
-      const normalizedCart = normalizeCart(updatedCart);
-      updateCart(normalizedCart);
-
-      // Also keep the shared cache fresh.
-      setCartCacheFromResponse(updatedCart);
-
-      // Then reconcile with the server in case the
-      // payload was partial.
-      fetchCart({ silent: true });
+      applyCartUpdate(updatedCart);
     };
 
     const handleConnect = () => {
       console.log("🟢 Cart socket connected:", socket.id);
-      // Ask for a fresh cart after reconnecting.
       fetchCart({ silent: true });
     };
 
@@ -293,9 +242,7 @@ function CartPage() {
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
 
-    // If already connected, request a fresh cart.
     if (socket.connected) {
-      console.log("🟢 Socket already connected:", socket.id);
       fetchCart({ silent: true });
     }
 
@@ -309,7 +256,6 @@ function CartPage() {
   // ===================================================
   // REMOVE ITEM
   // ===================================================
-
   const removeItem = async (componentId: string) => {
     const token = getToken();
     if (!token) {
@@ -321,16 +267,13 @@ function CartPage() {
       return;
     }
 
-    const itemName =
-      cartItems.find(
-        (it) => getComponentId(it.componentId) === componentId
-      )?.componentId &&
-      typeof cartItems.find(
-        (it) => getComponentId(it.componentId) === componentId
-      )?.componentId === "object"
-        ? (cartItems.find(
-            (it) => getComponentId(it.componentId) === componentId
-          )?.componentId as ComponentData).name
+    const itemName = cartItems.find(
+      (it) => getComponentId(it.componentId) === componentId
+    )?.componentId;
+
+    const name =
+      itemName && typeof itemName === "object"
+        ? itemName.name
         : "Item";
 
     try {
@@ -351,11 +294,10 @@ function CartPage() {
         throw new Error(data?.message || "Failed to remove item");
       }
 
-      const normalized = normalizeCart(data);
-      updateCart(normalized);
-      setCartCacheFromResponse(data);
+      // ⬇️ Syncs cache AND localStorage in one call
+      applyCartUpdate(data);
 
-      pushToast("info", `${itemName} removed from cart`);
+      pushToast("info", `${name} removed from cart`);
     } catch (error: any) {
       console.error("Remove cart item error:", error);
       pushToast(
@@ -370,7 +312,6 @@ function CartPage() {
   // ===================================================
   // INCREASE QUANTITY
   // ===================================================
-
   const increaseQuantity = async (item: CartItem) => {
     const token = getToken();
     if (!token) {
@@ -420,9 +361,7 @@ function CartPage() {
         );
       }
 
-      const normalized = normalizeCart(data);
-      updateCart(normalized);
-      setCartCacheFromResponse(data);
+      applyCartUpdate(data);
     } catch (error: any) {
       console.error("Increase quantity error:", error);
       pushToast(
@@ -437,7 +376,6 @@ function CartPage() {
   // ===================================================
   // DECREASE QUANTITY
   // ===================================================
-
   const decreaseQuantity = async (item: CartItem) => {
     const token = getToken();
     if (!token) {
@@ -451,7 +389,7 @@ function CartPage() {
       return;
     }
 
-    const itemName =
+    const name =
       typeof item.componentId === "object"
         ? item.componentId.name
         : "Item";
@@ -475,11 +413,8 @@ function CartPage() {
           throw new Error(data?.message || "Failed to remove item");
         }
 
-        const normalized = normalizeCart(data);
-        updateCart(normalized);
-        setCartCacheFromResponse(data);
-
-        pushToast("info", `${itemName} removed from cart`);
+        applyCartUpdate(data);
+        pushToast("info", `${name} removed from cart`);
         return;
       }
 
@@ -506,9 +441,7 @@ function CartPage() {
         );
       }
 
-      const normalized = normalizeCart(data);
-      updateCart(normalized);
-      setCartCacheFromResponse(data);
+      applyCartUpdate(data);
     } catch (error: any) {
       console.error("Decrease quantity error:", error);
       pushToast(
@@ -523,7 +456,6 @@ function CartPage() {
   // ===================================================
   // TOTAL PRICE
   // ===================================================
-
   const total = useMemo(() => {
     if (!Array.isArray(cart?.items)) return 0;
 
@@ -540,7 +472,6 @@ function CartPage() {
   // ===================================================
   // TOTAL QUANTITY
   // ===================================================
-
   const totalQuantity = useMemo(() => {
     if (!Array.isArray(cart?.items)) return 0;
 
@@ -553,24 +484,18 @@ function CartPage() {
   // ===================================================
   // FORMAT NAIRA
   // ===================================================
-
-  const formatNaira = (amount: number) => {
-    return `₦${amount.toLocaleString("en-NG")}`;
-  };
+  const formatNaira = (amount: number) =>
+    `₦${amount.toLocaleString("en-NG")}`;
 
   // ===================================================
   // SAFE CART ITEMS
   // ===================================================
-
   const cartItems = Array.isArray(cart?.items) ? cart.items : [];
 
   // ===================================================
   // HANDLE CHECKOUT (PAYSTACK)
   // ===================================================
-
   const handleCheckout = async () => {
-    console.log("💳 Initiating checkout...");
-
     if (isRedirecting || hasInitialized) return;
 
     setCheckoutError(null);
@@ -608,10 +533,6 @@ function CartPage() {
       try {
         data = rawText ? JSON.parse(rawText) : null;
       } catch {
-        console.error(
-          "Non-JSON response from paystack initialize:",
-          rawText.slice(0, 300)
-        );
         throw new Error(
           response.ok
             ? "Server returned an invalid response."
@@ -634,12 +555,10 @@ function CartPage() {
 
       window.location.href = data.authorizationUrl;
     } catch (error: any) {
-      console.error("Checkout error:", error);
       const message =
         error?.message || "Unable to start payment. Please try again.";
       setCheckoutError(message);
       pushToast("error", message);
-
       setIsRedirecting(false);
       setHasInitialized(false);
     }
@@ -648,7 +567,6 @@ function CartPage() {
   // ===================================================
   // PAGE
   // ===================================================
-
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl px-6 py-12">
@@ -711,7 +629,6 @@ function CartPage() {
                       exit={{ opacity: 0, x: -40 }}
                       className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"
                     >
-                      {/* IMAGE */}
                       <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-50">
                         {component.image ? (
                           <img
@@ -724,7 +641,6 @@ function CartPage() {
                         )}
                       </div>
 
-                      {/* DETAILS */}
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-semibold text-brand-navy">
                           {component.name}
@@ -737,7 +653,6 @@ function CartPage() {
                         </div>
                       </div>
 
-                      {/* QUANTITY */}
                       <div className="flex items-center self-start rounded-lg border border-slate-200 sm:self-auto">
                         <button
                           type="button"
@@ -771,12 +686,10 @@ function CartPage() {
                         </button>
                       </div>
 
-                      {/* PRICE */}
                       <div className="w-full text-left font-bold text-brand-navy sm:w-28 sm:text-right">
                         {formatNaira(itemTotal)}
                       </div>
 
-                      {/* DELETE */}
                       <button
                         type="button"
                         disabled={isUpdating}
@@ -819,7 +732,6 @@ function CartPage() {
                 </div>
               </div>
 
-              {/* TOTAL */}
               <div className="mt-4 flex justify-between border-t border-slate-100 pt-4 text-lg">
                 <span className="font-bold text-brand-navy">Total</span>
                 <motion.span
@@ -832,7 +744,6 @@ function CartPage() {
                 </motion.span>
               </div>
 
-              {/* ERROR */}
               {checkoutError && (
                 <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
                   <AlertCircle className="mt-0.5 size-4 shrink-0" />
@@ -840,7 +751,6 @@ function CartPage() {
                 </div>
               )}
 
-              {/* PAY BUTTON */}
               <button
                 type="button"
                 onClick={handleCheckout}

@@ -5,7 +5,6 @@ import {
   ArrowUpRight,
   Minus,
   Plus,
-  Loader2,
   CheckCircle2,
   AlertCircle,
   X,
@@ -48,22 +47,38 @@ export const cartCache: {
   loaded: false,
 };
 
+/**
+ * Extract the cart items array from any of the shapes
+ * the backend might return:
+ *   { items: [...] }
+ *   { cart: { items: [...] } }
+ *   [...]
+ */
+function extractItems(data: any): any[] {
+  if (!data) return [];
+  if (Array.isArray(data.items)) return data.items;
+  if (data.cart && Array.isArray(data.cart.items)) {
+    return data.cart.items;
+  }
+  if (Array.isArray(data)) return data;
+  return [];
+}
+
 export function setCartCacheFromResponse(cart: any) {
+  const rawItems = extractItems(cart);
   const items: CachedCartItem[] = [];
 
-  if (Array.isArray(cart?.items)) {
-    for (const it of cart.items) {
-      const id =
-        typeof it.componentId === "object"
-          ? it.componentId?._id
-          : it.componentId;
+  for (const it of rawItems) {
+    const id =
+      typeof it.componentId === "object"
+        ? it.componentId?._id
+        : it.componentId;
 
-      if (id) {
-        items.push({
-          componentId: String(id),
-          quantity: Number(it.quantity) || 0,
-        });
-      }
+    if (id) {
+      items.push({
+        componentId: String(id),
+        quantity: Number(it.quantity) || 0,
+      });
     }
   }
 
@@ -220,6 +235,11 @@ export function ComponentCard({
 
   const componentId = c._id;
 
+  // ===================================================
+  // CART READY GATE
+  // ===================================================
+  const [cartReady, setCartReady] = useState(cartCache.loaded);
+
   const [quantity, setQuantity] = useState(() =>
     getCachedQuantity(componentId)
   );
@@ -258,17 +278,41 @@ export function ComponentCard({
   };
 
   // ===================================================
+  // APPLY SERVER RESPONSE TO CACHE
+  // ===================================================
+  // Handles any response shape the backend returns
+  // ({ items }, { cart: { items } }, or [...]) and
+  // updates the local quantity accordingly.
+  //
+  const applyServerResponse = (data: any) => {
+    const rawItems = extractItems(data);
+
+    // If the server returned a payload with items,
+    // refresh the whole cache from it.
+    if (rawItems.length > 0 || Array.isArray(data?.items) || Array.isArray(data?.cart?.items)) {
+      setCartCacheFromResponse(data);
+      setQuantity(getCachedQuantity(componentId));
+    }
+  };
+
+  // ===================================================
   // INITIAL LOAD
   // ===================================================
+  // ALWAYS refetch the cart on mount, even if the
+  // cache is loaded. This is what ensures that a cart
+  // change made elsewhere (e.g. on /cart) is reflected
+  // the moment we navigate back to /components.
+  //
   useEffect(() => {
-    if (cartCache.loaded) {
-      setQuantity(getCachedQuantity(componentId));
-      return;
-    }
+    let cancelled = false;
 
-    const loadCartQuantity = async () => {
+    const loadCart = async () => {
       const token = sessionStorage.getItem("pulselab_token");
-      if (!token || !componentId) return;
+
+      if (!token || !componentId) {
+        setCartReady(true);
+        return;
+      }
 
       try {
         const response = await fetch(
@@ -287,17 +331,25 @@ export function ComponentCard({
 
         const cart = await response.json();
 
+        if (cancelled) return;
+
         setCartCacheFromResponse(cart);
         setQuantity(getCachedQuantity(componentId));
+        setCartReady(true);
       } catch (error) {
         console.error(
           "Failed to restore cart quantity:",
           error
         );
+        if (!cancelled) setCartReady(true);
       }
     };
 
-    loadCartQuantity();
+    loadCart();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [componentId]);
 
@@ -312,6 +364,7 @@ export function ComponentCard({
     const handleCartUpdated = (cart: any) => {
       setCartCacheFromResponse(cart);
       setQuantity(getCachedQuantity(componentId));
+      setCartReady(true);
     };
 
     socket.on("cart:updated", handleCartUpdated);
@@ -340,9 +393,6 @@ export function ComponentCard({
 
     if (isOutOfStock) return;
 
-    // ---------------------------------------------
-    // OPTIMISTIC UPDATE — flip to "1" immediately
-    // ---------------------------------------------
     const previousQuantity = quantity;
     setQuantity(1);
     syncCache(1);
@@ -373,13 +423,11 @@ export function ComponentCard({
         );
       }
 
+      applyServerResponse(data);
       pushToast("success", `${c.name} added to cart`);
     } catch (error: any) {
       console.error("Add to cart error:", error);
 
-      // ---------------------------------------------
-      // REVERT on failure
-      // ---------------------------------------------
       setQuantity(previousQuantity);
       syncCache(previousQuantity);
 
@@ -393,7 +441,7 @@ export function ComponentCard({
   };
 
   // ===================================================
-  // INCREASE (optimistic + stock guard with toast)
+  // INCREASE (optimistic + stock guard)
   // ===================================================
   const handleIncrease = async () => {
     const token = getToken();
@@ -408,20 +456,16 @@ export function ComponentCard({
       return;
     }
 
-    // ---------------------------------------------
-    // STOCK LIMIT — notify instead of silently ignoring
-    // ---------------------------------------------
     if (quantity >= c.stock) {
       pushToast(
         "error",
-        `Only ${c.stock} unit${c.stock === 1 ? "" : "s"} available for ${c.name}.`
+        `Only ${c.stock} unit${
+          c.stock === 1 ? "" : "s"
+        } available for ${c.name}.`
       );
       return;
     }
 
-    // ---------------------------------------------
-    // OPTIMISTIC UPDATE
-    // ---------------------------------------------
     const previousQuantity = quantity;
     const nextQuantity = previousQuantity + 1;
 
@@ -453,10 +497,11 @@ export function ComponentCard({
           data.message || "Failed to increase quantity"
         );
       }
+
+      applyServerResponse(data);
     } catch (error: any) {
       console.error("Increase quantity error:", error);
 
-      // REVERT
       setQuantity(previousQuantity);
       syncCache(previousQuantity);
 
@@ -487,9 +532,6 @@ export function ComponentCard({
 
     if (quantity <= 0) return;
 
-    // ---------------------------------------------
-    // OPTIMISTIC UPDATE
-    // ---------------------------------------------
     const previousQuantity = quantity;
     const isRemoving = previousQuantity === 1;
     const nextQuantity = isRemoving ? 0 : previousQuantity - 1;
@@ -519,6 +561,7 @@ export function ComponentCard({
           );
         }
 
+        applyServerResponse(data);
         pushToast("info", `${c.name} removed from cart`);
         return;
       }
@@ -545,10 +588,11 @@ export function ComponentCard({
           data.message || "Failed to decrease quantity"
         );
       }
+
+      applyServerResponse(data);
     } catch (error: any) {
       console.error("Decrease quantity error:", error);
 
-      // REVERT
       setQuantity(previousQuantity);
       syncCache(previousQuantity);
 
@@ -662,7 +706,9 @@ export function ComponentCard({
         </div>
 
         {/* CART ACTION */}
-        {quantity === 0 ? (
+        {!cartReady ? (
+          <div className="mt-5 h-12 w-full animate-pulse rounded-xl bg-slate-100" />
+        ) : quantity === 0 ? (
           <button
             type="button"
             disabled={isOutOfStock || !componentId}
@@ -674,7 +720,6 @@ export function ComponentCard({
           </button>
         ) : (
           <div className="mt-5 flex h-12 w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            {/* MINUS */}
             <button
               type="button"
               disabled={loading}
@@ -685,7 +730,6 @@ export function ComponentCard({
               <Minus className="h-4 w-4" />
             </button>
 
-            {/* QUANTITY */}
             <div className="flex flex-col items-center">
               <span className="text-base font-bold text-brand-navy">
                 {quantity}
@@ -695,7 +739,6 @@ export function ComponentCard({
               </span>
             </div>
 
-            {/* PLUS */}
             <button
               type="button"
               disabled={loading}
