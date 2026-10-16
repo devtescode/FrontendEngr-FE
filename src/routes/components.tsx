@@ -339,7 +339,7 @@ function CatalogIndex() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search components..."
-            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-brand-accent/40 focus:outline-none focus:ring-2 focus:ring-brand-accent/40 sm:flex-1 sm:px-4"
+            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-base focus:border-brand-accent/40 focus:outline-none focus:ring-2 focus:ring-brand-accent/40 sm:flex-1 sm:px-4 sm:text-sm"
           />
 
           <select
