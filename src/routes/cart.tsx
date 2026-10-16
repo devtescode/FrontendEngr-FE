@@ -18,6 +18,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
 import { RequireAuth } from "@/components/RequireAuth";
+import { pushToast } from "@/components/ComponentCard";
 
 const API_URL =
   import.meta.env.VITE_API_URL ||
@@ -36,7 +37,6 @@ export const Route = createFileRoute("/cart")({
     </RequireAuth>
   ),
 });
-
 
 // =====================================================
 // TYPES
@@ -104,23 +104,9 @@ function CartPage() {
   // ===================================================
   // RESET PAYMENT STATE WHEN RETURNING TO /cart
   // ===================================================
-  //
-  // When the user cancels on Paystack and Paystack
-  // redirects them back (either directly to /cart
-  // or via /payment/callback → /cart), the CartPage
-  // may NOT remount if it's a soft client-side
-  // navigation. So we must reset the payment flags
-  // whenever the location becomes "/cart".
-  //
-  // This ensures the Pay button is clickable again.
-  //
   useEffect(() => {
-    // Reset every time we land on /cart
     setIsRedirecting(false);
     setHasInitialized(false);
-
-    // Clear any stale pending reference from a
-    // previous cancelled attempt.
     sessionStorage.removeItem("pulselab_pending_reference");
   }, [location.pathname]);
 
@@ -268,13 +254,26 @@ function CartPage() {
   const removeItem = async (componentId: string) => {
     const token = getToken();
     if (!token) {
-      alert("Please login first.");
+      pushToast("error", "Please login first.");
       return;
     }
     if (!componentId) {
-      alert("Component ID is missing.");
+      pushToast("error", "Component ID is missing.");
       return;
     }
+
+    // Find the item name for a friendlier toast.
+    const itemName =
+      cartItems.find(
+        (it) => getComponentId(it.componentId) === componentId
+      )?.componentId &&
+      typeof cartItems.find(
+        (it) => getComponentId(it.componentId) === componentId
+      )?.componentId === "object"
+        ? (cartItems.find(
+            (it) => getComponentId(it.componentId) === componentId
+          )?.componentId as ComponentData).name
+        : "Item";
 
     try {
       setUpdating(componentId);
@@ -295,9 +294,13 @@ function CartPage() {
       }
 
       updateCart(normalizeCart(data));
+      pushToast("info", `${itemName} removed from cart`);
     } catch (error: any) {
       console.error("Remove cart item error:", error);
-      alert(error?.message || "Failed to remove item");
+      pushToast(
+        "error",
+        error?.message || "Failed to remove item"
+      );
     } finally {
       setUpdating(null);
     }
@@ -310,13 +313,13 @@ function CartPage() {
   const increaseQuantity = async (item: CartItem) => {
     const token = getToken();
     if (!token) {
-      alert("Please login first.");
+      pushToast("error", "Please login first.");
       return;
     }
 
     const componentId = getComponentId(item.componentId);
     if (!componentId) {
-      alert("Component ID is missing.");
+      pushToast("error", "Component ID is missing.");
       return;
     }
 
@@ -343,13 +346,18 @@ function CartPage() {
       console.log("➕ INCREASE CART RESPONSE:", data);
 
       if (!response.ok) {
-        throw new Error(data?.message || "Failed to increase quantity");
+        throw new Error(
+          data?.message || "Failed to increase quantity"
+        );
       }
 
       updateCart(normalizeCart(data));
     } catch (error: any) {
       console.error("Increase quantity error:", error);
-      alert(error?.message || "Failed to increase quantity");
+      pushToast(
+        "error",
+        error?.message || "Failed to increase quantity"
+      );
     } finally {
       setUpdating(null);
     }
@@ -362,15 +370,20 @@ function CartPage() {
   const decreaseQuantity = async (item: CartItem) => {
     const token = getToken();
     if (!token) {
-      alert("Please login first.");
+      pushToast("error", "Please login first.");
       return;
     }
 
     const componentId = getComponentId(item.componentId);
     if (!componentId) {
-      alert("Component ID is missing.");
+      pushToast("error", "Component ID is missing.");
       return;
     }
+
+    const itemName =
+      typeof item.componentId === "object"
+        ? item.componentId.name
+        : "Item";
 
     try {
       setUpdating(componentId);
@@ -392,6 +405,7 @@ function CartPage() {
         }
 
         updateCart(normalizeCart(data));
+        pushToast("info", `${itemName} removed from cart`);
         return;
       }
 
@@ -413,13 +427,18 @@ function CartPage() {
       console.log("➖ DECREASE CART RESPONSE:", data);
 
       if (!response.ok) {
-        throw new Error(data?.message || "Failed to decrease quantity");
+        throw new Error(
+          data?.message || "Failed to decrease quantity"
+        );
       }
 
       updateCart(normalizeCart(data));
     } catch (error: any) {
       console.error("Decrease quantity error:", error);
-      alert(error?.message || "Failed to decrease quantity");
+      pushToast(
+        "error",
+        error?.message || "Failed to decrease quantity"
+      );
     } finally {
       setUpdating(null);
     }
@@ -472,18 +491,10 @@ function CartPage() {
   // ===================================================
   // HANDLE CHECKOUT (PAYSTACK)
   // ===================================================
-  //
-  // 1. Ask backend to create a PaymentOrder and
-  //    initialize a Paystack transaction.
-  // 2. Backend returns an authorizationUrl.
-  // 3. Redirect the browser to Paystack.
-  //
-  // After payment OR cancellation, Paystack redirects
-  // to FRONTEND_URL/payment/callback?reference=...
-  //
+
   const handleCheckout = async () => {
-    console.log("💳 Initiating checkout...to Tescode Checkout");
-    // Prevent double-initiation (double clicks, re-renders)
+    console.log("💳 Initiating checkout...");
+
     if (isRedirecting || hasInitialized) return;
 
     setCheckoutError(null);
@@ -491,16 +502,16 @@ function CartPage() {
     const token = getToken();
     if (!token) {
       setCheckoutError("Please login first.");
+      pushToast("error", "Please login first.");
       return;
     }
 
     if (!cartItems.length) {
       setCheckoutError("Your cart is empty.");
+      pushToast("error", "Your cart is empty.");
       return;
     }
 
-    // Mark as initialized BEFORE the network call so any
-    // re-render or double-click cannot trigger a second one.
     setHasInitialized(true);
     setIsRedirecting(true);
 
@@ -538,8 +549,6 @@ function CartPage() {
         );
       }
 
-      // Persist the reference so the callback page can
-      // identify this attempt if the user cancels.
       if (data.reference) {
         sessionStorage.setItem(
           "pulselab_pending_reference",
@@ -549,16 +558,13 @@ function CartPage() {
 
       // Redirect to Paystack.
       window.location.href = data.authorizationUrl;
-
-      // IMPORTANT: Do NOT reset isRedirecting here.
-      // The page is about to unmount due to navigation.
     } catch (error: any) {
       console.error("Checkout error:", error);
-      setCheckoutError(
-        error?.message || "Unable to start payment. Please try again."
-      );
+      const message =
+        error?.message || "Unable to start payment. Please try again.";
+      setCheckoutError(message);
+      pushToast("error", message);
 
-      // Only reset on error — user stays on cart page.
       setIsRedirecting(false);
       setHasInitialized(false);
     }

@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Package,
   ShoppingCart,
@@ -6,14 +6,211 @@ import {
   Minus,
   Plus,
   Loader2,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Info,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { BackendComponent } from "@/lib/api";
 import { socket } from "@/lib/socket";
+
 const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4500";
+  import.meta.env.VITE_API_URL || "http://localhost:4500";
+
+// =====================================================
+// TYPES
+// =====================================================
+
+type ToastKind = "success" | "error" | "info";
+
+type Toast = {
+  id: string;
+  kind: ToastKind;
+  message: string;
+};
+
+// =====================================================
+// GLOBAL CART CACHE
+// =====================================================
+// Stores the current cart in memory so ComponentCard
+// can start with the correct quantity immediately on
+// mount — no flash of "Add to Cart" for items already
+// in the cart.
+//
+type CachedCartItem = {
+  componentId: string;
+  quantity: number;
+};
+
+export const cartCache: {
+  items: CachedCartItem[];
+  loaded: boolean;
+} = {
+  items: [],
+  loaded: false,
+};
+
+export function setCartCacheFromResponse(cart: any) {
+  const items: CachedCartItem[] = [];
+
+  if (Array.isArray(cart?.items)) {
+    for (const it of cart.items) {
+      const id =
+        typeof it.componentId === "object"
+          ? it.componentId?._id
+          : it.componentId;
+
+      if (id) {
+        items.push({
+          componentId: String(id),
+          quantity: Number(it.quantity) || 0,
+        });
+      }
+    }
+  }
+
+  cartCache.items = items;
+  cartCache.loaded = true;
+}
+
+export function getCachedQuantity(
+  componentId: string | undefined
+): number {
+  if (!componentId) return 0;
+
+  const found = cartCache.items.find(
+    (it) => it.componentId === String(componentId)
+  );
+
+  return found?.quantity ?? 0;
+}
+
+export function resetCartCache() {
+  cartCache.items = [];
+  cartCache.loaded = false;
+}
+
+// =====================================================
+// GLOBAL TOAST BUS
+// =====================================================
+let toastListeners: ((toasts: Toast[]) => void)[] = [];
+let toasts: Toast[] = [];
+
+function emitToasts() {
+  toastListeners.forEach((fn) => fn([...toasts]));
+}
+
+export function pushToast(kind: ToastKind, message: string) {
+  const id = `t_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+  // Keep only the newest 3 toasts visible.
+  toasts = [...toasts, { id, kind, message }].slice(-3);
+  emitToasts();
+
+  setTimeout(() => {
+    toasts = toasts.filter((t) => t.id !== id);
+    emitToasts();
+  }, 4000);
+}
+
+function dismissToast(id: string) {
+  toasts = toasts.filter((t) => t.id !== id);
+  emitToasts();
+}
+
+export function ToastHost() {
+  const [list, setList] = useState<Toast[]>([]);
+
+  useEffect(() => {
+    const fn = (next: Toast[]) => setList(next);
+    toastListeners.push(fn);
+    return () => {
+      toastListeners = toastListeners.filter((l) => l !== fn);
+    };
+  }, []);
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-5 z-[70] flex flex-col items-center gap-2 px-4">
+      <AnimatePresence>
+        {list.map((t) => (
+          <ToastItem key={t.id} toast={t} onDismiss={dismissToast} />
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ToastItem({
+  toast,
+  onDismiss,
+}: {
+  toast: Toast;
+  onDismiss: (id: string) => void;
+}) {
+  const config = {
+    success: {
+      icon: CheckCircle2,
+      ring: "ring-emerald-500/30",
+      bg: "bg-emerald-500/10",
+      text: "text-emerald-300",
+      iconColor: "text-emerald-400",
+    },
+    error: {
+      icon: AlertCircle,
+      ring: "ring-red-500/30",
+      bg: "bg-red-500/10",
+      text: "text-red-300",
+      iconColor: "text-red-400",
+    },
+    info: {
+      icon: Info,
+      ring: "ring-blue-500/30",
+      bg: "bg-blue-500/10",
+      text: "text-blue-300",
+      iconColor: "text-blue-400",
+    },
+  }[toast.kind];
+
+  const Icon = config.icon;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -16, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -16, scale: 0.94 }}
+      transition={{ type: "spring", stiffness: 320, damping: 26 }}
+      className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border border-white/10 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur-md ring-1 ${config.ring}`}
+    >
+      <div
+        className={`grid size-8 shrink-0 place-items-center rounded-lg ${config.bg}`}
+      >
+        <Icon className={`size-4 ${config.iconColor}`} />
+      </div>
+
+      <p
+        className={`min-w-0 flex-1 pt-1 text-sm font-medium ${config.text}`}
+      >
+        {toast.message}
+      </p>
+
+      <button
+        type="button"
+        onClick={() => onDismiss(toast.id)}
+        className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-500 transition hover:bg-white/5 hover:text-white"
+        aria-label="Dismiss"
+      >
+        <X className="size-3.5" />
+      </button>
+    </motion.div>
+  );
+}
+
+// =====================================================
+// COMPONENT CARD
+// =====================================================
 
 export function ComponentCard({
   c,
@@ -25,46 +222,73 @@ export function ComponentCard({
   const isOutOfStock = c.stock <= 0;
   const isLowStock = c.stock > 0 && c.stock <= 5;
 
-  const [quantity, setQuantity] = useState(0);
-  const [loading, setLoading] = useState(false);
-
-  /*
-   * =====================================================
-   * GET COMPONENT ID
-   * =====================================================
-   *
-   * Your backend requires a MongoDB ObjectId.
-   *
-   * Depending on how your API returns the component,
-   * the ID may be c._id or c.id.
-   */
-
   const componentId = c._id;
 
-  /*
-   * =====================================================
-   * GET TOKEN
-   * =====================================================
-   */
+  // ===================================================
+  // STATE — initialised from cache
+  // ===================================================
+  // Start with the cached quantity so there's no flash
+  // of "Add to Cart" for items that are already in the
+  // cart. Falls back to 0 if the cache doesn't have it.
+  //
+  const [quantity, setQuantity] = useState(() =>
+    getCachedQuantity(componentId)
+  );
+  const [loading, setLoading] = useState(false);
 
   const getToken = () => {
     return sessionStorage.getItem("pulselab_token");
   };
 
+  // ===================================================
+  // SYNC LOCAL QUANTITY INTO CACHE
+  // ===================================================
+  // Whenever this card changes the quantity locally,
+  // update the shared cache so future mounts (and other
+  // cards) see the change immediately.
+  //
+  const syncCache = (nextQuantity: number) => {
+    if (!componentId) return;
 
-  useEffect(() => {
-    const loadCartQuantity = async () => {
-      const token = sessionStorage.getItem(
-        "pulselab_token"
+    const id = String(componentId);
+    const existing = cartCache.items.find(
+      (it) => it.componentId === id
+    );
+
+    if (nextQuantity === 0) {
+      cartCache.items = cartCache.items.filter(
+        (it) => it.componentId !== id
       );
+      return;
+    }
 
-      if (!token || !componentId) {
-        return;
-      }
+    if (existing) {
+      existing.quantity = nextQuantity;
+    } else {
+      cartCache.items.push({
+        componentId: id,
+        quantity: nextQuantity,
+      });
+    }
+  };
+
+  // ===================================================
+  // INITIAL LOAD
+  // ===================================================
+  useEffect(() => {
+    // If we already have a loaded cache, use it — no fetch.
+    if (cartCache.loaded) {
+      setQuantity(getCachedQuantity(componentId));
+      return;
+    }
+
+    const loadCartQuantity = async () => {
+      const token = sessionStorage.getItem("pulselab_token");
+      if (!token || !componentId) return;
 
       try {
         const response = await fetch(
-          `${ API_URL}/engineering/cart`,
+          `${API_URL}/engineering/cart`,
           {
             method: "GET",
             headers: {
@@ -79,8 +303,11 @@ export function ComponentCard({
 
         const cart = await response.json();
 
-        updateQuantityFromCart(cart);
+        // Populate the shared cache first...
+        setCartCacheFromResponse(cart);
 
+        // ...then update this card's quantity from it.
+        setQuantity(getCachedQuantity(componentId));
       } catch (error) {
         console.error(
           "Failed to restore cart quantity:",
@@ -90,51 +317,24 @@ export function ComponentCard({
     };
 
     loadCartQuantity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [componentId]);
-  /*
-   * =====================================================
-   * CHECK COMPONENT ID
-   * =====================================================
-   */
 
   if (!componentId) {
     console.error("Component ID is missing:", c);
   }
 
-  /*
-   * =====================================================
-   * UPDATE QUANTITY FROM CART
-   * =====================================================
-   */
-
-  const updateQuantityFromCart = (cart: any) => {
-    if (!cart?.items) {
-      return;
-    }
-
-    const item = cart.items.find((cartItem: any) => {
-      const cartComponentId =
-        typeof cartItem.componentId === "object"
-          ? cartItem.componentId?._id
-          : cartItem.componentId;
-
-      return (
-        String(cartComponentId) === String(componentId)
-      );
-    });
-
-    setQuantity(item?.quantity ?? 0);
-  };
-
-  /*
-   * =====================================================
-   * REAL-TIME CART UPDATE
-   * =====================================================
-   */
-
+  // ===================================================
+  // REAL-TIME CART UPDATE
+  // ===================================================
   useEffect(() => {
     const handleCartUpdated = (cart: any) => {
-      updateQuantityFromCart(cart);
+      // Update the shared cache so the next mount is
+      // instant.
+      setCartCacheFromResponse(cart);
+
+      // Update this card's quantity.
+      setQuantity(getCachedQuantity(componentId));
     };
 
     socket.on("cart:updated", handleCartUpdated);
@@ -142,32 +342,27 @@ export function ComponentCard({
     return () => {
       socket.off("cart:updated", handleCartUpdated);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [componentId]);
 
-  /*
-   * =====================================================
-   * ADD TO CART
-   * =====================================================
-   */
-
+  // ===================================================
+  // ADD TO CART
+  // ===================================================
   const handleAddToCart = async () => {
     const token = getToken();
 
     if (!token) {
-      alert("Please login first.");
+      pushToast("error", "Please login first.");
       return;
     }
 
     if (!componentId) {
       console.error("Component ID is missing:", c);
-
-      alert("Component ID is missing.");
+      pushToast("error", "Component ID is missing.");
       return;
     }
 
-    if (isOutOfStock) {
-      return;
-    }
+    if (isOutOfStock) return;
 
     try {
       setLoading(true);
@@ -176,12 +371,10 @@ export function ComponentCard({
         `${API_URL}/engineering/addtocart`,
         {
           method: "POST",
-
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-
           body: JSON.stringify({
             componentId: componentId,
             quantity: 1,
@@ -190,7 +383,6 @@ export function ComponentCard({
       );
 
       const data = await response.json();
-
       console.log("ADD TO CART RESPONSE:", data);
 
       if (!response.ok) {
@@ -199,51 +391,37 @@ export function ComponentCard({
         );
       }
 
-      /*
-       * IMPORTANT
-       *
-       * Do not wait for Socket.IO to update the button.
-       * We already know the item was successfully added.
-       *
-       * Immediately change the UI.
-       */
-
       setQuantity(1);
-
+      syncCache(1);
+      pushToast("success", `${c.name} added to cart`);
     } catch (error: any) {
       console.error("Add to cart error:", error);
-
-      alert(
-        error.message ||
-        "Failed to add item to cart"
+      pushToast(
+        "error",
+        error.message || "Failed to add item to cart"
       );
     } finally {
       setLoading(false);
     }
   };
 
-  /*
-   * =====================================================
-   * INCREASE QUANTITY
-   * =====================================================
-   */
-
+  // ===================================================
+  // INCREASE
+  // ===================================================
   const handleIncrease = async () => {
     const token = getToken();
 
     if (!token) {
-      alert("Please login first.");
+      pushToast("error", "Please login first.");
       return;
     }
 
     if (!componentId) {
-      alert("Component ID is missing.");
+      pushToast("error", "Component ID is missing.");
       return;
     }
 
-    if (quantity >= c.stock) {
-      return;
-    }
+    if (quantity >= c.stock) return;
 
     try {
       setLoading(true);
@@ -252,12 +430,10 @@ export function ComponentCard({
         `${API_URL}/engineering/addtocart`,
         {
           method: "POST",
-
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-
           body: JSON.stringify({
             componentId: componentId,
             quantity: 1,
@@ -266,75 +442,57 @@ export function ComponentCard({
       );
 
       const data = await response.json();
-
       console.log("INCREASE RESPONSE:", data);
 
       if (!response.ok) {
         throw new Error(
-          data.message ||
-          "Failed to increase quantity"
+          data.message || "Failed to increase quantity"
         );
       }
 
-      /*
-       * Immediately update UI.
-       */
-
-      setQuantity((prev) => prev + 1);
-
+      setQuantity((prev) => {
+        const next = prev + 1;
+        syncCache(next);
+        return next;
+      });
     } catch (error: any) {
-      console.error(
-        "Increase quantity error:",
-        error
-      );
-
-      alert(
-        error.message ||
-        "Failed to increase quantity"
+      console.error("Increase quantity error:", error);
+      pushToast(
+        "error",
+        error.message || "Failed to increase quantity"
       );
     } finally {
       setLoading(false);
     }
   };
 
-  /*
-   * =====================================================
-   * DECREASE QUANTITY
-   * =====================================================
-   */
-
+  // ===================================================
+  // DECREASE
+  // ===================================================
   const handleDecrease = async () => {
     const token = getToken();
 
     if (!token) {
-      alert("Please login first.");
+      pushToast("error", "Please login first.");
       return;
     }
 
     if (!componentId) {
-      alert("Component ID is missing.");
+      pushToast("error", "Component ID is missing.");
       return;
     }
 
-    if (quantity <= 0) {
-      return;
-    }
+    if (quantity <= 0) return;
 
     try {
       setLoading(true);
 
-      /*
-       * ===============================================
-       * REMOVE ITEM
-       * ===============================================
-       */
-
+      // Removing the last unit
       if (quantity === 1) {
         const response = await fetch(
           `${API_URL}/engineering/cart/${componentId}`,
           {
             method: "DELETE",
-
             headers: {
               Authorization: `Bearer ${token}`,
             },
@@ -342,44 +500,31 @@ export function ComponentCard({
         );
 
         const data = await response.json();
-
         console.log("REMOVE CART RESPONSE:", data);
 
         if (!response.ok) {
           throw new Error(
-            data.message ||
-            "Failed to remove item"
+            data.message || "Failed to remove item"
           );
         }
 
-        /*
-         * Immediately hide +/- controls
-         * and show Add to Cart again.
-         */
-
         setQuantity(0);
-
+        syncCache(0);
+        pushToast("info", `${c.name} removed from cart`);
         return;
       }
 
-      /*
-       * ===============================================
-       * DECREASE FROM 2 -> 1, 3 -> 2, etc.
-       * ===============================================
-       */
-
+      // Decrease from 2 → 1, 3 → 2, etc.
       const newQuantity = quantity - 1;
 
       const response = await fetch(
         `${API_URL}/engineering/cart/${componentId}`,
         {
           method: "PUT",
-
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-
           body: JSON.stringify({
             quantity: newQuantity,
           }),
@@ -387,67 +532,39 @@ export function ComponentCard({
       );
 
       const data = await response.json();
-
-      console.log(
-        "DECREASE RESPONSE:",
-        data
-      );
+      console.log("DECREASE RESPONSE:", data);
 
       if (!response.ok) {
         throw new Error(
-          data.message ||
-          "Failed to decrease quantity"
+          data.message || "Failed to decrease quantity"
         );
       }
 
-      /*
-       * Immediately update UI.
-       */
-
       setQuantity(newQuantity);
-
+      syncCache(newQuantity);
     } catch (error: any) {
-      console.error(
-        "Decrease quantity error:",
-        error
-      );
-
-      alert(
-        error.message ||
-        "Failed to decrease quantity"
+      console.error("Decrease quantity error:", error);
+      pushToast(
+        "error",
+        error.message || "Failed to decrease quantity"
       );
     } finally {
       setLoading(false);
     }
   };
 
-  /*
-   * =====================================================
-   * UI
-   * =====================================================
-   */
-
+  // ===================================================
+  // UI
+  // ===================================================
   return (
     <motion.article
-      initial={{
-        opacity: 0,
-        y: 20,
-      }}
-      animate={{
-        opacity: 1,
-        y: 0,
-      }}
-      transition={{
-        duration: 0.4,
-        delay: index * 0.05,
-      }}
-      whileHover={{
-        y: -6,
-      }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: index * 0.05 }}
+      whileHover={{ y: -6 }}
       className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl"
     >
       {/* IMAGE */}
-
       <div className="relative h-66 overflow-hidden bg-slate-50">
         {c.image ? (
           <img
@@ -457,19 +574,12 @@ export function ComponentCard({
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center text-slate-400">
-            <Package
-              className="mb-2 h-12 w-12"
-              strokeWidth={1.5}
-            />
-
-            <span className="text-sm">
-              No image available
-            </span>
+            <Package className="mb-2 h-12 w-12" strokeWidth={1.5} />
+            <span className="text-sm">No image available</span>
           </div>
         )}
 
         {/* CATEGORY */}
-
         <div className="absolute left-4 top-4">
           <span className="rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur">
             {c.category}
@@ -477,7 +587,6 @@ export function ComponentCard({
         </div>
 
         {/* STOCK */}
-
         <div className="absolute right-4 top-4">
           {isOutOfStock ? (
             <span className="rounded-full bg-red-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm">
@@ -495,7 +604,6 @@ export function ComponentCard({
         </div>
 
         {/* VIEW */}
-
         <button
           type="button"
           className="absolute bottom-4 right-4 flex h-10 w-10 translate-y-2 items-center justify-center rounded-full bg-white text-slate-700 opacity-0 shadow-md transition-all duration-300 hover:bg-brand-navy hover:text-white group-hover:translate-y-0 group-hover:opacity-100"
@@ -506,36 +614,22 @@ export function ComponentCard({
       </div>
 
       {/* CONTENT */}
-
       <div className="mx-2 mb-4 mt-3 p-2">
-
-        {/* SKU */}
-
         <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
           SKU: {c.sku}
         </p>
-
-        {/* NAME */}
 
         <h3 className="line-clamp-1 text-lg font-bold text-slate-900 transition-colors group-hover:text-brand-navy">
           {c.name}
         </h3>
 
-        {/* DESCRIPTION */}
-
         <p className="mt-2 line-clamp-2 min-h-[40px] text-sm leading-5 text-slate-500">
           {c.description}
         </p>
 
-        {/* PRICE / STOCK */}
-
         <div className="mt-3 flex items-end justify-between gap-4">
-
           <div>
-            <p className="text-xs font-medium text-slate-400">
-              Price
-            </p>
-
+            <p className="text-xs font-medium text-slate-400">Price</p>
             <p className="mt-1 text-xl font-bold text-brand-navy">
               ₦{c.price.toLocaleString("en-NG")}
             </p>
@@ -545,38 +639,25 @@ export function ComponentCard({
             <p className="text-xs font-medium text-slate-400">
               Available
             </p>
-
             <p
-              className={`mt-1 text-sm font-semibold ${isOutOfStock
+              className={`mt-1 text-sm font-semibold ${
+                isOutOfStock
                   ? "text-red-500"
                   : isLowStock
                     ? "text-amber-600"
                     : "text-emerald-600"
-                }`}
+              }`}
             >
               {c.stock} units
             </p>
           </div>
-
         </div>
 
-        {/* =================================================
-            CART ACTION
-        ================================================= */}
-
+        {/* CART ACTION */}
         {quantity === 0 ? (
-
-          /*
-           * ADD TO CART
-           */
-
           <button
             type="button"
-            disabled={
-              isOutOfStock ||
-              loading ||
-              !componentId
-            }
+            disabled={isOutOfStock || loading || !componentId}
             onClick={handleAddToCart}
             className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-navy/90 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
           >
@@ -588,24 +669,13 @@ export function ComponentCard({
             ) : (
               <>
                 <ShoppingCart className="h-4 w-4" />
-
-                {isOutOfStock
-                  ? "Out of Stock"
-                  : "Add to Cart"}
+                {isOutOfStock ? "Out of Stock" : "Add to Cart"}
               </>
             )}
           </button>
-
         ) : (
-
-          /*
-           * INCREMENT / DECREMENT
-           */
-
           <div className="mt-5 flex h-12 w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-
             {/* MINUS */}
-
             <button
               type="button"
               disabled={loading}
@@ -621,36 +691,27 @@ export function ComponentCard({
             </button>
 
             {/* QUANTITY */}
-
             <div className="flex flex-col items-center">
               <span className="text-base font-bold text-brand-navy">
                 {quantity}
               </span>
-
               <span className="text-[10px] uppercase tracking-wide text-slate-400">
                 In cart
               </span>
             </div>
 
             {/* PLUS */}
-
             <button
               type="button"
-              disabled={
-                loading ||
-                quantity >= c.stock
-              }
+              disabled={loading || quantity >= c.stock}
               onClick={handleIncrease}
               className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Increase quantity"
             >
               <Plus className="h-4 w-4" />
             </button>
-
           </div>
-
         )}
-
       </div>
     </motion.article>
   );

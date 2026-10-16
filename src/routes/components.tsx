@@ -8,7 +8,10 @@ import { motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
-import { ComponentCard } from "@/components/ComponentCard";
+import {
+  ComponentCard,
+  setCartCacheFromResponse,
+} from "@/components/ComponentCard";
 import { RequireAuth } from "@/components/RequireAuth";
 
 import type { Category, Component } from "@/lib/data";
@@ -21,6 +24,9 @@ import {
   normalizeComponent,
   setComponentsCache,
 } from "@/lib/componentStore";
+
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 export const Route = createFileRoute("/components")({
   head: () => ({
@@ -107,6 +113,37 @@ function CatalogIndex() {
 
   // Prevent double socket setup in React StrictMode
   const socketSetupRef = useRef(false);
+
+  // =====================================================
+  // PREFETCH CART
+  // =====================================================
+  // Load the cart once, before any cards mount, so that
+  // every ComponentCard reads the correct quantity from
+  // the cache immediately. Prevents the "Add to Cart"
+  // flash for items already in the cart.
+  //
+  useEffect(() => {
+    const token = sessionStorage.getItem("pulselab_token");
+    if (!token) return;
+
+    let cancelled = false;
+
+    fetch(`${API_URL}/engineering/cart`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((cart) => {
+        if (cancelled) return;
+        setCartCacheFromResponse(cart);
+      })
+      .catch((err) => {
+        console.error("Failed to prefetch cart:", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // =====================================================
   // LOAD COMPONENTS
@@ -315,10 +352,11 @@ function CatalogIndex() {
           {/* LIVE INDICATOR */}
           <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5">
             <span
-              className={`size-1.5 rounded-full ${isLive
+              className={`size-1.5 rounded-full ${
+                isLive
                   ? "animate-pulse bg-emerald-500"
                   : "bg-slate-300"
-                }`}
+              }`}
             />
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               {isLive ? "Live" : "Offline"}
@@ -363,10 +401,11 @@ function CatalogIndex() {
             <button
               key={category}
               onClick={() => setCat(category)}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${cat === category
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
+                cat === category
                   ? "bg-brand-navy text-white"
                   : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                }`}
+              }`}
             >
               {category}
             </button>

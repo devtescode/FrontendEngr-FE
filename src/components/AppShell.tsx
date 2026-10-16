@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Navbar } from "./Navbar";
 import { connectUserSocket } from "@/lib/socket";
 import { useStore } from "@/lib/store";
+import { ToastHost } from "./ComponentCard";
 
 export function AppShell({
   children,
@@ -48,6 +49,9 @@ export function AppShell({
       <main className="flex-1">
         {children}
       </main>
+
+      {/* Global toast stack — renders once for the whole app */}
+      <ToastHost />
     </div>
   );
 }
