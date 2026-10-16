@@ -6,9 +6,9 @@ import {
   Bell,
   ClipboardList,
   AlertCircle,
-  PackageCheck,   // ← add
-  Calendar,       // ← add
-  Check,          // ← add
+  PackageCheck,
+  Calendar,
+  Check,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 
@@ -70,10 +70,7 @@ type Cart = {
 // =====================================================
 // MODULE-LEVEL CACHE
 // =====================================================
-// Survives navigation between pages. On repeat visits,
-// the page renders instantly from cache while a silent
-// background fetch updates the data.
-//
+
 let ordersCache: Order[] = [];
 let cartCache: Cart = { items: [] };
 let dashboardLoaded = false;
@@ -125,22 +122,22 @@ function normalizeOrder(raw: any): Order {
 
   const items: OrderItem[] = Array.isArray(raw?.items)
     ? raw.items.map((it: any) => {
-      const populated =
-        it?.componentId && typeof it.componentId === "object"
-          ? it.componentId
-          : null;
+        const populated =
+          it?.componentId && typeof it.componentId === "object"
+            ? it.componentId
+            : null;
 
-      return {
-        componentId: String(
-          populated?._id ?? it?.componentId ?? ""
-        ),
-        name: String(it?.name ?? ""),
-        price: Number(it?.price ?? 0),
-        quantity: Number(it?.quantity ?? 0),
-        image: populated?.image ?? it?.image ?? null,
-        sku: populated?.sku ?? it?.sku ?? null,
-      };
-    })
+        return {
+          componentId: String(
+            populated?._id ?? it?.componentId ?? ""
+          ),
+          name: String(it?.name ?? ""),
+          price: Number(it?.price ?? 0),
+          quantity: Number(it?.quantity ?? 0),
+          image: populated?.image ?? it?.image ?? null,
+          sku: populated?.sku ?? it?.sku ?? null,
+        };
+      })
     : [];
 
   const status: Order["status"] =
@@ -169,7 +166,6 @@ function normalizeOrder(raw: any): Order {
 // =====================================================
 
 async function loadDashboardData(): Promise<void> {
-  // Reuse an in-flight request if one exists.
   if (inflight) return inflight;
 
   const token = sessionStorage.getItem("pulselab_token");
@@ -179,7 +175,6 @@ async function loadDashboardData(): Promise<void> {
 
   inflight = (async () => {
     try {
-      // Fetch both in parallel.
       const [ordersRes, cartRes] = await Promise.all([
         fetchWithTimeout(`${API_URL}/engineering/userordersdb`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -237,14 +232,43 @@ async function loadDashboardData(): Promise<void> {
 }
 
 // =====================================================
+// HELPERS
+// =====================================================
+
+const formatShortDate = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-NG", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+const formatFullDateTime = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-NG", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+// =====================================================
 // PAGE
 // =====================================================
 
 function DashboardPage() {
   const user = useCurrentUser();
 
-  // Start with cached data — no flash of loading on
-  // repeat visits.
   const [orders, setOrders] = useState<Order[]>(() => ordersCache);
   const [cart, setCart] = useState<Cart>(() => cartCache);
   const [loading, setLoading] = useState(
@@ -252,8 +276,7 @@ function DashboardPage() {
   );
   const [error, setError] = useState<string | null>(null);
 
-  const getToken = () =>
-    sessionStorage.getItem("pulselab_token");
+  const getToken = () => sessionStorage.getItem("pulselab_token");
 
   // ===================================================
   // INITIAL LOAD (silent)
@@ -261,8 +284,6 @@ function DashboardPage() {
   useEffect(() => {
     let mounted = true;
 
-    // If cache is empty, show loading. If cache has data,
-    // do NOT flip loading to true — we'll update silently.
     const isFirstLoad = !dashboardLoaded;
 
     if (isFirstLoad) {
@@ -278,8 +299,6 @@ function DashboardPage() {
       })
       .catch((err: any) => {
         if (!mounted) return;
-        // Only surface the error if there's no cached data
-        // to fall back on.
         if (ordersCache.length === 0) {
           setError(err?.message || "Failed to load dashboard data.");
         } else {
@@ -342,23 +361,11 @@ function DashboardPage() {
     () => orders.filter((o) => o.status !== "Collected"),
     [orders]
   );
+
   const collected = useMemo(
     () => orders.filter((o) => o.status === "Collected"),
     [orders]
   );
-
-  const formatShortDate = (iso: string | null | undefined) => {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "—";
-    return d.toLocaleString("en-NG", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
 
   const cartCount = useMemo(
     () =>
@@ -375,7 +382,7 @@ function DashboardPage() {
   if (!user) {
     return (
       <AppShell>
-        <div className="flex items-center justify-center h-[60vh]">
+        <div className="flex h-[60vh] items-center justify-center">
           <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200" />
         </div>
       </AppShell>
@@ -389,39 +396,39 @@ function DashboardPage() {
     return (
       <AppShell>
         <div
-          className="mx-auto max-w-7xl px-6 py-12"
+          className="mx-auto w-full min-w-0 max-w-7xl overflow-x-clip px-3 py-6 sm:px-6 sm:py-10 lg:py-12"
           aria-busy="true"
           aria-live="polite"
         >
           <div className="pointer-events-none select-none">
             <div className="blur-[2px] opacity-70">
               {/* HEADER SKELETON */}
-              <div className="mb-10">
-                <div className="h-3 w-28 animate-pulse rounded bg-slate-200" />
-                <div className="mt-3 h-8 w-56 animate-pulse rounded bg-slate-200" />
-                <div className="mt-3 h-4 w-40 animate-pulse rounded bg-slate-200" />
+              <div className="mb-6 min-w-0 sm:mb-10">
+                <div className="h-3 w-24 animate-pulse rounded bg-slate-200 sm:w-28" />
+                <div className="mt-3 h-7 w-44 animate-pulse rounded bg-slate-200 sm:h-8 sm:w-56" />
+                <div className="mt-3 h-4 w-32 animate-pulse rounded bg-slate-200 sm:w-40" />
               </div>
 
               {/* STATS SKELETON */}
-              <div className="mb-12 grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <div className="mb-10 grid grid-cols-2 gap-3 sm:mb-12 sm:gap-4 lg:grid-cols-4">
                 {[0, 1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className="rounded-2xl border border-slate-200 bg-white p-5"
+                    className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"
                   >
-                    <div className="mb-3 size-9 animate-pulse rounded-lg bg-slate-200" />
-                    <div className="h-8 w-16 animate-pulse rounded bg-slate-200" />
-                    <div className="mt-2 h-2.5 w-24 animate-pulse rounded bg-slate-200" />
+                    <div className="mb-3 size-8 animate-pulse rounded-lg bg-slate-200 sm:size-9" />
+                    <div className="h-6 w-12 animate-pulse rounded bg-slate-200 sm:h-8 sm:w-16" />
+                    <div className="mt-2 h-2.5 w-20 animate-pulse rounded bg-slate-200 sm:w-24" />
                   </div>
                 ))}
               </div>
 
               {/* MAIN GRID SKELETON */}
-              <div className="grid gap-6 lg:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 lg:col-span-2">
+              <div className="mx-auto w-full max-w-md space-y-4 sm:max-w-lg sm:space-y-6 lg:grid lg:max-w-none lg:grid-cols-3 lg:space-y-0 lg:gap-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 lg:col-span-2">
                   <div className="mb-6 flex items-center justify-between">
-                    <div className="h-5 w-32 animate-pulse rounded bg-slate-200" />
-                    <div className="h-4 w-16 animate-pulse rounded bg-slate-200" />
+                    <div className="h-5 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
+                    <div className="h-4 w-14 animate-pulse rounded bg-slate-200 sm:w-16" />
                   </div>
 
                   <div className="space-y-3">
@@ -431,17 +438,17 @@ function DashboardPage() {
                         className="flex items-center justify-between rounded-xl bg-slate-50 p-4"
                       >
                         <div className="min-w-0 flex-1 space-y-2">
-                          <div className="h-3.5 w-48 animate-pulse rounded bg-slate-200" />
-                          <div className="h-3 w-32 animate-pulse rounded bg-slate-200" />
+                          <div className="h-3.5 w-40 animate-pulse rounded bg-slate-200 sm:w-48" />
+                          <div className="h-3 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
                         </div>
-                        <div className="h-5 w-14 animate-pulse rounded bg-slate-200" />
+                        <div className="h-5 w-12 animate-pulse rounded bg-slate-200 sm:w-14" />
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                  <div className="mb-6 h-5 w-32 animate-pulse rounded bg-slate-200" />
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+                  <div className="mb-6 h-5 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
 
                   <div className="space-y-3">
                     {[0, 1, 2].map((i) => (
@@ -449,8 +456,8 @@ function DashboardPage() {
                         key={i}
                         className="space-y-2 rounded-lg bg-slate-50 p-3"
                       >
-                        <div className="h-3.5 w-32 animate-pulse rounded bg-slate-200" />
-                        <div className="h-3 w-40 animate-pulse rounded bg-slate-200" />
+                        <div className="h-3.5 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
+                        <div className="h-3 w-36 animate-pulse rounded bg-slate-200 sm:w-40" />
                       </div>
                     ))}
                   </div>
@@ -458,7 +465,7 @@ function DashboardPage() {
               </div>
             </div>
 
-            <p className="mt-8 text-center font-mono text-xs uppercase tracking-widest text-slate-400">
+            <p className="mt-8 text-center font-mono text-[10px] uppercase tracking-widest text-slate-400 sm:text-xs">
               Loading your dashboard...
             </p>
           </div>
@@ -473,13 +480,15 @@ function DashboardPage() {
   if (error) {
     return (
       <AppShell>
-        <div className="mx-auto max-w-7xl px-6 py-12">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
-            <AlertCircle className="mx-auto mb-3 size-8 text-red-600" />
-            <p className="font-semibold text-red-700">
+        <div className="mx-auto w-full min-w-0 max-w-7xl overflow-x-clip px-3 py-6 sm:px-6 sm:py-10 lg:py-12">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center sm:p-8">
+            <AlertCircle className="mx-auto mb-3 size-7 text-red-600 sm:size-8" />
+            <p className="font-semibold text-red-700 sm:text-base">
               Couldn't load your dashboard
             </p>
-            <p className="mt-1 text-sm text-red-600">{error}</p>
+            <p className="mt-1 text-xs text-red-600 sm:text-sm">
+              {error}
+            </p>
             <button
               onClick={() => window.location.reload()}
               className="mt-5 rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
@@ -497,29 +506,29 @@ function DashboardPage() {
   // ===================================================
   return (
     <AppShell>
-      <div className="mx-auto max-w-7xl px-6 py-12">
+      <div className="mx-auto w-full min-w-0 max-w-7xl overflow-x-clip px-3 py-6 sm:px-6 sm:py-10 lg:py-12">
         {/* HEADER */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-10"
+          className="mb-6 min-w-0 sm:mb-10"
         >
-          <p className="font-mono text-[13px] uppercase tracking-widest text-slate-400">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-slate-400 sm:text-[13px]">
             Welcome back
           </p>
 
-          <h1 className="mt-1 text-3xl font-bold text-brand-navy">
+          <h1 className="mt-1 break-words text-2xl font-bold leading-tight text-brand-navy sm:text-3xl">
             {user.fullName}
           </h1>
 
-          <p className="mt-1 text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 sm:text-base">
             Matric ·{" "}
             <span className="font-mono">{user.matric}</span>
           </p>
         </motion.div>
 
         {/* STATS */}
-        <div className="mb-12 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mb-7 grid min-w-0 grid-cols-2 gap-3 sm:mb-10 sm:gap-4 lg:mb-12 lg:grid-cols-4">
           <StatCard
             icon={ClipboardList}
             label="Active Orders"
@@ -544,77 +553,144 @@ function DashboardPage() {
         </div>
 
         {/* MAIN GRID */}
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
           {/* ACTIVE ORDERS */}
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="rounded-2xl border border-slate-200 bg-white p-6 lg:col-span-2"
+            className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 sm:p-5 lg:col-span-2 lg:p-6"
           >
-            <div className="mb-6 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-brand-navy">
-                Active orders
-              </h2>
+            {/* HEADER */}
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-bold text-brand-navy sm:text-lg">
+                  Active orders
+                </h2>
+                <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+                  Your last 3 orders ready for pickup
+                </p>
+              </div>
 
               <Link
                 to="/orders"
-                className="text-sm font-semibold text-brand-accent"
+                className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-accent transition hover:gap-2 sm:text-sm"
               >
-                View all →
+                View all
+                <span aria-hidden>→</span>
               </Link>
             </div>
 
+            {/* LIST */}
             {active.length === 0 ? (
-              <div className="py-12 text-center text-slate-400">
-                No active orders.{" "}
-                <Link to="/components" className="text-brand-accent">
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-10 text-center sm:px-6 sm:py-12">
+                <div className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-white shadow-sm sm:size-12">
+                  <Package className="size-5 text-slate-400" />
+                </div>
+                <p className="text-sm font-medium text-slate-600">
+                  No active orders
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Your paid orders will appear here.
+                </p>
+                <Link
+                  to="/components"
+                  className="mt-4 inline-block rounded-lg bg-brand-navy px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                >
                   Browse components
                 </Link>
               </div>
             ) : (
               <div className="space-y-3">
-                {active.slice(0, 5).map((o, i) => (
+                {active.slice(0, 3).map((o, i) => (
                   <motion.div
                     key={o.id}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.15 + i * 0.05 }}
-                    className="flex items-center justify-between rounded-xl bg-slate-50 p-4"
+                    className="group min-w-0 rounded-xl border border-slate-200 bg-white p-3 transition-all hover:border-brand-navy/30 hover:shadow-md sm:p-4"
                   >
-                    <div className="min-w-0">
-                      <div className="truncate font-mono text-sm font-semibold text-brand-navy">
-                        {o.reference}
+                    {/* TOP ROW — IMAGES + REFERENCE + TOTAL */}
+                    <div className="flex min-w-0 flex-wrap items-start gap-3 sm:flex-nowrap">
+                      {/* IMAGE STACK */}
+                      <div className="flex shrink-0 -space-x-3">
+                        {o.items.slice(0, 2).map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="grid size-10 place-items-center overflow-hidden rounded-lg border-2 border-white bg-slate-100 shadow-sm sm:size-11"
+                            style={{ zIndex: 10 - idx }}
+                          >
+                            {item.image ? (
+                              <img
+                                src={item.image}
+                                alt={item.name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <Package className="size-4 text-slate-400" />
+                            )}
+                          </div>
+                        ))}
+                        {o.items.length > 2 && (
+                          <div className="grid size-10 place-items-center rounded-lg border-2 border-white bg-slate-200 text-[10px] font-bold text-slate-600 shadow-sm sm:size-11">
+                            +{o.items.length - 2}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="mt-0.5 text-xs text-slate-500">
-                        {o.items.length} item
-                        {o.items.length > 1 && "s"} ·{" "}
-                        {formatNaira(o.total)}
+                      {/* REFERENCE + STATUS */}
+                      <div className="min-w-0 flex-1 basis-24">
+                        <StatusPill status={o.status} />
+                        <div className="mt-1.5 truncate font-mono text-[11px] text-slate-500 sm:text-xs">
+                          {o.reference}
+                        </div>
+                      </div>
+
+                      {/* TOTAL — stacked vertically on mobile */}
+                      <div className="ml-auto min-w-0 shrink-0 text-right">
+                        <div className="text-sm font-bold text-brand-navy sm:text-base">
+                          {formatNaira(o.total)}
+                        </div>
+                        <div className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">
+                          {o.items.length} item
+                          {o.items.length > 1 && "s"}
+                        </div>
                       </div>
                     </div>
 
-                    <StatusPill status={o.status} />
+                    {/* BOTTOM ROW — PAID DATE + PICKUP HINT */}
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500 sm:text-xs">
+                        <Calendar className="size-3.5 shrink-0 text-slate-400" />
+                        <span className="truncate">
+                          Paid {formatShortDate(o.paidAt)}
+                        </span>
+                      </div>
+
+                      <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-emerald-600 sm:text-xs">
+                        <PackageCheck className="size-3.5" />
+                        Ready for pickup
+                      </span>
+                    </div>
                   </motion.div>
                 ))}
               </div>
             )}
           </motion.section>
 
-          {/* RECENT ACTIVITY */}
           {/* RECENT COLLECTED */}
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="rounded-2xl border border-slate-200 bg-white p-6"
+            className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 sm:p-5 lg:p-6"
           >
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-brand-navy">
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-base font-bold text-brand-navy sm:text-lg">
                   Recent collected
                 </h2>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
                   Your last 3 pickups
                 </p>
               </div>
@@ -622,7 +698,7 @@ function DashboardPage() {
               {collected.length > 0 && (
                 <Link
                   to="/orders"
-                  className="text-sm font-semibold text-brand-accent"
+                  className="shrink-0 text-xs font-semibold text-brand-accent sm:text-sm"
                 >
                   View all →
                 </Link>
@@ -630,8 +706,8 @@ function DashboardPage() {
             </div>
 
             {collected.length === 0 ? (
-              <div className="py-10 text-center">
-                <div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-slate-100">
+              <div className="py-8 text-center sm:py-10">
+                <div className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-slate-100 sm:size-12">
                   <PackageCheck className="size-5 text-slate-400" />
                 </div>
                 <p className="text-sm text-slate-500">
@@ -649,16 +725,16 @@ function DashboardPage() {
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.25 + i * 0.05 }}
-                    className="group rounded-xl border border-slate-200 bg-slate-50/50 p-3 transition hover:border-slate-300 hover:bg-white hover:shadow-sm"
+                    className="group min-w-0 rounded-xl border border-slate-200 bg-slate-50/50 p-3 transition hover:border-slate-300 hover:bg-white hover:shadow-sm"
                   >
-                    {/* TOP ROW — ICON + REFERENCE + AMOUNT */}
-                    <div className="flex items-start gap-3">
-                      {/* THUMBNAIL STACK */}
+                    {/* TOP ROW */}
+                    <div className="flex min-w-0 flex-wrap items-start gap-3 sm:flex-nowrap">
+                      {/* IMAGE STACK */}
                       <div className="flex shrink-0 -space-x-3">
                         {o.items.slice(0, 2).map((item, idx) => (
                           <div
                             key={idx}
-                            className="grid size-10 place-items-center overflow-hidden rounded-lg border-2 border-white bg-slate-100 shadow-sm"
+                            className="grid size-9 place-items-center overflow-hidden rounded-lg border-2 border-white bg-slate-100 shadow-sm sm:size-10"
                             style={{ zIndex: 10 - idx }}
                           >
                             {item.image ? (
@@ -673,29 +749,26 @@ function DashboardPage() {
                           </div>
                         ))}
                         {o.items.length > 2 && (
-                          <div className="grid size-10 place-items-center rounded-lg border-2 border-white bg-slate-200 text-[10px] font-bold text-slate-600 shadow-sm">
+                          <div className="grid size-9 place-items-center rounded-lg border-2 border-white bg-slate-200 text-[10px] font-bold text-slate-600 shadow-sm sm:size-10">
                             +{o.items.length - 2}
                           </div>
                         )}
                       </div>
 
                       {/* REFERENCE + STATUS */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-700 ring-1 ring-emerald-200/60">
-                            <Check className="size-3" />
-                            Collected
-                          </span>
-                        </div>
-
-                        <div className="mt-1.5 truncate font-mono text-xs text-slate-600">
+                      <div className="min-w-0 flex-1 basis-24">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-700 ring-1 ring-emerald-200/60">
+                          <Check className="size-3" />
+                          Collected
+                        </span>
+                        <div className="mt-1.5 truncate font-mono text-[11px] text-slate-600 sm:text-xs">
                           {o.reference}
                         </div>
                       </div>
 
                       {/* AMOUNT */}
-                      <div className="shrink-0 text-right">
-                        <div className="font-bold text-brand-navy">
+                      <div className="ml-auto min-w-0 shrink-0 text-right">
+                        <div className="text-sm font-bold text-brand-navy sm:text-base">
                           {formatNaira(o.total)}
                         </div>
                         <div className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">
@@ -706,7 +779,7 @@ function DashboardPage() {
 
                     {/* BOTTOM ROW — DATES */}
                     <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-200/70 pt-3">
-                      <div className="flex items-center gap-1.5 text-[11px]">
+                      <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
                         <Calendar className="size-3 shrink-0 text-slate-400" />
                         <div className="min-w-0">
                           <div className="text-[9px] uppercase tracking-widest text-slate-400">
@@ -718,7 +791,7 @@ function DashboardPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 text-[11px]">
+                      <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
                         <PackageCheck className="size-3 shrink-0 text-emerald-500" />
                         <div className="min-w-0">
                           <div className="text-[9px] uppercase tracking-widest text-slate-400">
@@ -759,27 +832,30 @@ function StatCard({
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className={`rounded-2xl border p-5 ${highlight
+      className={`min-w-0 rounded-2xl border p-3 sm:p-5 ${
+        highlight
           ? "border-transparent bg-brand-navy text-white"
           : "border-slate-200 bg-white"
-        }`}
+      }`}
     >
       <div
-        className={`mb-3 grid size-9 place-items-center rounded-lg ${highlight
+        className={`mb-3 grid size-8 place-items-center rounded-lg sm:size-9 ${
+          highlight
             ? "bg-white/10"
             : "bg-brand-accent/10 text-brand-accent"
-          }`}
+        }`}
       >
         <Icon className="size-4" />
       </div>
 
-      <div className="text-3xl font-bold tracking-tight">
+      <div className="text-2xl font-bold tracking-tight sm:text-3xl">
         <AnimatedCounter value={value} />
       </div>
 
       <div
-        className={`mt-1 font-mono text-[10px] uppercase tracking-widest ${highlight ? "text-white/60" : "text-slate-400"
-          }`}
+        className={`mt-1 break-words font-mono text-[10px] leading-4 uppercase tracking-wider sm:tracking-widest ${
+          highlight ? "text-white/60" : "text-slate-400"
+        }`}
       >
         {label}
       </div>
@@ -801,8 +877,9 @@ export function StatusPill({ status }: { status: string }) {
 
   return (
     <span
-      className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold uppercase tracking-tight ${palette[status] ?? "bg-slate-100 text-slate-600"
-        }`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight ring-1 ring-inset ${
+        palette[status] ?? "bg-slate-100 text-slate-600"
+      }`}
     >
       {label}
     </span>
