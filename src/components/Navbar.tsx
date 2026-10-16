@@ -1,15 +1,8 @@
-import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { Link, type LinkProps } from "@tanstack/react-router";
+import { useNavigate, useRouterState, Link, type LinkProps } from "@tanstack/react-router";
 import { resetOrdersCache } from "@/lib/ordersStore";
 import { disconnectUserSocket } from "@/lib/socket";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Bell,
-  ShoppingCart,
-  LogOut,
-  Menu,
-  X,
-} from "lucide-react";
+import { Bell, ShoppingCart, LogOut, Menu, X } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Logo } from "./Logo";
 import { useCurrentUser, useStore } from "@/lib/store";
@@ -31,17 +24,14 @@ export function Navbar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const cartCount = cart.reduce(
-    (total, item) => total + Number(item.quantity || 0),
-    0
+  const cartCount = useMemo(
+    () => cart.reduce((total, item) => total + Number(item.quantity || 0), 0),
+    [cart]
   );
 
   const userNotifications = useMemo(() => {
     if (!user) return [];
-
-    return notifications.filter(
-      (n) => n.userId === user.id
-    );
+    return notifications.filter((n) => n.userId === user.id);
   }, [notifications, user]);
 
   const unread = useMemo(
@@ -50,12 +40,9 @@ export function Navbar() {
   );
 
   if (typeof pathname !== "string") return null;
-
   if (pathname.startsWith("/admin")) return null;
 
-  const closeMobileMenu = () => {
-    setMobileOpen(false);
-  };
+  const closeMobileMenu = () => setMobileOpen(false);
 
   const toggleMobileMenu = () => {
     setMobileOpen((open) => !open);
@@ -65,27 +52,19 @@ export function Navbar() {
   // =====================================================
   // LOGOUT
   // =====================================================
-  // Centralized logout handler. Every logout button in
-  // the navbar calls this. It resets caches, clears
-  // session, closes any open menus, and redirects to
-  // the login page.
-  //
   const Logout = () => {
-    resetOrdersCache();         // clear cached orders
+    resetOrdersCache();
     disconnectUserSocket();
-    logout();                    // clear Zustand store
-    sessionStorage.clear();      // clear token + user
-    setMobileOpen(false);        // close mobile menu
-    setNotifOpen(false);         // close notifications
-    navigate({ to: "/login" });  // go to login page
+    logout();
+    sessionStorage.clear();
+    setMobileOpen(false);
+    setNotifOpen(false);
+    navigate({ to: "/login" });
   };
 
   return (
     <>
-      {/* =====================================================
-          MOBILE BACKDROP
-      ===================================================== */}
-
+      {/* MOBILE BACKDROP */}
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
@@ -99,10 +78,7 @@ export function Navbar() {
         )}
       </AnimatePresence>
 
-      {/* =====================================================
-          NAVBAR
-      ===================================================== */}
-
+      {/* NAVBAR */}
       <motion.nav
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -111,11 +87,7 @@ export function Navbar() {
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           {/* LOGO */}
-          <Link
-            to="/dashboard"
-            onClick={closeMobileMenu}
-            className="shrink-0"
-          >
+          <Link to="/dashboard" onClick={closeMobileMenu} className="shrink-0">
             <Logo />
           </Link>
 
@@ -181,7 +153,6 @@ export function Navbar() {
                   )}
                 </button>
 
-                {/* NOTIFICATION DROPDOWN */}
                 <AnimatePresence>
                   {notifOpen && (
                     <motion.div
@@ -206,7 +177,6 @@ export function Navbar() {
                           key={n.id}
                           onClick={() => {
                             markRead(n.id);
-
                             if (n.orderId) {
                               setNotifOpen(false);
                               navigate({ to: "/orders" });
@@ -216,10 +186,7 @@ export function Navbar() {
                             !n.read ? "bg-brand-accent/5" : ""
                           }`}
                         >
-                          <p className="text-sm text-brand-navy">
-                            {n.message}
-                          </p>
-
+                          <p className="text-sm text-brand-navy">{n.message}</p>
                           <p className="mt-1 text-[10px] text-slate-400">
                             {new Date(n.createdAt).toLocaleString()}
                           </p>
@@ -231,14 +198,13 @@ export function Navbar() {
               </div>
             )}
 
-            {/* USER */}
+            {/* USER / LOGIN */}
             {user ? (
               <div className="ml-1 flex items-center gap-1 sm:ml-2 sm:gap-2">
                 <div className="hidden flex-col items-end sm:flex">
                   <span className="text-xs font-semibold text-brand-navy">
                     {user.fullName}
                   </span>
-
                   <span className="font-mono text-[10px] text-slate-500">
                     {user.matric}
                   </span>
@@ -253,25 +219,19 @@ export function Navbar() {
                 </button>
               </div>
             ) : (
-              <div
-                onClick={Logout}
-                className="group ml-1 flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-brand-navy px-3 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:border-brand-accent/40 hover:bg-brand-accent/10 hover:text-brand-accent hover:shadow-lg hover:shadow-brand-accent/10 active:scale-95 sm:ml-2 sm:px-4"
+              <Link
+                to="/login"
+                className="ml-1 rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white sm:ml-2 sm:px-5"
               >
-                <LogOut className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-
-                <span className="hidden sm:inline">Logout</span>
-              </div>
+                Login
+              </Link>
             )}
 
             {/* MOBILE MENU BUTTON */}
             <button
               onClick={toggleMobileMenu}
               className="ml-1 flex size-10 items-center justify-center rounded-full transition-colors hover:bg-slate-100 md:hidden"
-              aria-label={
-                mobileOpen
-                  ? "Close navigation menu"
-                  : "Open navigation menu"
-              }
+              aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
               aria-expanded={mobileOpen}
             >
               <AnimatePresence mode="wait" initial={false}>
@@ -301,67 +261,42 @@ export function Navbar() {
           </div>
         </div>
 
-        {/* =====================================================
-            FLOATING MOBILE MENU
-        ===================================================== */}
-
+        {/* FLOATING MOBILE MENU */}
         <AnimatePresence>
           {mobileOpen && (
             <motion.div
               initial={{ opacity: 0, y: -12, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -12, scale: 0.98 }}
-              transition={{
-                duration: 0.25,
-                ease: [0.22, 1, 0.36, 1],
-              }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               className="absolute left-0 right-0 top-full z-50 border-t border-slate-200 bg-white shadow-xl md:hidden"
             >
               <div className="px-4 py-4 sm:px-6">
-                {/* NAVIGATION LINKS */}
                 <div className="flex flex-col gap-1">
-                  <MobileNavLink
-                    to="/components"
-                    onClick={closeMobileMenu}
-                  >
+                  <MobileNavLink to="/components" onClick={closeMobileMenu}>
                     Components
                   </MobileNavLink>
 
-                  <MobileNavLink
-                    to="/receipts"
-                    onClick={closeMobileMenu}
-                  >
+                  <MobileNavLink to="/receipts" onClick={closeMobileMenu}>
                     Order Receipt
                   </MobileNavLink>
 
-                  <MobileNavLink
-                    to="/cart"
-                    onClick={closeMobileMenu}
-                  >
+                  <MobileNavLink to="/cart" onClick={closeMobileMenu}>
                     Add to cart
                   </MobileNavLink>
 
-                  <MobileNavLink
-                    to="/orders"
-                    onClick={closeMobileMenu}
-                  >
+                  <MobileNavLink to="/orders" onClick={closeMobileMenu}>
                     My Orders
                   </MobileNavLink>
 
                   {user?.role === "student" && (
-                    <MobileNavLink
-                      to="/dashboard"
-                      onClick={closeMobileMenu}
-                    >
+                    <MobileNavLink to="/dashboard" onClick={closeMobileMenu}>
                       Dashboard
                     </MobileNavLink>
                   )}
 
                   {user?.role === "admin" && (
-                    <MobileNavLink
-                      to="/admin"
-                      onClick={closeMobileMenu}
-                    >
+                    <MobileNavLink to="/admin" onClick={closeMobileMenu}>
                       Admin
                     </MobileNavLink>
                   )}
@@ -375,7 +310,6 @@ export function Navbar() {
                         <p className="text-sm font-semibold text-brand-navy">
                           {user.fullName}
                         </p>
-
                         <p className="mt-0.5 font-mono text-[10px] text-slate-500">
                           {user.matric}
                         </p>
@@ -400,28 +334,20 @@ export function Navbar() {
   );
 }
 
-/* ============================================================
-   DESKTOP NAV LINK
-============================================================ */
-
+/* DESKTOP NAV LINK */
 function NavLink(props: LinkProps) {
   return (
     <Link
       {...props}
       className="text-slate-500 transition-colors hover:text-brand-navy"
-      activeProps={{
-        className: "text-brand-navy font-semibold",
-      }}
+      activeProps={{ className: "text-brand-navy font-semibold" }}
     >
       {props.children}
     </Link>
   );
 }
 
-/* ============================================================
-   MOBILE NAV LINK
-============================================================ */
-
+/* MOBILE NAV LINK */
 function MobileNavLink({
   onClick,
   ...props

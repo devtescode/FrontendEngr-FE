@@ -2,7 +2,7 @@ import {
   createFileRoute,
   Link,
   useNavigate,
-  Navigate,
+  // Navigate,
 } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
@@ -11,7 +11,7 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
-import { useCurrentUser, useStore } from "@/lib/store";
+import {  useStore } from "@/lib/store";
 import { connectUserSocket, socket } from "@/lib/socket";
 import { resetOrdersCache } from "@/lib/ordersStore";
 import { Mail, Lock, Loader2 } from "lucide-react";
@@ -27,7 +27,7 @@ const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 function LoginPage() {
-  const user = useCurrentUser();
+  // const user = useCurrentUser();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -70,13 +70,13 @@ function LoginPage() {
   // --------------------------------
   // REDIRECT IF ALREADY LOGGED IN
   // --------------------------------
-  if (user) {
-    return (
-      <Navigate
-        to={user.role === "admin" ? "/admin" : "/dashboard"}
-      />
-    );
-  }
+  // if (user) {
+  //   return (
+  //     <Navigate
+  //       to={user.role === "admin" ? "/admin" : "/dashboard"}
+  //     />
+  //   );
+  // }
 
   // --------------------------------
   // LOGIN
