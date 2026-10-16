@@ -34,11 +34,7 @@ type Toast = {
 // =====================================================
 // GLOBAL CART CACHE
 // =====================================================
-// Stores the current cart in memory so ComponentCard
-// can start with the correct quantity immediately on
-// mount — no flash of "Add to Cart" for items already
-// in the cart.
-//
+
 type CachedCartItem = {
   componentId: string;
   quantity: number;
@@ -95,6 +91,7 @@ export function resetCartCache() {
 // =====================================================
 // GLOBAL TOAST BUS
 // =====================================================
+
 let toastListeners: ((toasts: Toast[]) => void)[] = [];
 let toasts: Toast[] = [];
 
@@ -105,7 +102,6 @@ function emitToasts() {
 export function pushToast(kind: ToastKind, message: string) {
   const id = `t_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-  // Keep only the newest 3 toasts visible.
   toasts = [...toasts, { id, kind, message }].slice(-3);
   emitToasts();
 
@@ -224,13 +220,6 @@ export function ComponentCard({
 
   const componentId = c._id;
 
-  // ===================================================
-  // STATE — initialised from cache
-  // ===================================================
-  // Start with the cached quantity so there's no flash
-  // of "Add to Cart" for items that are already in the
-  // cart. Falls back to 0 if the cache doesn't have it.
-  //
   const [quantity, setQuantity] = useState(() =>
     getCachedQuantity(componentId)
   );
@@ -243,10 +232,6 @@ export function ComponentCard({
   // ===================================================
   // SYNC LOCAL QUANTITY INTO CACHE
   // ===================================================
-  // Whenever this card changes the quantity locally,
-  // update the shared cache so future mounts (and other
-  // cards) see the change immediately.
-  //
   const syncCache = (nextQuantity: number) => {
     if (!componentId) return;
 
@@ -276,7 +261,6 @@ export function ComponentCard({
   // INITIAL LOAD
   // ===================================================
   useEffect(() => {
-    // If we already have a loaded cache, use it — no fetch.
     if (cartCache.loaded) {
       setQuantity(getCachedQuantity(componentId));
       return;
@@ -303,10 +287,7 @@ export function ComponentCard({
 
         const cart = await response.json();
 
-        // Populate the shared cache first...
         setCartCacheFromResponse(cart);
-
-        // ...then update this card's quantity from it.
         setQuantity(getCachedQuantity(componentId));
       } catch (error) {
         console.error(
@@ -329,11 +310,7 @@ export function ComponentCard({
   // ===================================================
   useEffect(() => {
     const handleCartUpdated = (cart: any) => {
-      // Update the shared cache so the next mount is
-      // instant.
       setCartCacheFromResponse(cart);
-
-      // Update this card's quantity.
       setQuantity(getCachedQuantity(componentId));
     };
 
@@ -346,7 +323,7 @@ export function ComponentCard({
   }, [componentId]);
 
   // ===================================================
-  // ADD TO CART
+  // ADD TO CART (optimistic)
   // ===================================================
   const handleAddToCart = async () => {
     const token = getToken();
@@ -357,16 +334,21 @@ export function ComponentCard({
     }
 
     if (!componentId) {
-      console.error("Component ID is missing:", c);
       pushToast("error", "Component ID is missing.");
       return;
     }
 
     if (isOutOfStock) return;
 
-    try {
-      setLoading(true);
+    // ---------------------------------------------
+    // OPTIMISTIC UPDATE — flip to "1" immediately
+    // ---------------------------------------------
+    const previousQuantity = quantity;
+    setQuantity(1);
+    syncCache(1);
+    setLoading(true);
 
+    try {
       const response = await fetch(
         `${API_URL}/engineering/addtocart`,
         {
@@ -391,11 +373,16 @@ export function ComponentCard({
         );
       }
 
-      setQuantity(1);
-      syncCache(1);
       pushToast("success", `${c.name} added to cart`);
     } catch (error: any) {
       console.error("Add to cart error:", error);
+
+      // ---------------------------------------------
+      // REVERT on failure
+      // ---------------------------------------------
+      setQuantity(previousQuantity);
+      syncCache(previousQuantity);
+
       pushToast(
         "error",
         error.message || "Failed to add item to cart"
@@ -406,7 +393,7 @@ export function ComponentCard({
   };
 
   // ===================================================
-  // INCREASE
+  // INCREASE (optimistic + stock guard with toast)
   // ===================================================
   const handleIncrease = async () => {
     const token = getToken();
@@ -421,11 +408,28 @@ export function ComponentCard({
       return;
     }
 
-    if (quantity >= c.stock) return;
+    // ---------------------------------------------
+    // STOCK LIMIT — notify instead of silently ignoring
+    // ---------------------------------------------
+    if (quantity >= c.stock) {
+      pushToast(
+        "error",
+        `Only ${c.stock} unit${c.stock === 1 ? "" : "s"} available for ${c.name}.`
+      );
+      return;
+    }
+
+    // ---------------------------------------------
+    // OPTIMISTIC UPDATE
+    // ---------------------------------------------
+    const previousQuantity = quantity;
+    const nextQuantity = previousQuantity + 1;
+
+    setQuantity(nextQuantity);
+    syncCache(nextQuantity);
+    setLoading(true);
 
     try {
-      setLoading(true);
-
       const response = await fetch(
         `${API_URL}/engineering/addtocart`,
         {
@@ -449,14 +453,13 @@ export function ComponentCard({
           data.message || "Failed to increase quantity"
         );
       }
-
-      setQuantity((prev) => {
-        const next = prev + 1;
-        syncCache(next);
-        return next;
-      });
     } catch (error: any) {
       console.error("Increase quantity error:", error);
+
+      // REVERT
+      setQuantity(previousQuantity);
+      syncCache(previousQuantity);
+
       pushToast(
         "error",
         error.message || "Failed to increase quantity"
@@ -467,7 +470,7 @@ export function ComponentCard({
   };
 
   // ===================================================
-  // DECREASE
+  // DECREASE (optimistic)
   // ===================================================
   const handleDecrease = async () => {
     const token = getToken();
@@ -484,11 +487,19 @@ export function ComponentCard({
 
     if (quantity <= 0) return;
 
-    try {
-      setLoading(true);
+    // ---------------------------------------------
+    // OPTIMISTIC UPDATE
+    // ---------------------------------------------
+    const previousQuantity = quantity;
+    const isRemoving = previousQuantity === 1;
+    const nextQuantity = isRemoving ? 0 : previousQuantity - 1;
 
-      // Removing the last unit
-      if (quantity === 1) {
+    setQuantity(nextQuantity);
+    syncCache(nextQuantity);
+    setLoading(true);
+
+    try {
+      if (isRemoving) {
         const response = await fetch(
           `${API_URL}/engineering/cart/${componentId}`,
           {
@@ -508,14 +519,9 @@ export function ComponentCard({
           );
         }
 
-        setQuantity(0);
-        syncCache(0);
         pushToast("info", `${c.name} removed from cart`);
         return;
       }
-
-      // Decrease from 2 → 1, 3 → 2, etc.
-      const newQuantity = quantity - 1;
 
       const response = await fetch(
         `${API_URL}/engineering/cart/${componentId}`,
@@ -526,7 +532,7 @@ export function ComponentCard({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            quantity: newQuantity,
+            quantity: nextQuantity,
           }),
         }
       );
@@ -539,11 +545,13 @@ export function ComponentCard({
           data.message || "Failed to decrease quantity"
         );
       }
-
-      setQuantity(newQuantity);
-      syncCache(newQuantity);
     } catch (error: any) {
       console.error("Decrease quantity error:", error);
+
+      // REVERT
+      setQuantity(previousQuantity);
+      syncCache(previousQuantity);
+
       pushToast(
         "error",
         error.message || "Failed to decrease quantity"
@@ -657,21 +665,12 @@ export function ComponentCard({
         {quantity === 0 ? (
           <button
             type="button"
-            disabled={isOutOfStock || loading || !componentId}
+            disabled={isOutOfStock || !componentId}
             onClick={handleAddToCart}
             className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-navy/90 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
           >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Adding...
-              </>
-            ) : (
-              <>
-                <ShoppingCart className="h-4 w-4" />
-                {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-              </>
-            )}
+            <ShoppingCart className="h-4 w-4" />
+            {isOutOfStock ? "Out of Stock" : "Add to Cart"}
           </button>
         ) : (
           <div className="mt-5 flex h-12 w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -683,11 +682,7 @@ export function ComponentCard({
               className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Decrease quantity"
             >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Minus className="h-4 w-4" />
-              )}
+              <Minus className="h-4 w-4" />
             </button>
 
             {/* QUANTITY */}
@@ -703,7 +698,7 @@ export function ComponentCard({
             {/* PLUS */}
             <button
               type="button"
-              disabled={loading || quantity >= c.stock}
+              disabled={loading}
               onClick={handleIncrease}
               className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Increase quantity"

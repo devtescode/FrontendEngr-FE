@@ -1,4 +1,4 @@
-import { io } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
 import { jwtDecode } from "jwt-decode";
 
 type TokenPayload = {
@@ -10,7 +10,7 @@ type TokenPayload = {
 const SOCKET_URL =
   import.meta.env.VITE_API_URL || "http://localhost:4500";
 
-export const socket = io(SOCKET_URL, {
+export const socket: Socket = io(SOCKET_URL, {
   autoConnect: true,
   transports: ["websocket", "polling"],
   reconnection: true,
@@ -32,38 +32,65 @@ export const getUserIdFromToken = (): string | null => {
   }
 };
 
+// =====================================================
+// MODULE-LEVEL GUARD
+// =====================================================
+// The "connect" listener is registered ONCE for the
+// lifetime of the app. Every call to connectUserSocket
+// reuses the same listener instead of stacking a new
+// one. This is what prevents the flood of duplicate
+// "joined socket room" logs on the backend.
+//
+let connectListenerRegistered = false;
+
+function joinRoom() {
+  const userId = getUserIdFromToken();
+  if (!userId) return;
+
+  socket.emit("user:join", { userId });
+}
+
 /**
- * Joins the current user's socket room.
+ * Ensures the current user is joined to their socket
+ * room.
  *
- * Returns a cleanup function that removes the
- * "connect" listener added here. Call it in the
- * useEffect return of any component using the socket.
+ * Safe to call from multiple components — only the
+ * first call registers the underlying "connect"
+ * listener. Subsequent calls reuse it.
+ *
+ * Also emits `user:join` immediately if the socket is
+ * already connected, so a component mounting after the
+ * initial connection doesn't have to wait for the next
+ * reconnect event.
  */
 export const connectUserSocket = (): (() => void) => {
-  const userId = getUserIdFromToken();
-
-  if (!userId) {
-    console.log("❌ No userId found — socket not joined");
-    return () => {};
+  // Register the "connect" listener only once per
+  // app lifetime.
+  if (!connectListenerRegistered) {
+    socket.on("connect", joinRoom);
+    connectListenerRegistered = true;
   }
 
-  const joinRoom = () => {
-    console.log("👤 Joining socket room for user:", userId);
-    socket.emit("user:join", { userId });
-  };
-
-  // Re-join on every reconnect — critical for mobile
-  // networks and server restarts.
-  socket.on("connect", joinRoom);
-
-  // If already connected, join immediately.
+  // If already connected, join the room now.
   if (socket.connected) {
     joinRoom();
   }
 
-  console.log("🟢 Socket user ready:", userId);
-
-  return () => {
-    socket.off("connect", joinRoom);
-  };
+  // Return a no-op cleanup. We deliberately keep the
+  // listener registered for the app's life, since
+  // removing it here would break other components that
+  // rely on the same connection.
+  return () => {};
 };
+
+// =====================================================
+// RESET (call on logout)
+// =====================================================
+// Removes the "connect" listener and disconnects. On
+// the next login, connectUserSocket will re-register.
+//
+export function disconnectUserSocket() {
+  socket.off("connect", joinRoom);
+  connectListenerRegistered = false;
+  socket.disconnect();
+}

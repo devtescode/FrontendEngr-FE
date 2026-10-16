@@ -16,6 +16,7 @@ import { useEffect } from "react";
 import appCss from "../styles.css?url";
 
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { connectUserSocket } from "@/lib/socket";
 
 /* =========================================================
    404 PAGE
@@ -228,7 +229,7 @@ export const Route =
 
     notFoundComponent: NotFoundComponent,
 
-    errorComponent: ErrorComponent,
+    // errorComponent: ErrorComponent,
   });
 
 /* =========================================================
@@ -238,6 +239,22 @@ export const Route =
 function RootComponent() {
   const { queryClient } =
     Route.useRouteContext();
+
+  // ===================================================
+  // SOCKET CONNECTION
+  // ===================================================
+  // Connect the socket once at the app root. The helper
+  // has a module-level guard so subsequent calls (from
+  // any route) reuse the same "connect" listener
+  // instead of stacking a new one.
+  //
+  // This prevents the flood of duplicate "joined socket
+  // room" logs and keeps the main thread free for fetch
+  // responses and renders.
+  //
+  useEffect(() => {
+    connectUserSocket();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
