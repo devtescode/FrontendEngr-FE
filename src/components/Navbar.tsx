@@ -1,7 +1,7 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Link, type LinkProps } from "@tanstack/react-router";
 import { resetOrdersCache } from "@/lib/ordersStore";
-
+import { disconnectUserSocket } from "@/lib/socket";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -72,6 +72,7 @@ export function Navbar() {
   //
   const Logout = () => {
     resetOrdersCache();         // clear cached orders
+    disconnectUserSocket();
     logout();                    // clear Zustand store
     sessionStorage.clear();      // clear token + user
     setMobileOpen(false);        // close mobile menu

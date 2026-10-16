@@ -18,11 +18,14 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
 import { RequireAuth } from "@/components/RequireAuth";
-import { pushToast } from "@/components/ComponentCard";
+import {
+  cartCache,
+  pushToast,
+  setCartCacheFromResponse,
+} from "@/components/ComponentCard";
 
 const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4500";
+  import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 const CART_STORAGE_KEY = "pulselab_cart";
 
@@ -71,7 +74,16 @@ type CartData = {
 function CartPage() {
   const location = useLocation();
 
+  // ===================================================
+  // BUILD INITIAL STATE FROM CACHE (fallback to localStorage)
+  // ===================================================
+  // The cart cache holds the most recent state known to
+  // the app — written by ComponentCard when the user
+  // increments/decrements there. Use it first so the
+  // cart page opens with fresh data.
+  //
   const [cart, setCart] = useState<CartData>(() => {
+    // 1) Try localStorage first
     try {
       const savedCart = localStorage.getItem(CART_STORAGE_KEY);
       if (savedCart) {
@@ -83,6 +95,8 @@ function CartPage() {
     } catch (error) {
       console.error("Failed to load saved cart:", error);
     }
+
+    // 2) Fall back to empty
     return { items: [] };
   });
 
@@ -160,10 +174,13 @@ function CartPage() {
   };
 
   // ===================================================
-  // FETCH CART SILENTLY
+  // FETCH CART (FORCE, not silent-gated)
   // ===================================================
-
-  const fetchCartSilently = async () => {
+  // Always hits the server. Used on mount and after
+  // every socket `cart:updated` so the page reconciles
+  // with the source of truth.
+  //
+  const fetchCart = async (opts?: { silent?: boolean }) => {
     const token = getToken();
     if (!token) return;
 
@@ -171,7 +188,7 @@ function CartPage() {
     const timeout = setTimeout(() => controller.abort(), 10000);
 
     try {
-      console.log("🛒 SILENTLY FETCHING CART...");
+      console.log("🛒 FETCHING CART (cart page)...");
 
       const response = await fetch(`${API_URL}/engineering/cart`, {
         method: "GET",
@@ -187,14 +204,20 @@ function CartPage() {
       }
 
       const normalizedCart = normalizeCart(data);
-      console.log("🛒 SILENT CART:", normalizedCart);
-
       updateCart(normalizedCart);
+
+      // Keep the shared ComponentCard cache in sync so
+      // the components page reflects the same state.
+      setCartCacheFromResponse(data);
     } catch (error: any) {
       if (error?.name === "AbortError") {
-        console.error("🛒 Silent cart request timed out.");
+        if (!opts?.silent) {
+          console.error("🛒 Cart request timed out.");
+        }
       } else {
-        console.error("🛒 Silent cart fetch error:", error);
+        if (!opts?.silent) {
+          console.error("🛒 Cart fetch error:", error);
+        }
       }
     } finally {
       clearTimeout(timeout);
@@ -202,29 +225,64 @@ function CartPage() {
   };
 
   // ===================================================
-  // LOAD CART SILENTLY
+  // LOAD CART ON MOUNT
   // ===================================================
-
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
-    fetchCartSilently();
+
+    // Fetch immediately. Do NOT wait — the initial
+    // state above already shows cached data, and this
+    // reconciles with the server.
+    fetchCart();
   }, []);
+
+  // ===================================================
+  // REFRESH CART ON ROUTE CHANGE
+  // ===================================================
+  // If the user navigates away and back without a full
+  // page reload, the component may remount but the
+  // previous fetch may be stale. Refetch on every
+  // mount for the /cart path.
+  //
+  useEffect(() => {
+    if (location.pathname !== "/cart") return;
+
+    // Skip the very first run — the mount effect above
+    // already fetched.
+    if (!hasFetched.current) return;
+
+    fetchCart({ silent: true });
+  }, [location.pathname]);
 
   // ===================================================
   // REAL-TIME CART UPDATE
   // ===================================================
-
+  // When the server broadcasts a cart update, both
+  // refresh from the server. This guarantees the cart
+  // page and the components page are always aligned.
+  //
   useEffect(() => {
-    const handleCartUpdated = (updatedCart: any) => {
+    const handleCartUpdated = async (updatedCart: any) => {
       console.log("🛒🔥 REAL-TIME CART UPDATE:", updatedCart);
+
+      // Update the local state immediately from the
+      // payload so the UI feels instant.
       const normalizedCart = normalizeCart(updatedCart);
       updateCart(normalizedCart);
+
+      // Also keep the shared cache fresh.
+      setCartCacheFromResponse(updatedCart);
+
+      // Then reconcile with the server in case the
+      // payload was partial.
+      fetchCart({ silent: true });
     };
 
     const handleConnect = () => {
       console.log("🟢 Cart socket connected:", socket.id);
-      socket.emit("cart:request");
+      // Ask for a fresh cart after reconnecting.
+      fetchCart({ silent: true });
     };
 
     const handleDisconnect = (reason: string) => {
@@ -235,9 +293,10 @@ function CartPage() {
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
 
+    // If already connected, request a fresh cart.
     if (socket.connected) {
       console.log("🟢 Socket already connected:", socket.id);
-      socket.emit("cart:request");
+      fetchCart({ silent: true });
     }
 
     return () => {
@@ -262,7 +321,6 @@ function CartPage() {
       return;
     }
 
-    // Find the item name for a friendlier toast.
     const itemName =
       cartItems.find(
         (it) => getComponentId(it.componentId) === componentId
@@ -293,7 +351,10 @@ function CartPage() {
         throw new Error(data?.message || "Failed to remove item");
       }
 
-      updateCart(normalizeCart(data));
+      const normalized = normalizeCart(data);
+      updateCart(normalized);
+      setCartCacheFromResponse(data);
+
       pushToast("info", `${itemName} removed from cart`);
     } catch (error: any) {
       console.error("Remove cart item error:", error);
@@ -327,7 +388,15 @@ function CartPage() {
       typeof item.componentId !== "string" &&
       item.componentId.stock !== undefined
     ) {
-      if (item.quantity >= item.componentId.stock) return;
+      if (item.quantity >= item.componentId.stock) {
+        pushToast(
+          "error",
+          `Only ${item.componentId.stock} unit${
+            item.componentId.stock === 1 ? "" : "s"
+          } available.`
+        );
+        return;
+      }
     }
 
     try {
@@ -351,7 +420,9 @@ function CartPage() {
         );
       }
 
-      updateCart(normalizeCart(data));
+      const normalized = normalizeCart(data);
+      updateCart(normalized);
+      setCartCacheFromResponse(data);
     } catch (error: any) {
       console.error("Increase quantity error:", error);
       pushToast(
@@ -404,7 +475,10 @@ function CartPage() {
           throw new Error(data?.message || "Failed to remove item");
         }
 
-        updateCart(normalizeCart(data));
+        const normalized = normalizeCart(data);
+        updateCart(normalized);
+        setCartCacheFromResponse(data);
+
         pushToast("info", `${itemName} removed from cart`);
         return;
       }
@@ -432,7 +506,9 @@ function CartPage() {
         );
       }
 
-      updateCart(normalizeCart(data));
+      const normalized = normalizeCart(data);
+      updateCart(normalized);
+      setCartCacheFromResponse(data);
     } catch (error: any) {
       console.error("Decrease quantity error:", error);
       pushToast(
@@ -556,7 +632,6 @@ function CartPage() {
         );
       }
 
-      // Redirect to Paystack.
       window.location.href = data.authorizationUrl;
     } catch (error: any) {
       console.error("Checkout error:", error);
