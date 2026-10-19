@@ -277,7 +277,8 @@ function LoginPage() {
             value={email}
             onChange={setEmail}
             type="email"
-            placeholder="you@elizade.edu.ng"
+            // placeholder="you@elizade.edu.ng"
+            placeholder="teslimagboola09@gmail.com"
             icon={<Mail size={18} />}
           />
 
