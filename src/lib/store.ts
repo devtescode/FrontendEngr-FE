@@ -22,7 +22,9 @@ export type OrderStatus =
   | "Paid"
   | "Preparing"
   | "Ready"
-  | "Collected";
+  | "Collected"
+  | "Cancelled"
+  | "Pending";
 
 export interface Order {
   id: string;
