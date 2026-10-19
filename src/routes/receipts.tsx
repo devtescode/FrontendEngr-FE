@@ -35,7 +35,7 @@ import {
 } from "@/lib/ordersStore";
 
 export const Route = createFileRoute("/receipts")({
-  head: () => ({ meta: [{ title: "Receipts — PulseLab" }] }),
+  head: () => ({ meta: [{ title: "Receipts — EU Hardwarestore" }] }),
   component: () => (
     <RequireAuth role="student">
       <ReceiptsIndexPage />
@@ -43,11 +43,11 @@ export const Route = createFileRoute("/receipts")({
   ),
 });
 const BRAND = {
-  name: "PulseLab",
+  name: "EU Hardwarestore",
   tagline: "Engineering Components Store",
   address: "Engineering Building, Room 204",
   phone: "+234 806 486 4821",
-  email: "support@pulselab.ng",
+  email: "support@euhardwarestore.ng",
 };
 
 // =====================================================

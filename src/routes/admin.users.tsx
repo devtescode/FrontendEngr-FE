@@ -206,7 +206,7 @@ function AdminUsers() {
 
             <p className="mt-2 max-w-xl text-sm text-slate-500">
               View and manage students who
-              have registered on PulseLab.
+              have registered on EU Hardwarestore.
             </p>
 
           </div>

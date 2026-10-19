@@ -29,7 +29,7 @@ const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 export const Route = createFileRoute("/orders")({
-  head: () => ({ meta: [{ title: "My Orders — PulseLab" }] }),
+  head: () => ({ meta: [{ title: "My Orders — EU Hardwarestore" }] }),
   component: () => (
     <RequireAuth role="student">
       <OrdersPage />
@@ -98,7 +98,7 @@ const STATUS = {
     label: "Collected",
     short: "Collected",
     description:
-      "You've picked up this order. Thanks for shopping with PulseLab.",
+      "You've picked up this order. Thanks for shopping with EU Hardwarestore.",
     icon: CheckCircle2,
     pillBg: "bg-slate-100 text-slate-600 ring-slate-200/60",
     pillDot: "bg-slate-400",

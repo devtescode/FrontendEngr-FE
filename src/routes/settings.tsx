@@ -4,8 +4,6 @@ import {
   AlertCircle,
   Check,
   CheckCircle2,
-  Eye,
-  EyeOff,
   KeyRound,
   LockKeyhole,
   ShieldCheck,
@@ -14,6 +12,8 @@ import {
 import { useState, type FormEvent } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { pushToast } from "@/components/ComponentCard";
+import { FormInput } from "@/components/FormInput";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useCurrentUser } from "@/lib/store";
 
@@ -21,7 +21,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
-    meta: [{ title: "Settings — PulseLab" }],
+    meta: [{ title: "Settings — EU Hardwarestore" }],
   }),
   component: () => (
     <RequireAuth role="student">
@@ -41,6 +41,11 @@ function SettingsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const showError = (message: string) => {
+    setError(message);
+    pushToast("error", message);
+  };
+
   const passwordChecks = [
     { label: "At least 8 characters", valid: newPassword.length >= 8 },
     {
@@ -55,19 +60,19 @@ function SettingsPage() {
     setSuccess(null);
 
     if (newPassword.length < 8) {
-      setError("Your new password must be at least 8 characters long.");
+      showError("Your new password must be at least 8 characters long.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError("Your new password and confirmation do not match.");
+      showError("Your new password and confirmation do not match.");
       return;
     }
 
     const token = sessionStorage.getItem("pulselab_token");
 
     if (!token) {
-      setError("Your session has expired. Please sign in again.");
+      showError("Your session has expired. Please sign in again.");
       return;
     }
 
@@ -86,16 +91,18 @@ function SettingsPage() {
       const data: { message?: string } | null = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(data?.message || "Unable to update your password. Please try again.");
+        showError(data?.message || "Unable to update your password. Please try again.");
         return;
       }
 
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setSuccess(data?.message || "Your password has been updated successfully.");
+      const message = data?.message || "Your password has been updated successfully.";
+      setSuccess(message);
+      pushToast("success", message);
     } catch (requestError) {
-      setError(
+      showError(
         requestError instanceof Error
           ? requestError.message
           : "Unable to connect to the server. Please try again.",
@@ -121,7 +128,7 @@ function SettingsPage() {
             Settings
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-            Manage your account details and keep your PulseLab account secure.
+            Manage your account details and keep your account secure.
           </p>
         </motion.header>
 
@@ -177,7 +184,7 @@ function SettingsPage() {
                 <div className="min-w-0">
                   <h2 className="text-lg font-bold text-brand-navy">Account information</h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    These details are linked to your PulseLab account.
+                    These details are linked to your EU Hardwarestore account.
                   </p>
                 </div>
               </div>
@@ -204,30 +211,35 @@ function SettingsPage() {
               </div>
 
               <form onSubmit={submit} className="space-y-5 px-5 py-6 sm:px-7">
-                <PasswordField
+                <FormInput
                   id="current-password"
                   label="Current password"
                   value={currentPassword}
                   onChange={setCurrentPassword}
+                  type="password"
                   autoComplete="current-password"
                   placeholder="Enter your current password"
                 />
 
                 <div className="grid gap-5 sm:grid-cols-2">
-                  <PasswordField
+                  <FormInput
                     id="new-password"
                     label="New password"
                     value={newPassword}
                     onChange={setNewPassword}
+                    type="password"
                     autoComplete="new-password"
+                    minLength={8}
                     placeholder="Create a new password"
                   />
-                  <PasswordField
+                  <FormInput
                     id="confirm-password"
                     label="Confirm new password"
                     value={confirmPassword}
                     onChange={setConfirmPassword}
+                    type="password"
                     autoComplete="new-password"
+                    minLength={8}
                     placeholder="Enter it again"
                   />
                 </div>
@@ -302,53 +314,6 @@ function AccountDetail({ label, value }: { label: string; value?: string }) {
       <dd className="mt-1 truncate text-sm font-semibold text-slate-800">
         {value || "Not provided"}
       </dd>
-    </div>
-  );
-}
-
-function PasswordField({
-  id,
-  label,
-  value,
-  onChange,
-  autoComplete,
-  placeholder,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  autoComplete: "current-password" | "new-password";
-  placeholder: string;
-}) {
-  const [visible, setVisible] = useState(false);
-
-  return (
-    <div>
-      <label htmlFor={id} className="mb-2 block text-sm font-semibold text-slate-700">
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          id={id}
-          type={visible ? "text" : "password"}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          autoComplete={autoComplete}
-          required
-          minLength={id === "current-password" ? undefined : 8}
-          placeholder={placeholder}
-          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand-accent focus:ring-4 focus:ring-brand-accent/10"
-        />
-        <button
-          type="button"
-          onClick={() => setVisible((isVisible) => !isVisible)}
-          aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
-          className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 transition hover:text-slate-700"
-        >
-          {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-        </button>
-      </div>
     </div>
   );
 }

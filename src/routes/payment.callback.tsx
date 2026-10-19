@@ -7,7 +7,7 @@ const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:4500";
 
 export const Route = createFileRoute("/payment/callback")({
-  head: () => ({ meta: [{ title: "Verifying Payment — PulseLab" }] }),
+  head: () => ({ meta: [{ title: "Verifying Payment — EU Hardwarestore" }] }),
   component: PaymentCallbackPage,
 });
 

@@ -25,7 +25,7 @@ const CART_STORAGE_KEY = "pulselab_cart";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({
-    meta: [{ title: "Cart — PulseLab" }],
+    meta: [{ title: "Cart — EU Hardwarestore" }],
   }),
 
   component: () => (

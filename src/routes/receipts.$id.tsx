@@ -34,15 +34,15 @@
     import.meta.env.VITE_API_URL || "http://localhost:4500";
 
     const BRAND = {
-    name: "PulseLab",
+    name: "EU Hardwarestore",
     tagline: "Engineering Components Store",
     address: "Engineering Building, Room 204",
     phone: "+234 806 486 4821",
-    email: "support@pulselab.ng",
+    email: "support@euhardwarestore.ng",
     };
 
     export const Route = createFileRoute("/receipts/$id")({
-    head: () => ({ meta: [{ title: "Receipt — PulseLab" }] }),
+    head: () => ({ meta: [{ title: "Receipt — EU Hardwarestore" }] }),
     component: () => (
         <RequireAuth role="student">
         <ReceiptPage />

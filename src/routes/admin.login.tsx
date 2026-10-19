@@ -15,7 +15,7 @@
 
   export const Route = createFileRoute("/admin/login")({
     head: () => ({
-      meta: [{ title: "Admin sign in — PulseLab" }],
+      meta: [{ title: "Admin sign in — EU Hardwarestore" }],
     }),
     component: AdminLogin,
   });

@@ -22,7 +22,7 @@ import {
 
 export const Route = createFileRoute("/register")({
   head: () => ({
-    meta: [{ title: "Register — PulseLab" }],
+    meta: [{ title: "Register — EU Hardwarestore" }],
   }),
   component: RegisterPage,
 });
@@ -121,7 +121,7 @@ function RegisterPage() {
         </h1>
 
         <p className="text-slate-500 text-sm mt-1">
-          Join the EU Hardware Hub.
+          Join the EU Hardwarestore.
         </p>
 
         {/* FORM */}
