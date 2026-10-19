@@ -503,7 +503,7 @@ function AdminOverview({
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Live view of paid orders, hand-overs and stock levels for the Elizade University
+              Live view of paid orders, hand-overs and stock levels for the EU
               hardware hub.
             </p>
           </div>
