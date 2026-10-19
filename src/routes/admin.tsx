@@ -260,8 +260,29 @@ function AdminLayoutShell({
   const logout = useStore((s) => s.logout);
   const navigate = useNavigate();
 
+  /* Lock the page behind the mobile drawer so the content
+     underneath does not scroll while the menu is open. */
+  useEffect(() => {
+    if (!open) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [open]);
+
+  /* Close the drawer when the viewport grows to desktop. */
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   return (
-    <div className="min-h-screen flex bg-slate-950 text-white">
+    <div className="flex min-h-dvh bg-slate-950 text-white lg:h-screen lg:overflow-hidden">
       {open && (
         <div
           onClick={() => setOpen(false)}
@@ -271,14 +292,14 @@ function AdminLayoutShell({
 
       <aside
         className={`
-          fixed lg:static z-50 top-0 left-0 min-h-screen w-64
-          border-r border-white/5 bg-slate-950 flex flex-col
+          fixed lg:static z-50 top-0 left-0 h-dvh w-[17rem] max-w-[85vw] lg:w-64 lg:max-w-none
+          border-r border-white/5 bg-slate-950 flex flex-col overflow-y-auto
           transform transition-transform duration-300
           ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0
         `}
       >
-        <div className="flex items-center justify-between border-b border-white/5 p-6">
-          <div>
+        <div className="flex items-center justify-between border-b border-white/5 p-5 sm:p-6">
+          <div className="min-w-0">
             <Logo className="text-white" />
             <div className="mt-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
               Admin Console
@@ -287,7 +308,7 @@ function AdminLayoutShell({
 
           <button
             onClick={() => setOpen(false)}
-            className="rounded-lg p-1.5 text-slate-500 hover:bg-white/5 hover:text-white lg:hidden"
+            className="-mr-1 shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-white/5 hover:text-white lg:hidden"
             aria-label="Close menu"
           >
             <X className="size-4" />
@@ -315,9 +336,9 @@ function AdminLayoutShell({
           })}
         </nav>
 
+        {/* BACKEND STATUS */}
         <div className="space-y-3 border-t border-white/5 p-3">
-          {/* BACKEND STATUS */}
-          <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2.5">
+          {/* <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2.5">
             <span className="relative flex size-2">
               <span
                 className={`absolute inline-flex size-full animate-ping rounded-full opacity-70 ${
@@ -339,7 +360,7 @@ function AdminLayoutShell({
                 {apiOnline ? "Connected" : "Reconnecting…"}
               </p>
             </div>
-          </div>
+          </div> */}
 
           <button
             onClick={() => {
@@ -355,15 +376,15 @@ function AdminLayoutShell({
       </aside>
 
       <main className="flex-1 overflow-auto transition-all">
-        <div className="flex items-center gap-3 border-b border-white/5 bg-slate-950 p-4 lg:hidden">
+        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-white/5 bg-slate-950/95 px-4 py-3 backdrop-blur lg:hidden">
           <button
             onClick={() => setOpen(true)}
-            className="rounded-lg bg-white/5 p-2 hover:bg-white/10"
+            className="rounded-lg bg-white/5 p-2 text-slate-200 hover:bg-white/10"
             aria-label="Open menu"
           >
             <Menu className="size-5" />
           </button>
-          <span className="font-semibold">Admin</span>
+          <span className="truncate text-sm font-semibold text-white">Admin Console</span>
         </div>
         {children}
       </main>
@@ -463,21 +484,21 @@ function AdminOverview({
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 px-5 py-8 md:px-8">
+    <div className="bg-slate-950 px-4 py-6 sm:px-5 md:px-8 md:py-8">
       <div className="mx-auto max-w-7xl">
         {/* ================= HEADER ================= */}
         <motion.header
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between"
+          className="flex flex-col gap-4 sm:gap-5 md:flex-row md:items-start md:justify-between"
         >
-          <div>
-            <p className="flex items-center gap-2 text-sm font-medium text-brand-accent">
+          <div className="min-w-0">
+            {/* <p className="flex items-center gap-2 text-sm font-medium text-brand-accent">
               <Server className="size-4" />
               Engr-BE · Admin Console
-            </p>
+            </p> */}
 
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-white md:text-4xl">
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl md:text-4xl">
               Operations Overview
             </h1>
 
@@ -487,7 +508,7 @@ function AdminOverview({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             {lastUpdated && (
               <span className="hidden text-xs text-slate-500 sm:block">
                 Synced {timeAgo(lastUpdated.toISOString())}
@@ -497,7 +518,7 @@ function AdminOverview({
             <button
               onClick={onRefresh}
               disabled={refreshing}
-              className="flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50 sm:w-auto"
             >
               <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
@@ -506,7 +527,7 @@ function AdminOverview({
         </motion.header>
 
         {/* ================= STATS ================= */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="mt-6 grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 lg:mt-8 lg:grid-cols-3 xl:grid-cols-4">
           <StatCard
             icon={<Wallet className="size-5" />}
             label="Total Orders"
@@ -550,11 +571,11 @@ function AdminOverview({
         {/* ================= CONTENT ================= */}
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
           {/* ---------- LATEST ORDERS ---------- */}
-          <section className="lg:col-span-2 rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl md:p-6">
+          <section className="lg:col-span-2 rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-xl sm:p-5 md:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="flex items-center gap-2 text-lg font-bold text-white">
-                  <Clock3 className="size-4 text-brand-accent" />
+              <div className="min-w-0">
+                <h2 className="flex items-center gap-2 text-base font-bold text-white sm:text-lg">
+                  <Clock3 className="size-4 shrink-0 text-brand-accent" />
                   Latest Orders
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
@@ -564,7 +585,7 @@ function AdminOverview({
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1">
+              <div className="flex w-full shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1 sm:w-auto">
                 {(
                   [
                     { key: "all", label: "All" },
@@ -575,7 +596,7 @@ function AdminOverview({
                   <button
                     key={f.key}
                     onClick={() => setFilter(f.key)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition sm:flex-none ${
                       filter === f.key
                         ? "bg-brand-accent text-white"
                         : "text-slate-400 hover:bg-white/5 hover:text-white"
@@ -614,7 +635,7 @@ function AdminOverview({
 
               <Link
                 to="/admin/pickup"
-                className="group inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-brand-accent/40 hover:bg-brand-accent/10 hover:text-white"
+                className="group inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-brand-accent/40 hover:bg-brand-accent/10 hover:text-white sm:w-auto"
               >
                 Open pickup desk
                 <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
@@ -625,9 +646,9 @@ function AdminOverview({
           {/* ---------- RIGHT COLUMN ---------- */}
           <div className="space-y-6">
             {/* PIPELINE */}
-            <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl md:p-6">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-white">
-                <Package className="size-4 text-brand-accent" />
+            <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-xl sm:p-5 md:p-6">
+              <h2 className="flex items-center gap-2 text-base font-bold text-white sm:text-lg">
+                <Package className="size-4 shrink-0 text-brand-accent" />
                 Order Pipeline
               </h2>
               <p className="mt-1 text-xs text-slate-500">Where every paid order currently sits</p>
@@ -663,11 +684,11 @@ function AdminOverview({
             </section>
 
             {/* LOW STOCK */}
-            <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-5 shadow-xl md:p-6">
+            <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-xl sm:p-5 md:p-6">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="flex items-center gap-2 text-lg font-bold text-white">
-                    <AlertTriangle className="size-4 text-brand-gold" />
+                <div className="min-w-0">
+                  <h2 className="flex items-center gap-2 text-base font-bold text-white sm:text-lg">
+                    <AlertTriangle className="size-4 shrink-0 text-brand-gold" />
                     Low Stock Alerts
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
@@ -714,7 +735,9 @@ function AdminOverview({
 
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-white">{c.name}</p>
-                          <p className="mt-0.5 font-mono text-[11px] text-slate-500">{c.sku}</p>
+                          <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500">
+                            {c.sku}
+                          </p>
                         </div>
 
                         <span
@@ -785,7 +808,7 @@ function OrderRow({
   return (
     <Link
       to="/admin/pickup"
-      className="group flex items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3 transition hover:border-brand-accent/30 hover:bg-white/[0.05]"
+      className="group flex items-start gap-3 rounded-2xl border border-white/5 bg-white/[0.02] p-3 transition hover:border-brand-accent/30 hover:bg-white/[0.05] sm:items-center sm:gap-4"
     >
       {/* THUMBNAILS */}
       <div className="flex shrink-0 -space-x-3">
@@ -796,17 +819,17 @@ function OrderRow({
               src={src}
               alt={firstItem?.name ?? "Component"}
               loading="lazy"
-              className="size-12 rounded-xl border-2 border-slate-900 object-cover transition group-hover:border-brand-accent/40"
+              className="size-11 rounded-xl border-2 border-slate-900 object-cover transition group-hover:border-brand-accent/40 sm:size-12"
             />
           ))
         ) : (
-          <div className="grid size-12 place-items-center rounded-xl border border-white/10 bg-slate-950">
+          <div className="grid size-11 place-items-center rounded-xl border border-white/10 bg-slate-950 sm:size-12">
             <Package className="size-5 text-slate-700" />
           </div>
         )}
 
         {extraItems > 0 && (
-          <span className="grid size-12 place-items-center rounded-xl border-2 border-slate-900 bg-slate-800 text-xs font-bold text-slate-300">
+          <span className="grid size-11 place-items-center rounded-xl border-2 border-slate-900 bg-slate-800 text-xs font-bold text-slate-300 sm:size-12">
             +{extraItems}
           </span>
         )}
@@ -814,11 +837,13 @@ function OrderRow({
 
       {/* DETAILS */}
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate font-mono text-sm font-semibold text-white">{reference}</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="truncate font-mono text-xs font-semibold text-white sm:text-sm">
+            {reference}
+          </span>
 
           <span
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${meta.chip}`}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${meta.chip}`}
           >
             <span className={`size-1.5 rounded-full ${meta.dot}`} />
             {meta.label}
@@ -828,9 +853,12 @@ function OrderRow({
         <p className="mt-1 truncate text-xs text-slate-500">
           {firstLabel} · {unitCount} unit{unitCount === 1 ? "" : "s"}
         </p>
+
+        {/* AMOUNT — mobile only (on desktop it sits on the right) */}
+        <p className="mt-1.5 text-sm font-bold text-white sm:hidden">{formatNaira(total)}</p>
       </div>
 
-      {/* AMOUNT + TIME */}
+      {/* AMOUNT + TIME — desktop */}
       <div className="hidden shrink-0 text-right sm:block">
         <p className="text-sm font-bold text-white">{formatNaira(total)}</p>
         <p className="mt-0.5 text-[11px] text-slate-500" title={formatDateTime(order.createdAt)}>
@@ -838,7 +866,7 @@ function OrderRow({
         </p>
       </div>
 
-      <ChevronRight className="size-4 shrink-0 text-slate-700 transition group-hover:translate-x-0.5 group-hover:text-brand-accent" />
+      <ChevronRight className="mt-1 hidden size-4 shrink-0 text-slate-700 transition group-hover:translate-x-0.5 group-hover:text-brand-accent sm:mt-0 sm:block" />
     </Link>
   );
 }
@@ -886,14 +914,22 @@ function StatCard({
   const t = tones[tone];
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 shadow-lg transition hover:border-white/20">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[10px] font-mono uppercase tracking-widest text-slate-500">{label}</p>
+    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-lg transition hover:border-white/20 sm:p-5">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <p className="text-[10px] font-mono uppercase leading-tight tracking-widest text-slate-500">
+          {label}
+        </p>
 
-        <div className={`grid size-9 shrink-0 place-items-center rounded-xl ${t.chip}`}>{icon}</div>
+        <div className={`grid size-8 shrink-0 place-items-center rounded-xl sm:size-9 ${t.chip}`}>
+          {icon}
+        </div>
       </div>
 
-      <p className={`mt-3 text-2xl font-bold tracking-tight ${t.value}`}>{value}</p>
+      <p
+        className={`mt-3 break-words text-xl font-bold leading-tight tracking-tight sm:text-2xl ${t.value}`}
+      >
+        {value}
+      </p>
 
       {hint && <p className="mt-1 truncate text-[11px] text-slate-500">{hint}</p>}
     </div>
@@ -947,15 +983,18 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
 
 function AdminSkeleton() {
   return (
-    <div className="min-h-screen bg-slate-950 px-5 py-8 md:px-8">
+    <div className="bg-slate-950 px-4 py-6 sm:px-5 md:px-8 md:py-8">
       <div className="mx-auto max-w-7xl animate-pulse">
         <div className="h-4 w-40 rounded bg-white/5" />
-        <div className="mt-4 h-10 w-72 rounded bg-white/5" />
+        <div className="mt-4 h-9 w-64 max-w-full rounded bg-white/5 sm:h-10 sm:w-72" />
         <div className="mt-2 h-4 w-96 max-w-full rounded bg-white/5" />
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-32 rounded-2xl border border-white/5 bg-white/[0.03]" />
+        <div className="mt-6 grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 lg:mt-8 lg:grid-cols-3 xl:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="h-28 rounded-2xl border border-white/5 bg-white/[0.03] sm:h-32"
+            />
           ))}
         </div>
 
