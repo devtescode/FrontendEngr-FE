@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ReceiptsRouteImport } from './routes/receipts'
 import { Route as ReceiptsIdRouteImport } from './routes/receipts.$id'
@@ -31,6 +32,11 @@ import { Route as AdminCollectedRouteImport } from './routes/admin.collected'
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrdersRoute = OrdersRouteImport.update({
@@ -133,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/receipts': typeof ReceiptsRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/register': typeof RegisterRoute
+  '/settings': typeof SettingsRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/receipts': typeof ReceiptsRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/register': typeof RegisterRoute
+  '/settings': typeof SettingsRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -174,6 +182,7 @@ export interface FileRoutesById {
   '/receipts': typeof ReceiptsRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/register': typeof RegisterRoute
+  '/settings': typeof SettingsRoute
   '/admin/components': typeof AdminComponentsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -196,6 +205,7 @@ export interface FileRouteTypes {
     | '/receipts'
     | '/receipts/$id'
     | '/register'
+    | '/settings'
     | '/admin/components'
     | '/admin/login'
     | '/admin/orders'
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
     | '/receipts'
     | '/receipts/$id'
     | '/register'
+    | '/settings'
     | '/admin/components'
     | '/admin/login'
     | '/admin/orders'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '/receipts'
     | '/receipts/$id'
     | '/register'
+    | '/settings'
     | '/admin/components'
     | '/admin/login'
     | '/admin/orders'
@@ -256,6 +268,7 @@ export interface RootRouteChildren {
   PaymentCallbackRoute: typeof PaymentCallbackRoute
   ReceiptsRoute: typeof ReceiptsRouteWithChildren
   RegisterRoute: typeof RegisterRoute
+  SettingsRoute: typeof SettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminCollectedRoute: typeof AdminCollectedRoute
 }
@@ -267,6 +280,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/orders': {
@@ -432,6 +452,7 @@ const rootRouteChildren: RootRouteChildren = {
   PaymentCallbackRoute: PaymentCallbackRoute,
   ReceiptsRoute: ReceiptsRouteWithChildren,
   RegisterRoute: RegisterRoute,
+  SettingsRoute: SettingsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

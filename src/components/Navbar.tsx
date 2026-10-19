@@ -107,6 +107,8 @@ export function Navbar() {
 
             <NavLink to="/receipts">Order Receipts</NavLink>
 
+            <NavLink to="/settings">Settings</NavLink>
+
             {user?.role === "admin" && (
               <NavLink to="/admin">Admin</NavLink>
             )}
@@ -288,6 +290,12 @@ export function Navbar() {
                   <MobileNavLink to="/orders" onClick={closeMobileMenu}>
                     My Orders
                   </MobileNavLink>
+
+                  {user && (
+                    <MobileNavLink to="/settings" onClick={closeMobileMenu}>
+                      Settings
+                    </MobileNavLink>
+                  )}
 
                   {user?.role === "student" && (
                     <MobileNavLink to="/dashboard" onClick={closeMobileMenu}>
