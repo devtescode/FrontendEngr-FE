@@ -7,8 +7,8 @@
   import logoImg from "../components/Assets/image.webp";
 
 
-  const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+  import { API_BASE_URL } from "@/lib/config";
+  const API_URL = API_BASE_URL;
 
   const SESSION_USER = "admin_user";
   const SESSION_TOKEN = "admin_token";

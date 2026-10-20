@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
   Boxes,
@@ -12,8 +12,6 @@ import {
   Package,
   Menu,
   X,
-  Server,
-  Wallet,
   Clock3,
   CheckCircle2,
   HandCoins,
@@ -22,6 +20,10 @@ import {
   ArrowRight,
   AlertTriangle,
   Layers,
+  BarChart3, 
+  ShoppingCart,
+  CreditCard,
+  
 } from "lucide-react";
 import { RequireAuth } from "@/components/RequireAuth";
 import { Logo } from "@/components/Logo";
@@ -36,7 +38,8 @@ export const Route = createFileRoute("/admin")({
   component: AdminLayout,
 });
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "@/lib/config";
+const API_URL = API_BASE_URL;
 
 /* ============================================================
    HELPERS
@@ -77,8 +80,10 @@ function timeAgo(iso?: string | null): string {
   const diff = Date.now() - then;
   if (diff < 0) return "just now";
 
+  const secs = Math.floor(diff / 1000);
+  if (secs < 60) return secs < 5 ? "just now" : `${secs}s ago`;
+
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
 
   const hours = Math.floor(mins / 60);
@@ -87,9 +92,13 @@ function timeAgo(iso?: string | null): string {
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
 
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks}w ago`;
+
   return new Date(then).toLocaleDateString("en-NG", {
     day: "numeric",
     month: "short",
+    year: "2-digit",
   });
 }
 
@@ -284,38 +293,43 @@ function AdminLayoutShell({
   return (
     <div className="flex min-h-dvh bg-slate-950 text-white lg:h-screen lg:overflow-hidden">
       {open && (
-        <div
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm lg:hidden"
         />
       )}
 
       <aside
         className={`
-          fixed lg:static z-50 top-0 left-0 h-dvh w-[17rem] max-w-[85vw] lg:w-64 lg:max-w-none
-          border-r border-white/5 bg-slate-950 flex flex-col overflow-y-auto
-          transform transition-transform duration-300
-          ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0
+          fixed lg:static z-50 top-0 left-0 h-dvh w-[18rem] max-w-[88vw] sm:w-[19rem] lg:w-64 lg:max-w-none
+          border-r border-white/5 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900/95
+          flex flex-col overflow-y-auto shadow-2xl shadow-black/60
+          transform transition-[transform,box-shadow] duration-300 ease-out
+          ${open ? "translate-x-0 shadow-2xl" : "-translate-x-full"} lg:translate-x-0 lg:shadow-none
         `}
       >
-        <div className="flex items-center justify-between border-b border-white/5 p-5 sm:p-6">
+        <div className="flex items-center justify-between border-b border-white/5 px-4 py-4 sm:px-5 sm:py-5">
           <div className="min-w-0">
             <Logo className="text-white" />
-            <div className="mt-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+            <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
               Admin Console
             </div>
           </div>
 
           <button
             onClick={() => setOpen(false)}
-            className="-mr-1 shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-white/5 hover:text-white lg:hidden"
+            className="-mr-1 shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/5 hover:text-white lg:hidden"
             aria-label="Close menu"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 space-y-1 p-2.5 sm:p-3">
           {NAV.map((n) => {
             const active = n.exact ? pathname === n.to : pathname.startsWith(n.to);
             return (
@@ -323,21 +337,21 @@ function AdminLayoutShell({
                 key={n.to}
                 to={n.to}
                 onClick={() => setOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
                   active
-                    ? "bg-brand-accent/15 text-brand-accent"
-                    : "text-slate-400 hover:bg-white/5 hover:text-white"
+                    ? "bg-gradient-to-r from-brand-accent/20 to-brand-accent/10 text-brand-accent shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]"
+                    : "text-slate-400 hover:bg-white/[0.04] hover:text-white"
                 }`}
               >
-                <n.icon className="size-4" />
-                {n.label}
+                <n.icon className={`size-4 transition-colors ${active ? "text-brand-accent" : "text-slate-500 group-hover:text-slate-300"}`} />
+                <span className="truncate">{n.label}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* BACKEND STATUS */}
-        <div className="space-y-3 border-t border-white/5 p-3">
+        <div className="space-y-2.5 border-t border-white/5 p-2.5 sm:p-3">
           {/* <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2.5">
             <span className="relative flex size-2">
               <span
@@ -367,26 +381,28 @@ function AdminLayoutShell({
               logout();
               navigate({ to: "/admin/login" });
             }}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+            className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm text-slate-400 transition-all duration-200 hover:bg-rose-500/10 hover:text-rose-300 sm:gap-3 sm:px-3"
           >
-            <LogOut className="size-4" />
-            Sign out
+            <LogOut className="size-4 text-slate-500 transition-colors group-hover:text-rose-300" />
+            <span className="truncate">Sign out</span>
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto transition-all">
-        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-white/5 bg-slate-950/95 px-4 py-3 backdrop-blur lg:hidden">
+      <main className="flex-1 overflow-x-hidden overflow-y-auto transition-all">
+        <div className="sticky top-0 z-30 flex items-center gap-2.5 border-b border-white/5 bg-slate-950/95 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-950/80 lg:hidden">
           <button
             onClick={() => setOpen(true)}
-            className="rounded-lg bg-white/5 p-2 text-slate-200 hover:bg-white/10"
+            className="rounded-lg bg-white/[0.04] p-1.5 text-slate-200 transition-colors hover:bg-white/[0.08] sm:p-2"
             aria-label="Open menu"
           >
-            <Menu className="size-5" />
+            <Menu className="size-4 sm:size-5" />
           </button>
-          <span className="truncate text-sm font-semibold text-white">Admin Console</span>
+          <span className="truncate text-xs font-semibold tracking-tight text-white sm:text-sm">Admin Console</span>
         </div>
-        {children}
+        <div className="w-full max-w-full overflow-x-hidden">
+          {children}
+        </div>
       </main>
     </div>
   );
@@ -409,6 +425,7 @@ function AdminOverview({
 }) {
   const orders = useStore((s) => s.orders);
   const components = useStore((s) => s.components);
+  const users = useStore((s) => s.users);
   const [filter, setFilter] = useState<OrderFilter>("all");
 
   /* ---------------------------------------------------
@@ -435,6 +452,23 @@ function AdminOverview({
 
     const revenue = paidOrders.reduce((sum, o) => sum + orderTotal(o), 0);
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const ordersToday = orders.filter((o) => {
+      const d = new Date(o.createdAt);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime() === today.getTime();
+    });
+    const revenueToday = paidOrders
+      .filter((o) => {
+        const d = new Date(o.createdAt);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime() === today.getTime();
+      })
+      .reduce((sum, o) => sum + orderTotal(o), 0);
+
+    const totalUsers = users.filter((u) => u.role !== "admin").length;
+
     return {
       total: orders.length,
       paidCount: paidOrders.length,
@@ -444,9 +478,14 @@ function AdminOverview({
       collected: paidOrders.filter((o) => isCollected(o)).length,
       unpaid: orders.length - paidOrders.length,
       revenue,
+      revenueToday,
+      ordersToday: ordersToday.length,
       lowStock: components.filter((c) => Number(c?.stock ?? 0) < 10).length,
+      outOfStock: components.filter((c) => Number(c?.stock ?? 0) <= 0).length,
+      totalComponents: components.length,
+      totalUsers,
     };
-  }, [orders, components]);
+  }, [orders, components, users]);
 
   /* ---------------------------------------------------
      The 5 most recent orders, newest first.
@@ -484,12 +523,13 @@ function AdminOverview({
   );
 
   return (
-    <div className="bg-slate-950 px-4 py-6 sm:px-5 md:px-8 md:py-8">
+    <div className="bg-slate-950 px-3 py-5 sm:px-4 sm:py-6 md:px-6 lg:px-8 md:py-8">
       <div className="mx-auto max-w-7xl">
         {/* ================= HEADER ================= */}
         <motion.header
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
           className="flex flex-col gap-4 sm:gap-5 md:flex-row md:items-start md:justify-between"
         >
           <div className="min-w-0">
@@ -498,17 +538,17 @@ function AdminOverview({
               Engr-BE · Admin Console
             </p> */}
 
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl md:text-4xl">
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
               Operations Overview
             </h1>
 
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-400 sm:mt-2">
               Live view of paid orders, hand-overs and stock levels for the EU
               hardware hub.
             </p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
             {lastUpdated && (
               <span className="hidden text-xs text-slate-500 sm:block">
                 Synced {timeAgo(lastUpdated.toISOString())}
@@ -518,7 +558,7 @@ function AdminOverview({
             <button
               onClick={onRefresh}
               disabled={refreshing}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50 sm:w-auto"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 text-sm font-medium text-slate-300 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06] hover:text-white disabled:opacity-50 sm:h-11 sm:w-auto sm:px-4"
             >
               <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
@@ -527,29 +567,29 @@ function AdminOverview({
         </motion.header>
 
         {/* ================= STATS ================= */}
-        <div className="mt-6 grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 lg:mt-8 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="mt-6 grid grid-cols-1 gap-2.5 min-[480px]:grid-cols-2 sm:gap-3 lg:mt-8 lg:grid-cols-3 xl:grid-cols-5">
           <StatCard
-            icon={<Wallet className="size-5" />}
+            icon={<ShoppingCart className="size-5" />}
             label="Total Orders"
             value={stats.total}
             hint={`${stats.paidCount} paid · ${stats.unpaid} unpaid`}
           />
 
           <StatCard
-            icon={<HandCoins className="size-5" />}
-            label="Paid, Not Collected"
-            value={stats.awaitingPickup}
-            hint="Paid · awaiting hand-over"
-            tone="amber"
+            icon={<CreditCard className="size-5" />}
+            label="Today's Orders"
+            value={stats.ordersToday}
+            hint={`${formatNaira(stats.revenueToday)} today`}
+            tone="accent"
           />
 
-          {/* <StatCard
-            icon={<PackageCheck className="size-5" />}
-            label="Ready for Pickup"
-            value={stats.ready}
-            hint="Prepared & waiting"
-            tone="accent"
-          /> */}
+          <StatCard
+            icon={<HandCoins className="size-5" />}
+            label="Awaiting Pickup"
+            value={stats.awaitingPickup}
+            hint="Paid · not collected"
+            tone="amber"
+          />
 
           <StatCard
             icon={<CheckCircle2 className="size-5" />}
@@ -561,20 +601,55 @@ function AdminOverview({
 
           <StatCard
             icon={<CircleDollarSign className="size-5" />}
-            label="Revenue"
+            label="Total Revenue"
             value={formatNaira(stats.revenue)}
-            hint="From paid orders"
+            hint={`${formatNaira(stats.paidCount ? stats.revenue / stats.paidCount : 0)} avg/order`}
             tone="gold"
           />
         </div>
 
+        {/* Quick Metrics */}
+        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+          <MiniQuickMetric
+            icon={<Users className="size-4" />}
+            label="Students"
+            value={stats.totalUsers}
+            to="/admin/users"
+          />
+          <MiniQuickMetric
+            icon={<Boxes className="size-4" />}
+            label="Components"
+            value={stats.totalComponents}
+            to="/admin/components"
+          />
+          <MiniQuickMetric
+            icon={<AlertTriangle className="size-4" />}
+            label="Low Stock"
+            value={stats.lowStock}
+            tone={stats.lowStock > 0 ? "amber" : "default"}
+            to="/admin/components"
+          />
+          <MiniQuickMetric
+            icon={<Package className="size-4" />}
+            label="Out of Stock"
+            value={stats.outOfStock}
+            tone={stats.outOfStock > 0 ? "rose" : "default"}
+            to="/admin/components"
+          />
+        </div>
+
         {/* ================= CONTENT ================= */}
-        <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <div className="mt-5 grid gap-4 sm:gap-5 lg:mt-6 lg:grid-cols-3">
           {/* ---------- LATEST ORDERS ---------- */}
-          <section className="lg:col-span-2 rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-xl sm:p-5 md:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="lg:col-span-2 rounded-2xl sm:rounded-3xl border border-white/10 bg-gradient-to-b from-slate-900/70 to-slate-900/50 p-3 shadow-xl shadow-black/20 sm:p-4 md:p-5 lg:p-6"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h2 className="flex items-center gap-2 text-base font-bold text-white sm:text-lg">
+                <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-white sm:text-lg">
                   <Clock3 className="size-4 shrink-0 text-brand-accent" />
                   Latest Orders
                 </h2>
@@ -585,7 +660,7 @@ function AdminOverview({
                 </p>
               </div>
 
-              <div className="flex w-full shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1 sm:w-auto">
+              <div className="flex w-full shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/[0.02] p-0.5 backdrop-blur-sm sm:w-auto">
                 {(
                   [
                     { key: "all", label: "All" },
@@ -596,10 +671,10 @@ function AdminOverview({
                   <button
                     key={f.key}
                     onClick={() => setFilter(f.key)}
-                    className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition sm:flex-none ${
+                    className={`flex-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all duration-200 sm:flex-none ${
                       filter === f.key
-                        ? "bg-brand-accent text-white"
-                        : "text-slate-400 hover:bg-white/5 hover:text-white"
+                        ? "bg-brand-accent text-white shadow-[0_0_0_1px_rgba(59,130,246,0.4)]"
+                        : "text-slate-400 hover:bg-white/[0.04] hover:text-white"
                     }`}
                   >
                     {f.label}
@@ -610,7 +685,7 @@ function AdminOverview({
 
             {recent.length === 0 ? (
               <div className="flex flex-col items-center py-14 text-center">
-                <div className="grid size-16 place-items-center rounded-2xl bg-white/5">
+                <div className="grid size-16 place-items-center rounded-2xl bg-white/5 ring-1 ring-white/10">
                   <Layers className="size-7 text-slate-600" />
                 </div>
                 <h3 className="mt-4 text-base font-semibold text-white">No orders yet</h3>
@@ -621,73 +696,95 @@ function AdminOverview({
                 </p>
               </div>
             ) : (
-              <div className="mt-5 space-y-2.5">
-                {recent.map((order) => (
-                  <OrderRow key={order.id} order={order} imageByComponent={imageByComponent} />
+              <div className="mt-4 space-y-2 sm:mt-5">
+                {recent.map((order, index) => (
+                  <motion.div
+                    key={order.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                  >
+                    <OrderRow order={order} imageByComponent={imageByComponent} />
+                  </motion.div>
                 ))}
               </div>
             )}
 
-            <div className="mt-5 flex flex-col gap-3 border-t border-white/5 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-4 flex flex-col gap-2.5 border-t border-white/5 pt-4 sm:mt-5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-5">
               <p className="text-xs text-slate-500">
                 Hand over paid components from the pickup desk.
               </p>
 
               <Link
                 to="/admin/pickup"
-                className="group inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-brand-accent/40 hover:bg-brand-accent/10 hover:text-white sm:w-auto"
+                className="group inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2 text-sm font-semibold text-slate-200 transition-all duration-200 hover:border-brand-accent/40 hover:bg-brand-accent/10 hover:text-white sm:w-auto sm:px-4 sm:py-2.5"
               >
                 Open pickup desk
                 <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
               </Link>
             </div>
-          </section>
+          </motion.section>
 
           {/* ---------- RIGHT COLUMN ---------- */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* PIPELINE */}
-            <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-xl sm:p-5 md:p-6">
-              <h2 className="flex items-center gap-2 text-base font-bold text-white sm:text-lg">
-                <Package className="size-4 shrink-0 text-brand-accent" />
+            <motion.section
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.4, ease: "easeOut" }}
+              className="rounded-2xl sm:rounded-3xl border border-white/10 bg-gradient-to-b from-slate-900/70 to-slate-900/50 p-3 sm:p-4 md:p-5 lg:p-6 shadow-xl shadow-black/20"
+            >
+              <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-white sm:text-lg">
+                <BarChart3 className="size-4 shrink-0 text-brand-accent" />
                 Order Pipeline
               </h2>
               <p className="mt-1 text-xs text-slate-500">Where every paid order currently sits</p>
 
-              <div className="mt-5 space-y-4">
+              <div className="mt-4 space-y-3 sm:mt-5 sm:space-y-4">
                 <PipelineRow
-                  label="Paid · not collected"
+                  label="Awaiting pickup"
                   value={stats.awaitingPickup}
                   total={Math.max(stats.paidCount, 1)}
                   bar="bg-amber-400"
                 />
-                {/* <PipelineRow
-                  label="Ready for pickup"
-                  value={stats.ready}
-                  total={Math.max(stats.paidCount, 1)}
-                  bar="bg-brand-accent"
-                /> */}
                 <PipelineRow
                   label="Collected"
                   value={stats.collected}
                   total={Math.max(stats.paidCount, 1)}
                   bar="bg-emerald-400"
                 />
+                <PipelineRow
+                  label="Unpaid"
+                  value={stats.unpaid}
+                  total={Math.max(stats.total, 1)}
+                  bar="bg-rose-400"
+                />
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/5 pt-5">
+              <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/5 pt-4 sm:mt-5 sm:gap-2.5 sm:pt-5">
                 <MiniStat label="Paid orders" value={stats.paidCount} />
                 <MiniStat
                   label="Avg. order"
                   value={formatNaira(stats.paidCount ? stats.revenue / stats.paidCount : 0)}
                 />
+                <MiniStat label="Orders today" value={stats.ordersToday} />
+                <MiniStat
+                  label="Revenue today"
+                  value={formatNaira(stats.revenueToday)}
+                />
               </div>
-            </section>
+            </motion.section>
 
             {/* LOW STOCK */}
-            <section className="rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-xl sm:p-5 md:p-6">
+            <motion.section
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.4, ease: "easeOut" }}
+              className="rounded-2xl sm:rounded-3xl border border-white/10 bg-gradient-to-b from-slate-900/70 to-slate-900/50 p-3 sm:p-4 md:p-5 lg:p-6 shadow-xl shadow-black/20"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="flex items-center gap-2 text-base font-bold text-white sm:text-lg">
+                  <h2 className="flex items-center gap-2 text-base font-bold tracking-tight text-white sm:text-lg">
                     <AlertTriangle className="size-4 shrink-0 text-brand-gold" />
                     Low Stock Alerts
                   </h2>
@@ -697,7 +794,7 @@ function AdminOverview({
                   </p>
                 </div>
 
-                <span className="rounded-xl bg-brand-gold/10 px-3 py-1.5 text-sm font-bold text-brand-gold">
+                <span className="rounded-xl bg-brand-gold/10 px-2.5 py-1 text-sm font-bold text-brand-gold ring-1 ring-brand-gold/20 sm:px-3 sm:py-1.5">
                   {stats.lowStock}
                 </span>
               </div>
@@ -716,9 +813,9 @@ function AdminOverview({
                     return (
                       <div
                         key={c.id}
-                        className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.02] p-2.5"
+                        className="flex items-center gap-2.5 rounded-2xl border border-white/5 bg-white/[0.02] p-2 transition-all duration-200 hover:bg-white/[0.04] sm:gap-3 sm:p-2.5"
                       >
-                        <div className="size-11 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950">
+                        <div className="size-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950 sm:size-11">
                           {img ? (
                             <img
                               src={img}
@@ -728,23 +825,23 @@ function AdminOverview({
                             />
                           ) : (
                             <div className="grid size-full place-items-center">
-                              <Package className="size-5 text-slate-700" />
+                              <Package className="size-4 sm:size-5 text-slate-700" />
                             </div>
                           )}
                         </div>
 
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-white">{c.name}</p>
-                          <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500">
-                            {c.sku}
+                          <p className="mt-0.5 truncate font-mono text-[10px] text-slate-500 sm:text-[11px]">
+                            {c.sku || "—"}
                           </p>
                         </div>
 
                         <span
-                          className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold ${
+                          className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold sm:px-2.5 sm:py-1 ${
                             stock <= 3
-                              ? "bg-rose-500/10 text-rose-300"
-                              : "bg-amber-500/10 text-amber-300"
+                              ? "bg-rose-500/10 text-rose-300 ring-1 ring-rose-500/20"
+                              : "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/20"
                           }`}
                         >
                           {stock} left
@@ -757,12 +854,12 @@ function AdminOverview({
 
               <Link
                 to="/admin/components"
-                className="group mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600"
+                className="group mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-accent px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-blue-600 hover:shadow-lg hover:shadow-brand-accent/20 sm:mt-5"
               >
                 Manage inventory
                 <ChevronRight className="size-4 transition group-hover:translate-x-0.5" />
               </Link>
-            </section>
+            </motion.section>
           </div>
         </div>
       </div>
@@ -808,10 +905,10 @@ function OrderRow({
   return (
     <Link
       to="/admin/pickup"
-      className="group flex items-start gap-3 rounded-2xl border border-white/5 bg-white/[0.02] p-3 transition hover:border-brand-accent/30 hover:bg-white/[0.05] sm:items-center sm:gap-4"
+      className="group flex items-start gap-2.5 rounded-2xl border border-white/5 bg-white/[0.02] p-2.5 transition-all duration-200 hover:border-brand-accent/40 hover:bg-white/[0.06] hover:shadow-md hover:shadow-black/20 sm:items-center sm:gap-4 sm:p-3"
     >
       {/* THUMBNAILS */}
-      <div className="flex shrink-0 -space-x-3">
+      <div className="flex shrink-0 -space-x-2 sm:-space-x-2.5">
         {thumbs.length > 0 ? (
           thumbs.map((src, i) => (
             <img
@@ -819,17 +916,17 @@ function OrderRow({
               src={src}
               alt={firstItem?.name ?? "Component"}
               loading="lazy"
-              className="size-11 rounded-xl border-2 border-slate-900 object-cover transition group-hover:border-brand-accent/40 sm:size-12"
+              className="size-10 rounded-xl border-2 border-slate-900 object-cover transition group-hover:border-brand-accent/40 sm:size-11 md:size-12"
             />
           ))
         ) : (
-          <div className="grid size-11 place-items-center rounded-xl border border-white/10 bg-slate-950 sm:size-12">
-            <Package className="size-5 text-slate-700" />
+          <div className="grid size-10 place-items-center rounded-xl border border-white/10 bg-slate-950 sm:size-11 md:size-12">
+            <Package className="size-4 sm:size-5 text-slate-700" />
           </div>
         )}
 
         {extraItems > 0 && (
-          <span className="grid size-11 place-items-center rounded-xl border-2 border-slate-900 bg-slate-800 text-xs font-bold text-slate-300 sm:size-12">
+          <span className="grid size-10 place-items-center rounded-xl border-2 border-slate-900 bg-slate-800 text-[9px] font-bold text-slate-300 sm:size-11 md:size-12 sm:text-xs">
             +{extraItems}
           </span>
         )}
@@ -843,14 +940,14 @@ function OrderRow({
           </span>
 
           <span
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${meta.chip}`}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.15em] sm:text-[10px] ${meta.chip}`}
           >
             <span className={`size-1.5 rounded-full ${meta.dot}`} />
             {meta.label}
           </span>
         </div>
 
-        <p className="mt-1 truncate text-xs text-slate-500">
+        <p className="mt-1 truncate text-[11px] text-slate-500 sm:text-xs">
           {firstLabel} · {unitCount} unit{unitCount === 1 ? "" : "s"}
         </p>
 
@@ -866,7 +963,7 @@ function OrderRow({
         </p>
       </div>
 
-      <ChevronRight className="mt-1 hidden size-4 shrink-0 text-slate-700 transition group-hover:translate-x-0.5 group-hover:text-brand-accent sm:mt-0 sm:block" />
+      <ChevronRight className="mt-0.5 hidden size-4 shrink-0 text-slate-700 transition group-hover:translate-x-0.5 group-hover:text-brand-accent sm:mt-0 sm:block" />
     </Link>
   );
 }
@@ -914,24 +1011,27 @@ function StatCard({
   const t = tones[tone];
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-lg transition hover:border-white/20 sm:p-5">
-      <div className="flex items-start justify-between gap-2 sm:gap-3">
-        <p className="text-[10px] font-mono uppercase leading-tight tracking-widest text-slate-500">
-          {label}
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-950/90 p-4 shadow-lg transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:shadow-black/20 sm:p-5">
+      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+      <div className="relative">
+        <div className="flex items-start justify-between gap-2 sm:gap-3">
+          <p className="text-[10px] font-mono uppercase leading-tight tracking-[0.2em] text-slate-500">
+            {label}
+          </p>
+
+          <div className={`grid size-9 shrink-0 place-items-center rounded-xl shadow-sm ring-1 ring-white/10 backdrop-blur-sm sm:size-10 ${t.chip}`}>
+            {icon}
+          </div>
+        </div>
+
+        <p
+          className={`mt-3 break-words text-xl font-bold leading-tight tracking-tight sm:text-2xl lg:text-3xl ${t.value}`}
+        >
+          {value}
         </p>
 
-        <div className={`grid size-8 shrink-0 place-items-center rounded-xl sm:size-9 ${t.chip}`}>
-          {icon}
-        </div>
+        {hint && <p className="mt-1.5 line-clamp-2 text-xs text-slate-500 sm:text-[11px]">{hint}</p>}
       </div>
-
-      <p
-        className={`mt-3 break-words text-xl font-bold leading-tight tracking-tight sm:text-2xl ${t.value}`}
-      >
-        {value}
-      </p>
-
-      {hint && <p className="mt-1 truncate text-[11px] text-slate-500">{hint}</p>}
     </div>
   );
 }
@@ -953,7 +1053,7 @@ function PipelineRow({
     <div>
       <div className="flex items-center justify-between text-xs">
         <span className="font-medium text-slate-300">{label}</span>
-        <span className="font-bold text-white">{value}</span>
+        <span className="font-bold text-white">{value} <span className="text-slate-500">({pct}%)</span></span>
       </div>
 
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
@@ -970,10 +1070,49 @@ function PipelineRow({
 
 function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">{label}</p>
-      <p className="mt-1 text-sm font-bold text-white">{value}</p>
+    <div className="rounded-xl border border-white/5 bg-white/[0.03] px-2.5 py-2 sm:px-3 sm:py-2.5">
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-600 sm:text-[10px]">{label}</p>
+      <p className="mt-0.5 text-xs font-bold text-white sm:mt-1 sm:text-sm">{value}</p>
     </div>
+  );
+}
+
+function MiniQuickMetric({
+  icon,
+  label,
+  value,
+  tone = "default",
+  to,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number | string;
+  tone?: "default" | "amber" | "rose" | "accent" | "green" | "gold";
+  to: string;
+}) {
+  const tones: Record<string, string> = {
+    default: "bg-white/5 text-slate-400",
+    amber: "bg-amber-500/10 text-amber-400",
+    rose: "bg-rose-500/10 text-rose-400",
+    accent: "bg-brand-accent/10 text-brand-accent",
+    green: "bg-emerald-500/10 text-emerald-400",
+    gold: "bg-brand-gold/10 text-brand-gold",
+  };
+
+  return (
+    <Link
+      to={to}
+      className="group flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] p-2.5 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06] sm:gap-3 sm:p-3"
+    >
+      <div className={`grid size-8 shrink-0 place-items-center rounded-lg ring-1 ring-white/10 backdrop-blur-sm sm:size-9 ${tones[tone]}`}>
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-semibold text-slate-400">{label}</p>
+        <p className="text-sm font-bold text-white sm:text-base">{value}</p>
+      </div>
+      <ChevronRight className="size-4 shrink-0 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-slate-400" />
+    </Link>
   );
 }
 
@@ -983,24 +1122,45 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
 
 function AdminSkeleton() {
   return (
-    <div className="bg-slate-950 px-4 py-6 sm:px-5 md:px-8 md:py-8">
-      <div className="mx-auto max-w-7xl animate-pulse">
-        <div className="h-4 w-40 rounded bg-white/5" />
-        <div className="mt-4 h-9 w-64 max-w-full rounded bg-white/5 sm:h-10 sm:w-72" />
-        <div className="mt-2 h-4 w-96 max-w-full rounded bg-white/5" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4 py-6 sm:px-5 md:px-8 md:py-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="animate-pulse">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex-1">
+              <div className="h-4 w-40 rounded bg-white/5" />
+              <div className="mt-4 h-9 w-64 max-w-full rounded bg-white/5 sm:h-10 sm:w-72" />
+              <div className="mt-2 h-4 w-96 max-w-full rounded bg-white/5" />
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="hidden h-10 w-32 rounded-xl bg-white/5 sm:block" />
+              <div className="h-10 w-full rounded-xl bg-white/5 sm:h-11 sm:w-28" />
+            </div>
+          </div>
 
-        <div className="mt-6 grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 lg:mt-8 lg:grid-cols-3 xl:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-28 rounded-2xl border border-white/5 bg-white/[0.03] sm:h-32"
-            />
-          ))}
-        </div>
+          <div className="mt-6 grid gap-3 min-[480px]:grid-cols-2 sm:gap-4 lg:mt-8 lg:grid-cols-3 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="relative overflow-hidden h-28 rounded-2xl border border-white/10 bg-white/[0.02] sm:h-32"
+              >
+                <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/[0.03] to-transparent" />
+              </div>
+            ))}
+          </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-3">
-          <div className="h-96 rounded-3xl border border-white/5 bg-white/[0.03] lg:col-span-2" />
-          <div className="h-96 rounded-3xl border border-white/5 bg-white/[0.03]" />
+          <div className="mt-6 grid gap-6 lg:grid-cols-3">
+            <div className="relative overflow-hidden h-96 rounded-3xl border border-white/10 bg-white/[0.02] lg:col-span-2">
+              <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/[0.03] to-transparent" />
+            </div>
+            <div className="space-y-6">
+              <div className="relative overflow-hidden h-64 rounded-3xl border border-white/10 bg-white/[0.02]">
+                <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/[0.03] to-transparent" />
+              </div>
+              <div className="relative overflow-hidden h-72 rounded-3xl border border-white/10 bg-white/[0.02]">
+                <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/[0.03] to-transparent" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

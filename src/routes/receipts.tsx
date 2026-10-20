@@ -33,9 +33,10 @@ import {
   type Order,
   type OrderItem,
 } from "@/lib/ordersStore";
+import { API_BASE_URL } from "@/lib/config";
 
 export const Route = createFileRoute("/receipts")({
-  head: () => ({ meta: [{ title: "Receipts — EU Hardwarestore" }] }),
+  head: () => ({ meta: [{ title: "Receipts - EU Hardwarestore" }] }),
   component: () => (
     <RequireAuth role="student">
       <ReceiptsIndexPage />

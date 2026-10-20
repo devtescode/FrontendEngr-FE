@@ -141,57 +141,119 @@ function uid(prefix = "") {
    store only ever holds fully-formed PaymentOrders.
 ============================================================ */
 
-export function normalizeOrderItem(raw: any): OrderItem {
-  /* The server either stores a plain componentId string or
-     populates the whole component document. Support both so the
-     UI can show the component image / sku. */
-  const populated =
-    raw?.componentId && typeof raw.componentId === "object" ? raw.componentId : null;
+const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
+const safeStr = (v: unknown, fb = "") => {
+  if (v == null) return fb;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "bigint") return String(v);
+  if (isObj(v)) {
+    if (v._id != null) return String(v._id);
+    if (v.id != null) return String(v.id);
+  }
+  return String(v);
+};
+const safeNum = (v: unknown, fb = 0) => {
+  if (v == null) return fb;
+  if (typeof v === "number") return Number.isFinite(v) ? v : fb;
+  if (typeof v === "string") {
+    const n = Number(v.trim());
+    return Number.isFinite(n) ? n : fb;
+  }
+  return fb;
+};
+const safeNullStr = (v: unknown) => {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t === "" ? null : t;
+  }
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (isObj(v)) {
+    if (v.url != null) return safeNullStr(v.url);
+    if (v.src != null) return safeNullStr(v.src);
+    if (v.image != null) return safeNullStr(v.image);
+  }
+  return null;
+};
+const pickObj = (obj: any, keys: string[]) => {
+  if (!isObj(obj)) return null;
+  for (const k of keys) {
+    if (isObj(obj[k])) return obj[k];
+  }
+  return null;
+};
 
-  const componentId = populated
-    ? String(populated._id ?? populated.id ?? "")
-    : String(raw?.componentId ?? "");
+export function normalizeOrderItem(raw: any): OrderItem {
+  if (!isObj(raw)) return { componentId: "", name: "", price: 0, quantity: 0, image: null, sku: null };
+  const populated =
+    raw.componentId && isObj(raw.componentId)
+      ? raw.componentId
+      : pickObj(raw, ["component", "product", "item"]);
+
+  const componentId = safeStr(
+    populated?._id ?? populated?.id ?? raw.componentId ?? raw.componentId?._id,
+    ""
+  );
+
+  const name = safeStr(raw.name ?? populated?.name ?? "", "");
+  const price = safeNum(raw.price ?? populated?.price ?? raw.unitPrice ?? raw.amount ?? 0, 0);
+  const quantity = safeNum(raw.quantity ?? raw.qty ?? raw.count ?? 0, 0);
+
+  const image = safeNullStr(populated?.image ?? populated?.thumbnail ?? raw.image ?? raw.thumbnail) ?? null;
+  const sku = safeNullStr(populated?.sku ?? raw.sku ?? "") ?? null;
 
   return {
     componentId,
-    name: raw?.name ?? populated?.name ?? "",
-    price: Number(raw?.price ?? 0), // already naira
-    quantity: Number(raw?.quantity ?? 0),
-    image: populated?.image ?? raw?.image ?? null,
-    sku: populated?.sku ?? raw?.sku ?? null,
+    name,
+    price,
+    quantity,
+    image,
+    sku,
   };
 }
 
 export function normalizeOrder(raw: any): PaymentOrder {
-  const amountKobo = Number(raw?.amountKobo ?? raw?.amount ?? 0);
-  const items: OrderItem[] = Array.isArray(raw?.items)
-    ? raw.items
+  const source = isObj(raw) ? raw : {};
+  const amountKobo = Math.round(safeNum(source.amountKobo ?? source.amount ?? source.totalKobo ?? 0, 0));
+  const items: OrderItem[] = Array.isArray(source.items)
+    ? source.items
         .map(normalizeOrderItem)
-        .filter(
-          (i: OrderItem) => i.componentId !== "" && i.quantity > 0
-        )
+        .filter((i: OrderItem) => i.componentId !== "" && i.quantity > 0)
     : [];
 
+  const totalFromItemsNaira = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const amountNaira = amountKobo > 0 ? amountKobo / 100 : totalFromItemsNaira;
+
+  const userId = safeStr(
+    source.userId?._id ?? source.userId ?? source.buyerId ?? source.customerId ?? "",
+    ""
+  );
+
+  const itemCount =
+    typeof source.itemCount === "number" && Number.isFinite(source.itemCount)
+      ? source.itemCount
+      : items.reduce((s, i) => s + i.quantity, 0);
+
   return {
-    id: String(raw?.id ?? raw?._id ?? ""),
-    reference: String(raw?.reference ?? ""),
-    userId: String(raw?.userId?._id ?? raw?.userId ?? ""),
+    id: safeStr(source.id ?? source._id ?? source.orderId ?? "", ""),
+    reference: safeStr(source.reference ?? source.ref ?? "", ""),
+    userId,
     items,
     amountKobo,
-    amountNaira: amountKobo / 100,
-    currency: raw?.currency ?? "NGN",
-    paymentStatus: raw?.paymentStatus ?? "pending",
-    pickupStatus: raw?.pickupStatus ?? null,
-    paystackTransactionId: raw?.paystackTransactionId,
-    paystackChannel: raw?.paystackChannel,
-    paystackGatewayResponse: raw?.paystackGatewayResponse,
-    paystackFees: raw?.paystackFees,
-    paystackPaidAt: raw?.paystackPaidAt,
-    paidAt: raw?.paidAt,
-    collectedAt: raw?.collectedAt,
-    createdAt: raw?.createdAt ?? new Date().toISOString(),
-    updatedAt: raw?.updatedAt ?? new Date().toISOString(),
-    itemCount: items.reduce((s, i) => s + i.quantity, 0),
+    amountNaira,
+    currency: safeStr(source.currency ?? "NGN", "NGN"),
+    paymentStatus: (source.paymentStatus as PaymentStatus) ?? "pending",
+    pickupStatus: source.pickupStatus ?? null,
+    paystackTransactionId: source.paystackTransactionId,
+    paystackChannel: source.paystackChannel,
+    paystackGatewayResponse: source.paystackGatewayResponse,
+    paystackFees: source.paystackFees,
+    paystackPaidAt: source.paystackPaidAt,
+    paidAt: source.paidAt,
+    collectedAt: source.collectedAt,
+    createdAt: safeStr(source.createdAt ?? source.created_at ?? new Date().toISOString(), new Date().toISOString()),
+    updatedAt: safeStr(source.updatedAt ?? source.updated_at ?? new Date().toISOString(), new Date().toISOString()),
+    itemCount,
   };
 }
 

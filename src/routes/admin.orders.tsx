@@ -22,8 +22,8 @@ export const Route = createFileRoute("/admin/orders")({
   component: AdminCarts,
 });
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "@/lib/config";
+const API_URL = API_BASE_URL;
 
 type CartItem = {
   componentId: {

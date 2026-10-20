@@ -18,8 +18,8 @@ import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { formatNaira, useCurrentUser } from "@/lib/store";
 import { socket, connectUserSocket } from "@/lib/socket";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "@/lib/config";
+const API_URL = API_BASE_URL;
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -35,6 +35,48 @@ export const Route = createFileRoute("/dashboard")({
 // =====================================================
 // TYPES
 // =====================================================
+
+const isObjDash = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
+const toStr = (v: unknown, fb = "") => {
+  if (v == null) return fb;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "bigint") return String(v);
+  if (isObjDash(v)) {
+    if (v._id != null) return String(v._id);
+    if (v.id != null) return String(v.id);
+  }
+  return String(v);
+};
+const toNum = (v: unknown, fb = 0) => {
+  if (v == null) return fb;
+  if (typeof v === "number") return Number.isFinite(v) ? v : fb;
+  if (typeof v === "string") {
+    const n = Number(v.trim());
+    return Number.isFinite(n) ? n : fb;
+  }
+  return fb;
+};
+const toNullStr = (v: unknown): string | null => {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t === "" ? null : t;
+  }
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (isObjDash(v)) {
+    if (v.url != null) return toNullStr(v.url);
+    if (v.src != null) return toNullStr(v.src);
+    if (v.image != null) return toNullStr(v.image);
+  }
+  return null;
+};
+const pickObjDash = (obj: any, keys: string[]) => {
+  if (!isObjDash(obj)) return null;
+  for (const k of keys) {
+    if (isObjDash(obj[k])) return obj[k];
+  }
+  return null;
+};
 
 type OrderItem = {
   componentId: string;
@@ -56,13 +98,14 @@ type Order = {
   paidAt: string;
   createdAt: string;
   collectedAt?: string | null;
+  itemCount?: number;
 };
 
 type Cart = {
   _id?: string;
   userId?: string;
   items: {
-    componentId: string | { _id: string };
+    componentId: string | { _id: string; id?: string } | any;
     quantity: number;
   }[];
 };
@@ -118,46 +161,76 @@ async function fetchWithTimeout(
 // =====================================================
 
 function normalizeOrder(raw: any): Order {
-  const id = String(raw?.id ?? raw?._id ?? "");
+  const source = isObjDash(raw) ? raw : {};
 
-  const items: OrderItem[] = Array.isArray(raw?.items)
-    ? raw.items.map((it: any) => {
-        const populated =
-          it?.componentId && typeof it.componentId === "object"
-            ? it.componentId
-            : null;
+  const id = toStr(source.id ?? source._id ?? source.orderId ?? source.uuid, "");
 
-        return {
-          componentId: String(
-            populated?._id ?? it?.componentId ?? ""
-          ),
-          name: String(it?.name ?? ""),
-          price: Number(it?.price ?? 0),
-          quantity: Number(it?.quantity ?? 0),
-          image: populated?.image ?? it?.image ?? null,
-          sku: populated?.sku ?? it?.sku ?? null,
-        };
-      })
+  const items: OrderItem[] = Array.isArray(source.items)
+    ? source.items
+        .map((it: any): OrderItem | null => {
+          if (!isObjDash(it)) return null;
+
+          const populated =
+            it.componentId && isObjDash(it.componentId)
+              ? it.componentId
+              : pickObjDash(it, ["component", "product", "item"]);
+
+          const componentId = toStr(
+            populated?._id ?? populated?.id ?? it.componentId ?? it.componentId?._id,
+            ""
+          );
+          if (!componentId) return null;
+
+          const name = toStr(it.name ?? populated?.name ?? "", "");
+          const price = toNum(it.price ?? populated?.price ?? it.unitPrice ?? it.amount ?? 0, 0);
+          const quantity = toNum(it.quantity ?? it.qty ?? it.count ?? 0, 0);
+          if (quantity <= 0) return null;
+
+          const image = toNullStr(populated?.image ?? populated?.thumbnail ?? it.image ?? it.thumbnail) ?? null;
+          const sku = toNullStr(populated?.sku ?? it.sku ?? "") ?? null;
+
+          return {
+            componentId,
+            name,
+            price,
+            quantity,
+            image,
+            sku,
+          };
+        })
+        .filter((i): i is OrderItem => !!i)
     : [];
 
+  const rawStatus = source.status ?? source.pickupStatus ?? source.paymentStatus;
   const status: Order["status"] =
-    raw?.status === "Ready" || raw?.status === "Collected"
-      ? raw.status
+    rawStatus === "Ready" || rawStatus === "Collected"
+      ? rawStatus
       : "Paid";
+
+  const totalFromItems = items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+  const total = toNum(source.total ?? source.amount ?? source.amountNaira ?? source.grandTotal ?? source.amountDue ?? totalFromItems, totalFromItems);
+
+  const paidAtCandidate =
+    source.paidAt ?? source.paid_at ?? source.createdAt ?? source.created_at ?? new Date().toISOString();
+  const createdAtCandidate = source.createdAt ?? source.created_at ?? paidAtCandidate ?? "";
+
+  const itemCount =
+    typeof source.itemCount === "number" && Number.isFinite(source.itemCount)
+      ? source.itemCount
+      : items.reduce((s, it) => s + it.quantity, 0);
 
   return {
     id,
-    reference: String(raw?.reference ?? ""),
+    reference: toStr(source.reference ?? source.ref ?? source.orderReference ?? "", ""),
     items,
-    total: Number(raw?.total ?? 0),
-    currency: String(raw?.currency ?? "NGN"),
+    total,
+    currency: toStr(source.currency ?? "NGN", "NGN"),
     status,
-    channel: raw?.channel ?? null,
-    paidAt: String(
-      raw?.paidAt ?? raw?.createdAt ?? new Date().toISOString()
-    ),
-    createdAt: String(raw?.createdAt ?? ""),
-    collectedAt: raw?.collectedAt ?? null,
+    channel: source.channel ?? source.paymentMethod ?? null,
+    paidAt: toStr(paidAtCandidate, new Date().toISOString()),
+    createdAt: toStr(createdAtCandidate, ""),
+    collectedAt: source.collectedAt ?? source.collected_at ?? null,
+    itemCount,
   };
 }
 
@@ -168,14 +241,23 @@ function normalizeOrder(raw: any): Order {
 async function loadDashboardData(): Promise<void> {
   if (inflight) return inflight;
 
-  const token = sessionStorage.getItem("pulselab_token");
+  let token: string | null = null;
+  try {
+    token =
+      sessionStorage.getItem("pulselab_token") ||
+      sessionStorage.getItem("token") ||
+      sessionStorage.getItem("auth_token") ||
+      null;
+  } catch {
+    token = null;
+  }
   if (!token) {
     throw new Error("Please login first.");
   }
 
   inflight = (async () => {
     try {
-      const [ordersRes, cartRes] = await Promise.all([
+      const [ordersRes, cartRes] = await Promise.allSettled([
         fetchWithTimeout(`${API_URL}/engineering/userordersdb`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
@@ -184,44 +266,91 @@ async function loadDashboardData(): Promise<void> {
         }),
       ]);
 
-      const ordersText = await ordersRes.text();
+      let ordersResOk: Response | null = null;
+      let ordersText: string = "";
+      if (ordersRes.status === "fulfilled") {
+        ordersResOk = ordersRes.value;
+        ordersText = await ordersResOk.text();
+      }
+
+      let cartResOk: Response | null = null;
+      let cartText: string = "";
+      if (cartRes.status === "fulfilled") {
+        cartResOk = cartRes.value;
+        cartText = await cartResOk.text();
+      }
+
+      if (!ordersResOk || !ordersResOk.ok) {
+        let ordersDataErr: any = null;
+        try {
+          ordersDataErr = ordersText ? JSON.parse(ordersText) : null;
+        } catch {
+          // ignore parse error for non-OK response
+        }
+        throw new Error(ordersDataErr?.message || "Unable to load orders.");
+      }
+
+      if (!cartResOk || !cartResOk.ok) {
+        let cartDataErr: any = null;
+        try {
+          cartDataErr = cartText ? JSON.parse(cartText) : null;
+        } catch {
+          // ignore parse error for non-OK response
+        }
+        throw new Error(cartDataErr?.message || "Unable to load cart.");
+      }
+
       let ordersData: any = null;
       try {
         ordersData = ordersText ? JSON.parse(ordersText) : null;
       } catch {
         throw new Error(
-          `Orders endpoint returned non-JSON (HTTP ${ordersRes.status}).`
+          `Orders endpoint returned non-JSON (HTTP ${ordersResOk.status}).`
         );
       }
-      if (!ordersRes.ok) {
-        throw new Error(ordersData?.message || "Unable to load orders.");
-      }
 
-      const cartText = await cartRes.text();
       let cartData: any = null;
       try {
         cartData = cartText ? JSON.parse(cartText) : null;
       } catch {
         throw new Error(
-          `Cart endpoint returned non-JSON (HTTP ${cartRes.status}).`
+          `Cart endpoint returned non-JSON (HTTP ${cartResOk.status}).`
         );
       }
-      if (!cartRes.ok) {
-        throw new Error(cartData?.message || "Unable to load cart.");
+
+      let nextOrders: Order[] = [];
+      if (Array.isArray(ordersData?.orders)) {
+        nextOrders = ordersData.orders
+          .map((o: any) => normalizeOrder(o))
+          .filter((o: any) => o && o.id);
+      } else if (Array.isArray(ordersData)) {
+        nextOrders = ordersData
+          .map((o: any) => normalizeOrder(o))
+          .filter((o: any) => o && o.id);
+      } else if (Array.isArray(ordersData?.data)) {
+        nextOrders = ordersData.data
+          .map((o: any) => normalizeOrder(o))
+          .filter((o: any) => o && o.id);
       }
 
-      const nextOrders: Order[] = Array.isArray(ordersData?.orders)
-        ? ordersData.orders.map(normalizeOrder)
-        : [];
+      const extractCart = (data: any): Cart => {
+        if (!data || typeof data !== "object") return { items: [] };
+        if (Array.isArray(data.items)) {
+          return { ...data, items: data.items };
+        }
+        if (data.cart && Array.isArray(data.cart.items)) {
+          return { ...data.cart, items: data.cart.items };
+        }
+        if (Array.isArray(data)) {
+          return { items: data };
+        }
+        return { items: [] };
+      };
 
-      const nextCart: Cart = Array.isArray(cartData?.items)
-        ? cartData
-        : cartData?.cart && Array.isArray(cartData.cart.items)
-          ? cartData.cart
-          : { items: [] };
+      const nextCart: Cart = extractCart(cartData);
 
-      ordersCache = nextOrders;
-      cartCache = nextCart;
+      ordersCache = Array.isArray(nextOrders) ? nextOrders : [];
+      cartCache = nextCart && Array.isArray(nextCart.items) ? nextCart : { items: [] };
       dashboardLoaded = true;
     } finally {
       inflight = null;
@@ -269,14 +398,20 @@ const formatFullDateTime = (iso: string | null | undefined) => {
 function DashboardPage() {
   const user = useCurrentUser();
 
-  const [orders, setOrders] = useState<Order[]>(() => ordersCache);
-  const [cart, setCart] = useState<Cart>(() => cartCache);
+  const [orders, setOrders] = useState<Order[]>(() => Array.isArray(ordersCache) ? ordersCache : []);
+  const [cart, setCart] = useState<Cart>(() => cartCache && Array.isArray(cartCache.items) ? cartCache : { items: [] });
   const [loading, setLoading] = useState(
-    () => !dashboardLoaded && ordersCache.length === 0
+    () => !dashboardLoaded && (Array.isArray(ordersCache) ? ordersCache.length === 0 : true)
   );
   const [error, setError] = useState<string | null>(null);
 
-  const getToken = () => sessionStorage.getItem("pulselab_token");
+  const getToken = () => {
+    try {
+      return sessionStorage.getItem("pulselab_token") || sessionStorage.getItem("token") || null;
+    } catch {
+      return null;
+    }
+  };
 
   // ===================================================
   // INITIAL LOAD (silent)
@@ -294,12 +429,14 @@ function DashboardPage() {
     loadDashboardData()
       .then(() => {
         if (!mounted) return;
-        setOrders(ordersCache);
-        setCart(cartCache);
+        setOrders(Array.isArray(ordersCache) ? ordersCache : []);
+        setCart(cartCache && Array.isArray(cartCache.items) ? cartCache : { items: [] });
       })
       .catch((err: any) => {
         if (!mounted) return;
-        if (ordersCache.length === 0) {
+        const hasCachedOrders = Array.isArray(ordersCache) && ordersCache.length > 0;
+        const hasCachedCart = cartCache && Array.isArray(cartCache.items) && cartCache.items.length > 0;
+        if (!hasCachedOrders && !hasCachedCart) {
           setError(err?.message || "Failed to load dashboard data.");
         } else {
           console.error("Silent dashboard refresh failed:", err);
@@ -319,6 +456,7 @@ function DashboardPage() {
   // REAL-TIME UPDATES (silent)
   // ===================================================
   useEffect(() => {
+    let mounted = true;
     const token = getToken();
     if (!token) return;
 
@@ -327,8 +465,9 @@ function DashboardPage() {
     const refresh = async () => {
       try {
         await loadDashboardData();
-        setOrders(ordersCache);
-        setCart(cartCache);
+        if (!mounted) return;
+        setOrders(Array.isArray(ordersCache) ? ordersCache : []);
+        setCart(cartCache && Array.isArray(cartCache.items) ? cartCache : { items: [] });
       } catch (e) {
         console.error("Dashboard refresh failed:", e);
       }
@@ -348,6 +487,7 @@ function DashboardPage() {
     socket.on("cart:updated", onCartUpdated);
 
     return () => {
+      mounted = false;
       cleanupJoin();
       socket.off("orders:updated", onOrdersUpdated);
       socket.off("cart:updated", onCartUpdated);
@@ -357,24 +497,26 @@ function DashboardPage() {
   // ===================================================
   // DERIVED
   // ===================================================
+  const safeOrders = Array.isArray(orders) ? orders : [];
+  const safeCart = cart && Array.isArray(cart.items) ? cart : { items: [] };
+
   const active = useMemo(
-    () => orders.filter((o) => o.status !== "Collected"),
-    [orders]
+    () => safeOrders.filter((o: any) => o && o.status !== "Collected"),
+    [safeOrders]
   );
 
   const collected = useMemo(
-    () => orders.filter((o) => o.status === "Collected"),
-    [orders]
+    () => safeOrders.filter((o: any) => o && o.status === "Collected"),
+    [safeOrders]
   );
 
-  const cartCount = useMemo(
-    () =>
-      cart.items.reduce(
-        (a, c) => a + (Number(c.quantity) || 0),
-        0
-      ),
-    [cart]
-  );
+  const cartCount = useMemo(() => {
+    if (!Array.isArray(safeCart.items)) return 0;
+    return safeCart.items.reduce((a, c: any) => {
+      const q = Number(c?.quantity ?? c?.qty ?? 0);
+      return a + (Number.isFinite(q) ? q : 0);
+    }, 0);
+  }, [safeCart]);
 
   // ===================================================
   // USER NOT LOADED YET
@@ -528,7 +670,7 @@ function DashboardPage() {
         </motion.div>
 
         {/* STATS */}
-        <div className="mb-7 grid min-w-0 grid-cols-2 gap-3 sm:mb-10 sm:gap-4 lg:mb-12 lg:grid-cols-4">
+        <div className="mb-7 grid min-w-0 w-full max-w-full overflow-visible grid-cols-2 gap-1.5 xs:gap-2 sm:gap-3 md:gap-4 sm:mb-10 lg:mb-12 lg:grid-cols-4">
           <StatCard
             icon={ClipboardList}
             label="Active Orders"
@@ -537,7 +679,7 @@ function DashboardPage() {
           <StatCard
             icon={Package}
             label="Total Orders"
-            value={orders.length}
+            value={safeOrders.length}
           />
           <StatCard
             icon={ShoppingCart}
@@ -826,35 +968,77 @@ function StatCard({
 }: {
   icon: any;
   label: string;
-  value: number;
+  value: number | string | null | undefined;
   highlight?: boolean;
 }) {
+  const safeValue =
+    typeof value === "number" && !isNaN(value)
+      ? value
+      : typeof value === "string" && value.trim() !== ""
+        ? value.trim()
+        : 0;
+
+  const numericValue =
+    typeof safeValue === "number"
+      ? safeValue
+      : Number(safeValue) || 0;
+
+  const displayValue = String(safeValue);
+
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className={`min-w-0 rounded-2xl border p-3 sm:p-5 ${
+      className={`min-w-0 w-full max-w-full overflow-visible rounded-2xl border p-2 sm:p-3 md:p-4 lg:p-5 ${
         highlight
           ? "border-transparent bg-brand-navy text-white"
           : "border-slate-200 bg-white"
       }`}
+      title={displayValue}
+      data-debug-value={displayValue}
+      aria-label={`${label}: ${displayValue}`}
     >
       <div
-        className={`mb-3 grid size-8 place-items-center rounded-lg sm:size-9 ${
+        className={`mb-1.5 grid size-6 place-items-center rounded-lg sm:mb-2 sm:size-7 md:mb-3 md:size-8 lg:size-9 ${
           highlight
             ? "bg-white/10"
             : "bg-brand-accent/10 text-brand-accent"
         }`}
       >
-        <Icon className="size-4" />
+        <Icon className="size-3 sm:size-3.5 md:size-4" />
       </div>
 
-      <div className="text-2xl font-bold tracking-tight sm:text-3xl">
-        <AnimatedCounter value={value} />
+      <div className="min-w-0 w-full max-w-full overflow-visible">
+        <div
+          className="flex min-w-0 max-w-full w-full items-baseline text-base font-bold tracking-tight tabular-nums xs:text-lg sm:text-xl md:text-2xl lg:text-3xl"
+          style={{
+            lineHeight: 1,
+            fontVariantNumeric: "tabular-nums",
+            fontFeatureSettings: '"tnum" 1, "liga" 1',
+            wordBreak: "keep-all",
+            overflowWrap: "normal",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {typeof safeValue === "number" ? (
+            <AnimatedCounter
+              value={numericValue}
+              className="min-w-0 max-w-full overflow-visible inline-flex tabular-nums"
+            />
+          ) : (
+            <span
+              className="min-w-0 max-w-full overflow-visible whitespace-nowrap tabular-nums"
+              style={{ textOverflow: "unset" }}
+            >
+              {displayValue}
+            </span>
+          )}
+        </div>
+        <span className="sr-only" aria-live="polite">{displayValue}</span>
       </div>
 
       <div
-        className={`mt-1 break-words font-mono text-[10px] leading-4 uppercase tracking-wider sm:tracking-widest ${
-          highlight ? "text-white/60" : "text-slate-400"
+        className={`mt-1 min-w-0 break-words font-mono text-[8px] leading-3 uppercase tracking-tight xs:text-[9px] xs:leading-3.5 sm:text-[10px] sm:leading-4 sm:tracking-widest ${
+          highlight ? "text-white/70" : "text-slate-400"
         }`}
       >
         {label}

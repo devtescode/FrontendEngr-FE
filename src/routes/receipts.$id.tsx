@@ -29,9 +29,9 @@
 
     import { AppShell } from "@/components/AppShell";
     import { RequireAuth } from "@/components/RequireAuth";
+    import { API_BASE_URL } from "@/lib/config";
 
-    const API_URL =
-    import.meta.env.VITE_API_URL || "http://localhost:4500";
+    const API_URL = API_BASE_URL;
 
     const BRAND = {
     name: "EU Hardwarestore",

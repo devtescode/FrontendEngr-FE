@@ -1,5 +1,6 @@
 import { io, type Socket } from "socket.io-client";
 import { jwtDecode } from "jwt-decode";
+import { API_BASE_URL } from "./config";
 
 type TokenPayload = {
   id?: string;
@@ -7,8 +8,7 @@ type TokenPayload = {
   userId?: string;
 };
 
-const SOCKET_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+const SOCKET_URL = API_BASE_URL;
 
 export const socket: Socket = io(SOCKET_URL, {
   autoConnect: true,

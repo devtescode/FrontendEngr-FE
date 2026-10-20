@@ -1,5 +1,6 @@
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "./config";
+
+const API_URL = API_BASE_URL;
 
 export type BackendComponent = {
   _id?: string;
@@ -51,10 +52,16 @@ async function handleResponse<T>(res: Response): Promise<T> {
     let message = `Request failed with status ${res.status}`;
 
     if (contentType?.includes("application/json")) {
-      const errorData = await res.json().catch(() => null);
+      const errorData = await res.json().catch((err) => {
+        console.error("Failed to parse error response as JSON:", err);
+        return null;
+      });
       message = errorData?.message || message;
     } else {
-      const text = await res.text().catch(() => "");
+      const text = await res.text().catch((err) => {
+        console.error("Failed to read error response text:", err);
+        return "";
+      });
       if (text) message = text;
     }
 
@@ -67,7 +74,10 @@ async function handleResponse<T>(res: Response): Promise<T> {
   }
 
   if (!contentType?.includes("application/json")) {
-    const text = await res.text().catch(() => "");
+    const text = await res.text().catch((err) => {
+      console.error("Failed to read non-JSON response:", err);
+      return "";
+    });
     if (!text) return undefined as T;
     throw new Error("Server did not return JSON.");
   }
@@ -152,10 +162,12 @@ export const componentApi = {
       return [];
     } catch (err: any) {
       if (err?.name === "AbortError") {
+        console.error("getAll request aborted due to timeout");
         throw new Error(
           "Request timed out. Check your backend is running."
         );
       }
+      console.error("getAll request failed:", err);
       throw err;
     } finally {
       clear();
@@ -181,8 +193,10 @@ export const componentApi = {
       return await handleResponse<BackendComponent>(res);
     } catch (err: any) {
       if (err?.name === "AbortError") {
+        console.error("getOne request aborted due to timeout");
         throw new Error("Request timed out.");
       }
+      console.error("getOne request failed:", err);
       throw err;
     } finally {
       clear();
@@ -228,8 +242,10 @@ export const componentApi = {
       return component;
     } catch (err: any) {
       if (err?.name === "AbortError") {
+        console.error("create request aborted due to timeout");
         throw new Error("Upload timed out. Try a smaller image.");
       }
+      console.error("create request failed:", err);
       throw err;
     } finally {
       clear();
@@ -280,8 +296,10 @@ export const componentApi = {
       return component;
     } catch (err: any) {
       if (err?.name === "AbortError") {
+        console.error("update request aborted due to timeout");
         throw new Error("Upload timed out. Try a smaller image.");
       }
+      console.error("update request failed:", err);
       throw err;
     } finally {
       clear();
@@ -316,8 +334,10 @@ export const componentApi = {
       return await handleResponse(res);
     } catch (err: any) {
       if (err?.name === "AbortError") {
+        console.error("delete request aborted due to timeout");
         throw new Error("Request timed out.");
       }
+      console.error("delete request failed:", err);
       throw err;
     } finally {
       clear();

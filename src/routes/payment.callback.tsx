@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, CheckCircle2, XCircle, Ban } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "@/lib/config";
+const API_URL = API_BASE_URL;
 
 export const Route = createFileRoute("/payment/callback")({
   head: () => ({ meta: [{ title: "Verifying Payment — EU Hardwarestore" }] }),

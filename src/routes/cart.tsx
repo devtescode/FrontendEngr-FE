@@ -18,8 +18,8 @@ import {
   setCartCacheFromResponse,
 } from "@/components/ComponentCard";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "@/lib/config";
+const API_URL = API_BASE_URL;
 
 const CART_STORAGE_KEY = "pulselab_cart";
 
@@ -104,21 +104,141 @@ function CartPage() {
   }, [location.pathname]);
 
   // ===================================================
-  // NORMALIZE CART
+  // SAFE COERCION & NORMALIZE CART
   // ===================================================
+  const isObjCart = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
+  const toStrCart = (v: unknown, fb = "") => {
+    if (v == null) return fb;
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "bigint") return String(v);
+    if (isObjCart(v)) {
+      if (v._id != null) return String(v._id);
+      if (v.id != null) return String(v.id);
+    }
+    return String(v);
+  };
+  const toNumCart = (v: unknown, fb = 0) => {
+    if (v == null) return fb;
+    if (typeof v === "number") return Number.isFinite(v) ? v : fb;
+    if (typeof v === "string") {
+      const n = Number(v.trim());
+      return Number.isFinite(n) ? n : fb;
+    }
+    return fb;
+  };
+
   const normalizeCart = (data: any): CartData => {
     if (!data) return { items: [] };
 
-    if (Array.isArray(data.items)) {
-      return { ...data, items: data.items };
+    const source = isObjCart(data) ? data : Array.isArray(data) ? { items: data } : {};
+    if (Array.isArray(source.items)) {
+      const normalizedItems = source.items
+        .map((it: any) => {
+          if (!it) return null;
+          if (isObjCart(it)) {
+            const componentId = it.componentId;
+            if (componentId && isObjCart(componentId)) {
+              const cid = componentId._id ?? componentId.id ?? "";
+              if (!cid) return null;
+              const normalizedComp = { ...componentId, _id: String(cid) };
+              return {
+                ...it,
+                componentId: normalizedComp,
+                quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+              };
+            }
+            if (typeof componentId === "string") {
+              const cid = componentId.trim();
+              if (!cid) return null;
+              return {
+                ...it,
+                componentId: cid,
+                quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+              };
+            }
+            // try to coerce
+            const cid2 = toStrCart(componentId, "");
+            if (!cid2) return null;
+            return {
+              ...it,
+              componentId: cid2,
+              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+            };
+          }
+          return null;
+        })
+        .filter((it: any) => it && it.quantity > 0);
+      return { ...source, items: normalizedItems };
     }
 
-    if (data.cart && Array.isArray(data.cart.items)) {
-      return { ...data.cart, items: data.cart.items };
+    if (source.cart && isObjCart(source.cart) && Array.isArray(source.cart.items)) {
+      const normalizedItems = source.cart.items
+        .map((it: any) => {
+          if (!isObjCart(it)) return null;
+          const componentId = it.componentId;
+          if (componentId && isObjCart(componentId)) {
+            const cid = componentId._id ?? componentId.id ?? "";
+            if (!cid) return null;
+            return {
+              ...it,
+              componentId: { ...componentId, _id: String(cid) },
+              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+            };
+          }
+          if (typeof componentId === "string") {
+            const cid = componentId.trim();
+            if (!cid) return null;
+            return {
+              ...it,
+              componentId: cid,
+              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+            };
+          }
+          const cid2 = toStrCart(componentId, "");
+          if (!cid2) return null;
+          return {
+            ...it,
+            componentId: cid2,
+            quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+          };
+        })
+        .filter((it: any) => it && it.quantity > 0);
+      return { ...source.cart, items: normalizedItems };
     }
 
-    if (Array.isArray(data)) {
-      return { items: data };
+    if (Array.isArray(source)) {
+      const normalizedItems = source
+        .map((it: any) => {
+          if (!isObjCart(it)) return null;
+          const componentId = it.componentId;
+          if (componentId && isObjCart(componentId)) {
+            const cid = componentId._id ?? componentId.id ?? "";
+            if (!cid) return null;
+            return {
+              ...it,
+              componentId: { ...componentId, _id: String(cid) },
+              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+            };
+          }
+          if (typeof componentId === "string") {
+            const cid = componentId.trim();
+            if (!cid) return null;
+            return {
+              ...it,
+              componentId: cid,
+              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+            };
+          }
+          const cid2 = toStrCart(componentId, "");
+          if (!cid2) return null;
+          return {
+            ...it,
+            componentId: cid2,
+            quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
+          };
+        })
+        .filter((it: any) => it && it.quantity > 0);
+      return { items: normalizedItems };
     }
 
     return { items: [] };
@@ -459,12 +579,14 @@ function CartPage() {
   const total = useMemo(() => {
     if (!Array.isArray(cart?.items)) return 0;
 
-    return cart.items.reduce((sum, item) => {
-      const component = item.componentId;
+    return cart.items.reduce((sum, item: any) => {
+      const component = item?.componentId;
       if (!component || typeof component === "string") return sum;
+      if (typeof component !== "object") return sum;
 
-      const price = Number(component.price) || 0;
-      const quantity = Number(item.quantity) || 0;
+      const price = Number(component?.price ?? 0) || 0;
+      const quantity = Number(item?.quantity ?? item?.qty ?? 0) || 0;
+      if (!Number.isFinite(price) || !Number.isFinite(quantity)) return sum;
       return sum + price * quantity;
     }, 0);
   }, [cart]);
@@ -475,10 +597,10 @@ function CartPage() {
   const totalQuantity = useMemo(() => {
     if (!Array.isArray(cart?.items)) return 0;
 
-    return cart.items.reduce(
-      (sum, item) => sum + (Number(item.quantity) || 0),
-      0
-    );
+    return cart.items.reduce((sum, item: any) => {
+      const q = Number(item?.quantity ?? item?.qty ?? 0);
+      return sum + (Number.isFinite(q) ? q : 0);
+    }, 0);
   }, [cart]);
 
   // ===================================================

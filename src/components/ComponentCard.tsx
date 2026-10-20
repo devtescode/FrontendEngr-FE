@@ -15,8 +15,8 @@ import { useEffect, useState } from "react";
 import type { BackendComponent } from "@/lib/api";
 import { socket } from "@/lib/socket";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "@/lib/config";
+const API_URL = API_BASE_URL;
 
 // =====================================================
 // TYPES
@@ -47,6 +47,27 @@ export const cartCache: {
   loaded: false,
 };
 
+const isObjCC = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
+const toStrCC = (v: unknown, fb = "") => {
+  if (v == null) return fb;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "bigint") return String(v);
+  if (isObjCC(v)) {
+    if (v._id != null) return String(v._id);
+    if (v.id != null) return String(v.id);
+  }
+  return String(v);
+};
+const toNumCC = (v: unknown, fb = 0) => {
+  if (v == null) return fb;
+  if (typeof v === "number") return Number.isFinite(v) ? v : fb;
+  if (typeof v === "string") {
+    const n = Number(v.trim());
+    return Number.isFinite(n) ? n : fb;
+  }
+  return fb;
+};
+
 /**
  * Extract the cart items array from any of the shapes
  * the backend might return:
@@ -57,7 +78,7 @@ export const cartCache: {
 function extractItems(data: any): any[] {
   if (!data) return [];
   if (Array.isArray(data.items)) return data.items;
-  if (data.cart && Array.isArray(data.cart.items)) {
+  if (isObjCC(data.cart) && Array.isArray(data.cart.items)) {
     return data.cart.items;
   }
   if (Array.isArray(data)) return data;
@@ -69,17 +90,20 @@ export function setCartCacheFromResponse(cart: any) {
   const items: CachedCartItem[] = [];
 
   for (const it of rawItems) {
-    const id =
-      typeof it.componentId === "object"
-        ? it.componentId?._id
-        : it.componentId;
-
-    if (id) {
-      items.push({
-        componentId: String(id),
-        quantity: Number(it.quantity) || 0,
-      });
+    if (!isObjCC(it)) continue;
+    const comp = it.componentId;
+    let id: unknown = comp;
+    if (isObjCC(comp)) {
+      id = comp._id ?? comp.id ?? comp.componentId;
     }
+    const idStr = toStrCC(id, "");
+    if (!idStr) continue;
+    const qty = toNumCC(it.quantity ?? it.qty ?? it.count ?? 0, 0);
+    if (qty <= 0) continue;
+    items.push({
+      componentId: idStr,
+      quantity: qty,
+    });
   }
 
   cartCache.items = items;

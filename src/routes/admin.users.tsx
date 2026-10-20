@@ -21,8 +21,8 @@ export const Route = createFileRoute("/admin/users")({
   component: AdminUsers,
 });
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "@/lib/config";
+const API_URL = API_BASE_URL;
 
 type UserType = {
   _id: string;

@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Field } from "./login";
+import { API_BASE_URL } from "@/lib/config";
 
 // icons
 import {
@@ -22,13 +23,12 @@ import {
 
 export const Route = createFileRoute("/register")({
   head: () => ({
-    meta: [{ title: "Register — EU Hardwarestore" }],
+    meta: [{ title: "Register - EU Hardwarestore" }],
   }),
   component: RegisterPage,
 });
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:4500";
+// import { API_BASE_URL } from "@/lib/config";
+const API_URL = API_BASE_URL;
 
 function RegisterPage() {
   const register = useStore((s) => s.register);

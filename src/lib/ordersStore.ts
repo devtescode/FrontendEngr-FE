@@ -1,6 +1,73 @@
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:4500";
+import { API_BASE_URL } from "./config";
+
+const API_URL = API_BASE_URL;
+
+// =====================================================
+// SAFE COERCION & TYPE GUARDS
+// =====================================================
+
+const isObject = (v: unknown): v is Record<string, any> => {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+};
+
+const toStringSafe = (v: unknown, fallback = ""): string => {
+  if (v == null) return fallback;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "bigint") return String(v);
+  if (isObject(v)) {
+    const obj = v as Record<string, any>;
+    if (obj._id != null) return String(obj._id);
+    if (obj.id != null) return String(obj.id);
+    if (obj.uuid != null) return String(obj.uuid);
+  }
+  return String(v);
+};
+
+const toNumberSafe = (v: unknown, fallback = 0): number => {
+  if (v == null) return fallback;
+  if (typeof v === "number") {
+    return Number.isFinite(v) ? v : fallback;
+  }
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    if (trimmed === "") return fallback;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  if (typeof v === "boolean") return v ? 1 : 0;
+  if (isObject(v)) {
+    const obj = v as Record<string, any>;
+    if ("amount" in obj) return toNumberSafe(obj.amount, fallback);
+    if ("price" in obj) return toNumberSafe(obj.price, fallback);
+    if ("value" in obj) return toNumberSafe(obj.value, fallback);
+  }
+  return fallback;
+};
+
+const toNullableString = (v: unknown): string | null => {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  }
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (isObject(v)) {
+    const obj = v as Record<string, any>;
+    if (obj.url != null) return toNullableString(obj.url);
+    if (obj.src != null) return toNullableString(obj.src);
+    if (obj.image != null) return toNullableString(obj.image);
+  }
+  return null;
+};
+
+const pickFirstObject = (obj: any, keys: string[]): any => {
+  if (!isObject(obj)) return null;
+  for (const k of keys) {
+    if (obj[k] && isObject(obj[k])) return obj[k];
+  }
+  return null;
+};
 
 export type OrderItem = {
   componentId: string;
@@ -22,6 +89,7 @@ export type Order = {
   paidAt: string;
   createdAt: string;
   collectedAt?: string | null;
+  itemCount?: number;
 };
 
 // =====================================================
@@ -47,48 +115,90 @@ export const setOrdersCache = (next: Order[]) => {
 // can rely on `order.id` being a valid string.
 //
 function normalizeOrder(raw: any): Order {
-  const id = String(raw?.id ?? raw?._id ?? "");
+  const source = isObject(raw) ? raw : {};
 
-  const items: OrderItem[] = Array.isArray(raw?.items)
-    ? raw.items.map((it: any) => {
-        const populated =
-          it?.componentId && typeof it.componentId === "object"
-            ? it.componentId
-            : null;
+  const id = toStringSafe(source.id ?? source._id ?? source.orderId ?? source.uuid, "");
 
-        return {
-          componentId: String(
-            populated?._id ?? it?.componentId ?? ""
-          ),
-          name: String(it?.name ?? ""),
-          price: Number(it?.price ?? 0),
-          quantity: Number(it?.quantity ?? 0),
-          image: populated?.image ?? it?.image ?? null,
-          sku: populated?.sku ?? it?.sku ?? null,
-        };
-      })
+  const items: OrderItem[] = Array.isArray(source.items)
+    ? source.items
+        .map((it: any): OrderItem | null => {
+          if (!isObject(it)) return null;
+
+          const populated =
+            it.componentId && isObject(it.componentId)
+              ? it.componentId
+              : pickFirstObject(it, ["component", "product", "item"]);
+
+          const componentId = toStringSafe(
+            populated?._id ?? populated?.id ?? it.componentId ?? it.componentId?._id,
+            ""
+          );
+          if (!componentId) return null;
+
+          const name = toStringSafe(it.name ?? populated?.name ?? "", "");
+          const price = toNumberSafe(
+            it.price ?? populated?.price ?? it.unitPrice ?? it.amount ?? 0,
+            0
+          );
+          const quantity = toNumberSafe(it.quantity ?? it.qty ?? it.count ?? 0, 0);
+          if (quantity <= 0) return null;
+
+          const image =
+            toNullableString(
+              populated?.image ?? populated?.thumbnail ?? it.image ?? it.thumbnail
+            ) ?? null;
+          const sku = toNullableString(populated?.sku ?? it.sku ?? "") ?? null;
+
+          return {
+            componentId,
+            name,
+            price,
+            quantity,
+            image,
+            sku,
+          };
+        })
+        .filter((i): i is OrderItem => !!i)
     : [];
 
-  // Narrow status to the exact union. Anything other
-  // than "Ready" or "Collected" defaults to "Paid".
+  const rawStatus = source.status ?? source.pickupStatus ?? source.paymentStatus;
   const status: Order["status"] =
-    raw?.status === "Ready" || raw?.status === "Collected"
-      ? raw.status
+    rawStatus === "Ready" || rawStatus === "Collected"
+      ? rawStatus
       : "Paid";
+
+  const totalFromItems = items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+  const total = toNumberSafe(
+    source.total ??
+      source.amount ??
+      source.amountNaira ??
+      source.grandTotal ??
+      source.amountDue ??
+      totalFromItems,
+    totalFromItems
+  );
+
+  const paidAtCandidate =
+    source.paidAt ?? source.paid_at ?? source.createdAt ?? source.created_at ?? new Date().toISOString();
+  const createdAtCandidate = source.createdAt ?? source.created_at ?? paidAtCandidate ?? "";
+
+  const itemCount =
+    typeof source.itemCount === "number" && Number.isFinite(source.itemCount)
+      ? source.itemCount
+      : items.reduce((s, it) => s + it.quantity, 0);
 
   return {
     id,
-    reference: String(raw?.reference ?? ""),
+    reference: toStringSafe(source.reference ?? source.ref ?? source.orderReference ?? "", ""),
     items,
-    total: Number(raw?.total ?? 0),
-    currency: String(raw?.currency ?? "NGN"),
+    total,
+    currency: toStringSafe(source.currency ?? "NGN", "NGN"),
     status,
-    channel: raw?.channel ?? null,
-    paidAt: String(
-      raw?.paidAt ?? raw?.createdAt ?? new Date().toISOString()
-    ),
-    createdAt: String(raw?.createdAt ?? ""),
-    collectedAt: raw?.collectedAt ?? null,
+    channel: source.channel ?? source.paymentMethod ?? null,
+    paidAt: toStringSafe(paidAtCandidate, new Date().toISOString()),
+    createdAt: toStringSafe(createdAtCandidate, ""),
+    collectedAt: source.collectedAt ?? source.collected_at ?? null,
+    itemCount,
   };
 }
 // =====================================================

@@ -25,7 +25,11 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const cartCount = useMemo(
-    () => cart.reduce((total, item) => total + Number(item.quantity || 0), 0),
+    () =>
+      cart.reduce((total, item: any) => {
+        const q = Number(item?.quantity ?? item?.qty ?? 0);
+        return total + (Number.isFinite(q) ? q : 0);
+      }, 0),
     [cart]
   );
 
