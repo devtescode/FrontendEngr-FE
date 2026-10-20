@@ -276,9 +276,14 @@ export function Navbar() {
               exit={{ opacity: 0, y: -12, scale: 0.98 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               className="absolute left-0 right-0 top-full z-50 border-t border-slate-200 bg-white shadow-xl md:hidden"
-            >
+              >
               <div className="px-4 py-4 sm:px-6">
                 <div className="flex flex-col gap-1">
+              {user?.role === "student" && (
+                <MobileNavLink to="/dashboard" onClick={closeMobileMenu}>
+                  Dashboard
+                </MobileNavLink>
+              )}
                   <MobileNavLink to="/components" onClick={closeMobileMenu}>
                     Components
                   </MobileNavLink>
@@ -301,11 +306,6 @@ export function Navbar() {
                     </MobileNavLink>
                   )}
 
-                  {user?.role === "student" && (
-                    <MobileNavLink to="/dashboard" onClick={closeMobileMenu}>
-                      Dashboard
-                    </MobileNavLink>
-                  )}
 
                   {user?.role === "admin" && (
                     <MobileNavLink to="/admin" onClick={closeMobileMenu}>
