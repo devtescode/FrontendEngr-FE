@@ -197,40 +197,40 @@ function normalizeOrder(raw: any): Order | null {
 
   const items: OrderItem[] = Array.isArray(source.items)
     ? source.items
-        .map((it: any): OrderItem | null => {
-          if (!isObjDash(it)) return null;
-          const populated =
-            it.componentId && isObjDash(it.componentId)
-              ? it.componentId
-              : pickObjDash(it, ["component", "product", "item"]);
+      .map((it: any): OrderItem | null => {
+        if (!isObjDash(it)) return null;
+        const populated =
+          it.componentId && isObjDash(it.componentId)
+            ? it.componentId
+            : pickObjDash(it, ["component", "product", "item"]);
 
-          const componentId = toStr(
-            populated?._id ??
-              populated?.id ??
-              it.componentId ??
-              (isObjDash(it.componentId) ? it.componentId._id : undefined),
-            ""
-          );
-          if (!componentId) return null;
+        const componentId = toStr(
+          populated?._id ??
+          populated?.id ??
+          it.componentId ??
+          (isObjDash(it.componentId) ? it.componentId._id : undefined),
+          ""
+        );
+        if (!componentId) return null;
 
-          const quantity = readQty(it);
-          if (quantity <= 0) return null;
+        const quantity = readQty(it);
+        if (quantity <= 0) return null;
 
-          return {
-            componentId,
-            name: toStr(it.name ?? populated?.name ?? "", ""),
-            price: toNum(
-              it.price ?? populated?.price ?? it.unitPrice ?? it.amount ?? 0,
-              0
-            ),
-            quantity,
-            image:
-              toNullStr(populated?.image ?? populated?.thumbnail ?? it.image) ??
-              null,
-            sku: toNullStr(populated?.sku ?? it.sku ?? "") ?? null,
-          };
-        })
-        .filter((i): i is OrderItem => !!i)
+        return {
+          componentId,
+          name: toStr(it.name ?? populated?.name ?? "", ""),
+          price: toNum(
+            it.price ?? populated?.price ?? it.unitPrice ?? it.amount ?? 0,
+            0
+          ),
+          quantity,
+          image:
+            toNullStr(populated?.image ?? populated?.thumbnail ?? it.image) ??
+            null,
+          sku: toNullStr(populated?.sku ?? it.sku ?? "") ?? null,
+        };
+      })
+      .filter((i): i is OrderItem => !!i)
     : [];
 
   const rawStatus = source.status ?? source.pickupStatus ?? source.paymentStatus;
@@ -243,11 +243,11 @@ function normalizeOrder(raw: any): Order | null {
   );
   const total = toNum(
     source.total ??
-      source.amount ??
-      source.amountNaira ??
-      source.grandTotal ??
-      source.amountDue ??
-      totalFromItems,
+    source.amount ??
+    source.amountNaira ??
+    source.grandTotal ??
+    source.amountDue ??
+    totalFromItems,
     totalFromItems
   );
 
@@ -576,7 +576,7 @@ function DashboardPage() {
           </p>
         </motion.div>
 
-        <div className="mb-7 grid min-w-0 w-full max-w-full overflow-visible grid-cols-2 gap-1.5 xs:gap-2 sm:gap-3 md:gap-4 sm:mb-10 lg:mb-12 lg:grid-cols-4">
+        <div className="mb-7 grid w-full min-w-0 grid-cols-2 items-stretch gap-3 sm:mb-10 sm:gap-4 lg:mb-12 lg:grid-cols-4">
           <StatCard icon={ClipboardList} label="Active Orders" value={active.length} />
           <StatCard icon={Package} label="Total Orders" value={safeOrders.length} />
           <StatCard icon={ShoppingCart} label="Cart Items" value={cartCount} />
@@ -793,6 +793,10 @@ function DashboardPage() {
 /* ---------------- STAT CARD ---------------- */
 /* Replaced AnimatedCounter with plain span to prevent mobile frame throttling */
 
+
+
+
+
 function StatCard({
   icon: Icon,
   label,
@@ -816,45 +820,40 @@ function StatCard({
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className={`min-w-0 w-full max-w-full overflow-visible rounded-2xl border p-2 sm:p-3 md:p-4 lg:p-5 ${
+      className={`flex h-full min-h-[145px] w-full min-w-0 flex-col rounded-2xl border p-4 sm:min-h-[155px] sm:p-4 md:min-h-[165px] lg:min-h-[175px] lg:p-5 ${
         highlight
           ? "border-transparent bg-brand-navy text-white"
           : "border-slate-200 bg-white"
       }`}
       title={displayValue}
-      data-debug-value={displayValue}
       aria-label={`${label}: ${displayValue}`}
     >
-      <div
-        className={`mb-1.5 grid size-6 place-items-center rounded-lg sm:mb-2 sm:size-7 md:mb-3 md:size-8 lg:size-9 ${
-          highlight ? "bg-white/10" : "bg-brand-accent/10 text-brand-accent"
-        }`}
-      >
-        <Icon className="size-3 sm:size-3.5 md:size-4" />
-      </div>
-
-      <div className="min-w-0 w-full max-w-full overflow-visible">
-        <div
-          className="flex min-w-0 max-w-full w-full items-baseline text-base font-bold tracking-tight tabular-nums xs:text-lg sm:text-xl md:text-2xl lg:text-3xl"
-          style={{
-            lineHeight: 1,
-            fontVariantNumeric: "tabular-nums",
-            fontFeatureSettings: '"tnum" 1, "liga" 1',
-            wordBreak: "keep-all",
-            overflowWrap: "normal",
-            whiteSpace: "nowrap",
-          }}
-        >
-          <span className="min-w-0 max-w-full overflow-visible whitespace-nowrap tabular-nums">
+      {/* Value on the left, icon at the end */}
+      <div className="mb-4 flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div
+            className="break-words text-xl font-bold leading-tight tracking-tight tabular-nums sm:text-2xl md:text-3xl"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
             {displayValue}
-          </span>
+          </div>
         </div>
-        <span className="sr-only" aria-live="polite">{displayValue}</span>
+
+        <div
+          className={`grid size-9 shrink-0 place-items-center rounded-xl sm:size-10 ${
+            highlight
+              ? "bg-white/10 text-white"
+              : "bg-brand-accent/10 text-brand-accent"
+          }`}
+        >
+          <Icon className="size-4 sm:size-5" />
+        </div>
       </div>
 
+      {/* Label stays at the bottom */}
       <div
-        className={`mt-1 min-w-0 break-words font-mono text-[8px] leading-3 uppercase tracking-tight xs:text-[9px] xs:leading-3.5 sm:text-[10px] sm:leading-4 sm:tracking-widest ${
-          highlight ? "text-white/70" : "text-slate-400"
+        className={`mt-auto break-words text-[10px] font-semibold uppercase leading-4 tracking-wide sm:text-xs ${
+          highlight ? "text-white/70" : "text-slate-500"
         }`}
       >
         {label}
@@ -862,6 +861,8 @@ function StatCard({
     </motion.div>
   );
 }
+
+
 
 /* ---------------- STATUS PILL ---------------- */
 
@@ -876,9 +877,8 @@ export function StatusPill({ status }: { status: string }) {
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight ring-1 ring-inset ${
-        palette[status] ?? "bg-slate-100 text-slate-600"
-      }`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight ring-1 ring-inset ${palette[status] ?? "bg-slate-100 text-slate-600"
+        }`}
     >
       {label}
     </span>
