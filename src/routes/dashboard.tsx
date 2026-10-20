@@ -832,7 +832,7 @@ function StatCard({
       <div className="mb-4 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div
-            className="break-words text-xl font-bold leading-tight tracking-tight tabular-nums sm:text-2xl md:text-3xl"
+            className="break-words text-xl font-bold leading-tight tracking-tight tabular-nums sm:text-3xl md:text-3xl"
             style={{ fontVariantNumeric: "tabular-nums" }}
           >
             {displayValue}
