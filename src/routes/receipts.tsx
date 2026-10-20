@@ -258,11 +258,15 @@ function ReceiptsIndexPage() {
                 className="group flex w-full items-center gap-4 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all hover:border-brand-navy hover:shadow-lg"
               >
                 {/* LEFT ICON BLOCK */}
-                <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-navy to-slate-800 text-white shadow-sm">
-                  {/* <ReceiptIcon className="size-6" /> */}
-                  <img src={logoImg} alt="" />
 
+                <div className="size-14 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-brand-navy to-slate-800 shadow-md transition-transform duration-300 hover:scale-105">
+                  <img
+                    src={logoImg}
+                    // alt={BRAND.name}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
+
 
                 {/* INFO */}
                 <div className="min-w-0 flex-1">

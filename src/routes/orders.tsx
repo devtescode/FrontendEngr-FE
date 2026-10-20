@@ -24,6 +24,7 @@ import {
   setOrdersCache,
   type Order,
 } from "@/lib/ordersStore";
+import logoImg from "../components/Assets/image.webp";
 
 import { API_BASE_URL } from "@/lib/config";
 const API_URL = API_BASE_URL;
@@ -501,24 +502,22 @@ function Tabs({
               type="button"
               onClick={() => !disabled && onChange(tab.key)}
               disabled={disabled}
-              className={`group relative shrink-0 px-4 py-3 text-sm font-medium transition-colors ${
-                disabled
-                  ? "cursor-not-allowed text-slate-300"
-                  : isActive
-                    ? "text-brand-navy"
-                    : "text-slate-500 hover:text-slate-700"
-              }`}
+              className={`group relative shrink-0 px-4 py-3 text-sm font-medium transition-colors ${disabled
+                ? "cursor-not-allowed text-slate-300"
+                : isActive
+                  ? "text-brand-navy"
+                  : "text-slate-500 hover:text-slate-700"
+                }`}
             >
               <div className="flex items-center gap-2">
                 <span>{tab.label}</span>
                 <span
-                  className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
-                    isActive
-                      ? "bg-brand-navy text-white"
-                      : disabled
-                        ? "bg-slate-100 text-slate-300"
-                        : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
-                  }`}
+                  className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${isActive
+                    ? "bg-brand-navy text-white"
+                    : disabled
+                      ? "bg-slate-100 text-slate-300"
+                      : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
+                    }`}
                 >
                   {count}
                 </span>
@@ -557,20 +556,20 @@ function EmptyTabState({
   const config =
     tab === "Paid"
       ? {
-          title: "No Paid orders",
-          description:
-            "You don't have any orders waiting to be picked up right now.",
-        }
+        title: "No Paid orders",
+        description:
+          "You don't have any orders waiting to be picked up right now.",
+      }
       : tab === "Collected"
         ? {
-            title: "Nothing collected yet",
-            description:
-              "Orders you've picked up from the lab will appear here.",
-          }
+          title: "Nothing collected yet",
+          description:
+            "Orders you've picked up from the lab will appear here.",
+        }
         : {
-            title: "Nothing here",
-            description: "",
-          };
+          title: "Nothing here",
+          description: "",
+        };
 
   return (
     <motion.div
@@ -637,11 +636,10 @@ function OrderCard({
       }}
       exit={{ opacity: 0, x: -40 }}
       transition={{ delay: index * 0.04 }}
-      className={`relative overflow-hidden rounded-2xl border bg-white transition-shadow ${
-        isCollected
-          ? "border-slate-200 opacity-90 hover:opacity-100"
-          : "border-slate-200 hover:shadow-lg"
-      }`}
+      className={`relative overflow-hidden rounded-2xl border bg-white transition-shadow ${isCollected
+        ? "border-slate-200 opacity-90 hover:opacity-100"
+        : "border-slate-200 hover:shadow-lg"
+        }`}
     >
       <div
         className={`absolute left-0 top-0 h-full w-1 ${config.barBg}`}
@@ -650,13 +648,21 @@ function OrderCard({
       {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-6 py-4 pl-7">
         <div className="flex items-center gap-3">
+
           <div
-            className={`grid size-11 place-items-center rounded-xl text-white shadow-sm ${
-              isCollected ? "bg-slate-400" : "bg-brand-navy"
-            }`}
+            className={`size-12 shrink-0 overflow-hidden rounded-full border-2 shadow-md transition-all duration-300 sm:size-14 ${isCollected
+                ? "border-slate-300 bg-slate-400"
+                : "border-white/20 bg-brand-navy"
+              }`}
           >
-            <Receipt className="size-5" />
+            <img
+              src={logoImg}
+              // alt={BRAND.name}
+              className="h-full w-full rounded-full object-cover"
+            />
           </div>
+
+          {/* <Receipt className="size-5" /> */}
           <div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-slate-400">
               Order Reference
@@ -709,9 +715,8 @@ function OrderCard({
                     src={item.image}
                     alt={item.name}
                     loading="lazy"
-                    className={`h-full w-full object-cover ${
-                      isCollected ? "grayscale" : ""
-                    }`}
+                    className={`h-full w-full object-cover ${isCollected ? "grayscale" : ""
+                      }`}
                   />
                 ) : (
                   <Package className="size-5 text-slate-300" />
@@ -747,9 +752,8 @@ function OrderCard({
 
       {/* FOOTER */}
       <div
-        className={`grid gap-4 border-t border-slate-100 bg-slate-50/40 px-6 py-4 pl-7 ${
-          isCollected ? "sm:grid-cols-4" : "sm:grid-cols-3"
-        }`}
+        className={`grid gap-4 border-t border-slate-100 bg-slate-50/40 px-6 py-4 pl-7 ${isCollected ? "sm:grid-cols-4" : "sm:grid-cols-3"
+          }`}
       >
         {/* PAID ON */}
         <div className="flex items-center gap-2 text-xs text-slate-500">

@@ -13,14 +13,14 @@ export function Logo({ className = "" }: { className?: string }) {
       </div>
 
       {/* TEXT */}
-      <span className="text-xl  font-bold tracking-tight">
-        <span className="text-white">
+      {/* <span className="text-xl  font-bold tracking-tight">
+        <span style={{ color: "#24315D" }} className="text-white">
           EU
         </span>{" "}
-        <span className="text-white">
+        <span style={{ color: "#1F2A44" }} className="font-semibold">
           Hardwarestore
         </span>
-      </span>
+      </span> */}
     </div>
   );
 }
