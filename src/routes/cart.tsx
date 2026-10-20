@@ -167,8 +167,8 @@ function CartPage() {
           }
           return null;
         })
-        .filter((it: any) => it && it.quantity > 0);
-      return { ...source, items: normalizedItems };
+        .filter((it: any): it is CartItem => !!it && it.quantity > 0);
+      return { ...source, items: normalizedItems as CartItem[] };
     }
 
     if (source.cart && isObjCart(source.cart) && Array.isArray(source.cart.items)) {
@@ -202,8 +202,8 @@ function CartPage() {
             quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
           };
         })
-        .filter((it: any) => it && it.quantity > 0);
-      return { ...source.cart, items: normalizedItems };
+        .filter((it: any): it is CartItem => !!it && it.quantity > 0);
+      return { ...source.cart, items: normalizedItems as CartItem[] };
     }
 
     if (Array.isArray(source)) {
@@ -237,8 +237,8 @@ function CartPage() {
             quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
           };
         })
-        .filter((it: any) => it && it.quantity > 0);
-      return { items: normalizedItems };
+        .filter((it: any): it is CartItem => !!it && it.quantity > 0);
+      return { items: normalizedItems as CartItem[] };
     }
 
     return { items: [] };
