@@ -10,11 +10,10 @@ import {
   Calendar,
   Check,
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
-import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { formatNaira, useCurrentUser } from "@/lib/store";
 import { socket, connectUserSocket } from "@/lib/socket";
 
@@ -33,7 +32,7 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 // =====================================================
-// TYPES
+// TYPES & HELPERS
 // =====================================================
 
 const isObjDash = (v: unknown): v is Record<string, any> =>
@@ -44,7 +43,6 @@ const toStr = (v: unknown, fb = ""): string => {
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "bigint") return String(v);
   if (isObjDash(v)) {
-    // handle Mongo extended JSON + common wrappers
     if (v.$oid != null) return String(v.$oid);
     if (v._id != null) return toStr(v._id, fb);
     if (v.id != null) return toStr(v.id, fb);
@@ -86,7 +84,6 @@ const pickObjDash = (obj: any, keys: string[]) => {
   return null;
 };
 
-/** Quantity is the #1 mobile mismatch — accept every common key. */
 const readQty = (it: any): number => {
   if (!isObjDash(it)) return 0;
   const raw =
@@ -130,13 +127,6 @@ type Cart = {
   items: CartItem[];
 };
 
-type LoadResult = {
-  ordersOk: boolean;
-  cartOk: boolean;
-  ordersErr?: string;
-  cartErr?: string;
-};
-
 // =====================================================
 // MODULE-LEVEL CACHE
 // =====================================================
@@ -144,7 +134,7 @@ type LoadResult = {
 let ordersCache: Order[] = [];
 let cartCache: Cart = { items: [] };
 let dashboardLoaded = false;
-let inflight: Promise<LoadResult> | null = null;
+let inflight: Promise<void> | null = null;
 
 export const resetDashboardCache = () => {
   ordersCache = [];
@@ -154,26 +144,7 @@ export const resetDashboardCache = () => {
 };
 
 // =====================================================
-// DEBUG FLAG
-// =====================================================
-
-const isDebug = () => {
-  try {
-    return (
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("debug") === "1"
-    );
-  } catch {
-    return false;
-  }
-};
-
-const dbg = (...args: any[]) => {
-  if (isDebug()) console.log("[dash]", ...args);
-};
-
-// =====================================================
-// TOKEN (session + local, multiple keys)
+// TOKEN
 // =====================================================
 
 const getToken = (): string | null => {
@@ -221,7 +192,6 @@ async function fetchWithTimeout(
 
 function normalizeOrder(raw: any): Order | null {
   const source = isObjDash(raw) ? raw : {};
-
   const id = toStr(source.id ?? source._id ?? source.orderId ?? source.uuid, "");
   if (!id) return null;
 
@@ -229,7 +199,6 @@ function normalizeOrder(raw: any): Order | null {
     ? source.items
         .map((it: any): OrderItem | null => {
           if (!isObjDash(it)) return null;
-
           const populated =
             it.componentId && isObjDash(it.componentId)
               ? it.componentId
@@ -247,21 +216,19 @@ function normalizeOrder(raw: any): Order | null {
           const quantity = readQty(it);
           if (quantity <= 0) return null;
 
-          const name = toStr(it.name ?? populated?.name ?? "", "");
-          const price = toNum(
-            it.price ?? populated?.price ?? it.unitPrice ?? it.amount ?? 0,
-            0
-          );
-          const image =
-            toNullStr(
-              populated?.image ??
-                populated?.thumbnail ??
-                it.image ??
-                it.thumbnail
-            ) ?? null;
-          const sku = toNullStr(populated?.sku ?? it.sku ?? "") ?? null;
-
-          return { componentId, name, price, quantity, image, sku };
+          return {
+            componentId,
+            name: toStr(it.name ?? populated?.name ?? "", ""),
+            price: toNum(
+              it.price ?? populated?.price ?? it.unitPrice ?? it.amount ?? 0,
+              0
+            ),
+            quantity,
+            image:
+              toNullStr(populated?.image ?? populated?.thumbnail ?? it.image) ??
+              null,
+            sku: toNullStr(populated?.sku ?? it.sku ?? "") ?? null,
+          };
         })
         .filter((i): i is OrderItem => !!i)
     : [];
@@ -290,13 +257,6 @@ function normalizeOrder(raw: any): Order | null {
     source.createdAt ??
     source.created_at ??
     new Date().toISOString();
-  const createdAtCandidate =
-    source.createdAt ?? source.created_at ?? paidAtCandidate ?? "";
-
-  const itemCount =
-    typeof source.itemCount === "number" && Number.isFinite(source.itemCount)
-      ? source.itemCount
-      : items.reduce((s, it) => s + it.quantity, 0);
 
   return {
     id,
@@ -310,9 +270,9 @@ function normalizeOrder(raw: any): Order | null {
     status,
     channel: source.channel ?? source.paymentMethod ?? null,
     paidAt: toStr(paidAtCandidate, new Date().toISOString()),
-    createdAt: toStr(createdAtCandidate, ""),
+    createdAt: toStr(source.createdAt ?? source.created_at ?? paidAtCandidate, ""),
     collectedAt: source.collectedAt ?? source.collected_at ?? null,
-    itemCount,
+    itemCount: typeof source.itemCount === "number" ? source.itemCount : items.reduce((s, it) => s + it.quantity, 0),
   };
 }
 
@@ -325,25 +285,17 @@ function extractOrdersArray(ordersData: any): any[] {
   return [];
 }
 
-// =====================================================
-// NORMALIZE CART (must mirror normalizeOrder's tolerance)
-// =====================================================
-
 function extractCart(data: any): Cart {
   if (!data || typeof data !== "object") return { items: [] };
-
   const tryItems = (arr: any): CartItem[] | null =>
     Array.isArray(arr) ? (arr as CartItem[]) : null;
 
-  // Direct array
   const direct = tryItems(data);
   if (direct) return { items: direct };
 
-  // { items: [...] }
   const itemsKey = tryItems(data.items);
   if (itemsKey) return { ...data, items: itemsKey };
 
-  // { cart: { items: [...] } }
   if (isObjDash(data.cart)) {
     const cartItems = tryItems(data.cart.items);
     if (cartItems) return { ...data.cart, items: cartItems };
@@ -351,7 +303,6 @@ function extractCart(data: any): Cart {
     if (cartProducts) return { ...data.cart, items: cartProducts };
   }
 
-  // { data: [...] } / { data: { items: [...] } }
   if (Array.isArray(data.data)) return { items: data.data };
   if (isObjDash(data.data)) {
     const dItems = tryItems(data.data.items);
@@ -362,11 +313,9 @@ function extractCart(data: any): Cart {
     }
   }
 
-  // { result: [...] }
   const resultItems = tryItems(data.result);
   if (resultItems) return { items: resultItems };
 
-  // { products: [...] }
   const productItems = tryItems(data.products);
   if (productItems) return { items: productItems };
 
@@ -374,111 +323,47 @@ function extractCart(data: any): Cart {
 }
 
 // =====================================================
-// LOAD DATA (independent failures, cached)
+// LOAD DATA
 // =====================================================
 
-async function loadDashboardData(): Promise<LoadResult> {
+async function loadDashboardData(): Promise<void> {
   if (inflight) return inflight;
 
-  inflight = (async (): Promise<LoadResult> => {
-    const result: LoadResult = { ordersOk: false, cartOk: false };
-
+  inflight = (async () => {
     const token = getToken();
-    dbg("API_URL", API_URL, "origin", location.origin, "token?", !!token);
-
-    if (!token) {
-      result.ordersErr = "Please login first.";
-      result.cartErr = "Please login first.";
-      // Do NOT mark loaded; let the UI show the error banner.
-      return result;
-    }
+    if (!token) throw new Error("Please login first.");
 
     const headers = { Authorization: `Bearer ${token}` };
 
-    // ---- ORDERS ----
+    // Fetch Orders
     try {
-      const res = await fetchWithTimeout(
-        `${API_URL}/engineering/userordersdb`,
-        { headers }
-      );
-      const text = await res.text();
-      dbg("orders http", res.status, "body(head)", text.slice(0, 300));
-
-      if (!res.ok) {
-        let msg = "Unable to load orders.";
-        try {
-          msg = JSON.parse(text)?.message || msg;
-        } catch {
-          /* non-JSON */
-        }
-        throw new Error(msg);
+      const res = await fetchWithTimeout(`${API_URL}/engineering/userordersdb`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        ordersCache = extractOrdersArray(data)
+          .map(normalizeOrder)
+          .filter((o): o is Order => !!o);
+      } else {
+        console.error("Orders fetch failed with status:", res.status);
       }
-
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        throw new Error(`Orders endpoint returned non-JSON (HTTP ${res.status}).`);
-      }
-
-      const rawOrders = extractOrdersArray(data);
-      const nextOrders = rawOrders
-        .map((o: any) => normalizeOrder(o))
-        .filter((o): o is Order => !!o);
-
-      ordersCache = nextOrders;
-      result.ordersOk = true;
-      dbg("orders parsed", nextOrders.length);
-    } catch (e: any) {
-      result.ordersErr = e?.message || "Unable to load orders.";
-      console.error("[dash] orders fetch failed:", e);
+    } catch (e) {
+      console.error("Orders fetch error:", e);
     }
 
-    // ---- CART ----
+    // Fetch Cart
     try {
-      const res = await fetchWithTimeout(
-        `${API_URL}/engineering/cartuserdb`,
-        { headers }
-      );
-      const text = await res.text();
-      dbg("cart http", res.status, "body(head)", text.slice(0, 300));
-
-      if (!res.ok) {
-        let msg = "Unable to load cart.";
-        try {
-          msg = JSON.parse(text)?.message || msg;
-        } catch {
-          /* non-JSON */
-        }
-        throw new Error(msg);
+      const res = await fetchWithTimeout(`${API_URL}/engineering/cartuserdb`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        cartCache = extractCart(data);
+      } else {
+        console.error("Cart fetch failed with status:", res.status);
       }
-
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        throw new Error(`Cart endpoint returned non-JSON (HTTP ${res.status}).`);
-      }
-
-      const nextCart = extractCart(data);
-      cartCache =
-        nextCart && Array.isArray(nextCart.items)
-          ? nextCart
-          : { items: [] };
-      result.cartOk = true;
-      dbg("cart parsed", cartCache.items.length);
-    } catch (e: any) {
-      result.cartErr = e?.message || "Unable to load cart.";
-      console.error("[dash] cart fetch failed:", e);
+    } catch (e) {
+      console.error("Cart fetch error:", e);
     }
 
-    // Mark loaded only if at least one succeeded — avoids infinite loading,
-    // and avoids phantom "all empty" if both failed (UI shows error).
-    if (result.ordersOk || result.cartOk) {
-      dashboardLoaded = true;
-    }
-
-    return result;
+    dashboardLoaded = true;
   })().finally(() => {
     inflight = null;
   });
@@ -504,7 +389,7 @@ const formatShortDate = (iso: string | null | undefined) => {
 };
 
 // =====================================================
-// PAGE
+// PAGE COMPONENT
 // =====================================================
 
 function DashboardPage() {
@@ -521,9 +406,7 @@ function DashboardPage() {
   );
   const [error, setError] = useState<string | null>(null);
 
-  // ===================================================
-  // INITIAL LOAD
-  // ===================================================
+  // Initial Load
   useEffect(() => {
     let mounted = true;
     const isFirstLoad = !dashboardLoaded;
@@ -534,25 +417,13 @@ function DashboardPage() {
     }
 
     loadDashboardData()
-      .then((res) => {
+      .then(() => {
         if (!mounted) return;
         setOrders(Array.isArray(ordersCache) ? ordersCache : []);
-        setCart(
-          cartCache && Array.isArray(cartCache.items)
-            ? cartCache
-            : { items: [] }
-        );
-
-        // Only surface an error if BOTH failed and we have no cache.
-        const hasOrders = (ordersCache?.length ?? 0) > 0;
-        const hasCart = (cartCache?.items?.length ?? 0) > 0;
-        if (!res.ordersOk && !res.cartOk && !hasOrders && !hasCart) {
-          setError(res.ordersErr || res.cartErr || "Failed to load dashboard.");
-        }
+        setCart(cartCache && Array.isArray(cartCache.items) ? cartCache : { items: [] });
       })
       .catch((err: any) => {
         if (!mounted) return;
-        console.error("[dash] load error:", err);
         const hasOrders = (ordersCache?.length ?? 0) > 0;
         const hasCart = (cartCache?.items?.length ?? 0) > 0;
         if (!hasOrders && !hasCart) {
@@ -569,9 +440,7 @@ function DashboardPage() {
     };
   }, []);
 
-  // ===================================================
-  // REAL-TIME UPDATES
-  // ===================================================
+  // Real-time Updates
   useEffect(() => {
     let mounted = true;
     if (!getToken()) return;
@@ -583,50 +452,37 @@ function DashboardPage() {
         await loadDashboardData();
         if (!mounted) return;
         setOrders(Array.isArray(ordersCache) ? ordersCache : []);
-        setCart(
-          cartCache && Array.isArray(cartCache.items)
-            ? cartCache
-            : { items: [] }
-        );
+        setCart(cartCache && Array.isArray(cartCache.items) ? cartCache : { items: [] });
       } catch (e) {
-        console.error("[dash] refresh failed:", e);
+        console.error("Silent refresh failed:", e);
       }
     };
 
-    const onOrdersUpdated = () => refresh();
-    const onCartUpdated = () => refresh();
-
-    socket.on("orders:updated", onOrdersUpdated);
-    socket.on("cart:updated", onCartUpdated);
+    socket.on("orders:updated", refresh);
+    socket.on("cart:updated", refresh);
 
     return () => {
       mounted = false;
       cleanupJoin();
-      socket.off("orders:updated", onOrdersUpdated);
-      socket.off("cart:updated", onCartUpdated);
+      socket.off("orders:updated", refresh);
+      socket.off("cart:updated", refresh);
     };
   }, []);
 
   // ===================================================
-  // DERIVED
+  // DERIVED (FIXED: Removed useMemo to prevent mobile hydration bugs)
   // ===================================================
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safeCart = cart && Array.isArray(cart.items) ? cart : { items: [] };
 
-  const active = useMemo(
-    () => safeOrders.filter((o) => o && o.status !== "Collected"),
-    [safeOrders]
-  );
+  const active = safeOrders.filter((o) => o && o.status !== "Collected");
+  const collected = safeOrders.filter((o) => o && o.status === "Collected");
 
-  const collected = useMemo(
-    () => safeOrders.filter((o) => o && o.status === "Collected"),
-    [safeOrders]
-  );
-
-  const cartCount = useMemo(() => {
-    if (!Array.isArray(safeCart.items)) return 0;
-    return safeCart.items.reduce((acc, c: any) => acc + readQty(c), 0);
-  }, [safeCart]);
+  // Direct reduction rather than useMemo
+  const cartCount = safeCart.items.reduce((acc, c: any) => {
+    const qty = Number(c?.quantity ?? c?.qty ?? c?.count ?? c?.units ?? 0);
+    return acc + (Number.isFinite(qty) ? qty : 0);
+  }, 0);
 
   // ===================================================
   // GUARDS
@@ -641,77 +497,40 @@ function DashboardPage() {
     );
   }
 
-  if (loading && orders.length === 0 && (cart?.items?.length ?? 0) === 0) {
+  if (loading && orders.length === 0) {
     return (
       <AppShell>
-        <div
-          className="mx-auto w-full min-w-0 max-w-7xl overflow-x-clip px-3 py-6 sm:px-6 sm:py-10 lg:py-12"
-          aria-busy="true"
-          aria-live="polite"
-        >
-          <div className="pointer-events-none select-none">
-            <div className="blur-[2px] opacity-70">
-              <div className="mb-6 min-w-0 sm:mb-10">
-                <div className="h-3 w-24 animate-pulse rounded bg-slate-200 sm:w-28" />
-                <div className="mt-3 h-7 w-44 animate-pulse rounded bg-slate-200 sm:h-8 sm:w-56" />
-                <div className="mt-3 h-4 w-32 animate-pulse rounded bg-slate-200 sm:w-40" />
-              </div>
-
-              <div className="mb-10 grid grid-cols-2 gap-3 sm:mb-12 sm:gap-4 lg:grid-cols-4">
-                {[0, 1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"
-                  >
-                    <div className="mb-3 size-8 animate-pulse rounded-lg bg-slate-200 sm:size-9" />
-                    <div className="h-6 w-12 animate-pulse rounded bg-slate-200 sm:h-8 sm:w-16" />
-                    <div className="mt-2 h-2.5 w-20 animate-pulse rounded bg-slate-200 sm:w-24" />
-                  </div>
-                ))}
-              </div>
-
-              <div className="mx-auto w-full max-w-md space-y-4 sm:max-w-lg sm:space-y-6 lg:grid lg:max-w-none lg:grid-cols-3 lg:space-y-0 lg:gap-6">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 lg:col-span-2">
-                  <div className="mb-6 flex items-center justify-between">
-                    <div className="h-5 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
-                    <div className="h-4 w-14 animate-pulse rounded bg-slate-200 sm:w-16" />
-                  </div>
-                  <div className="space-y-3">
-                    {[0, 1, 2].map((i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between rounded-xl bg-slate-50 p-4"
-                      >
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <div className="h-3.5 w-40 animate-pulse rounded bg-slate-200 sm:w-48" />
-                          <div className="h-3 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
-                        </div>
-                        <div className="h-5 w-12 animate-pulse rounded bg-slate-200 sm:w-14" />
-                      </div>
-                    ))}
-                  </div>
+        <div className="mx-auto w-full max-w-7xl px-3 py-6 sm:px-6 sm:py-10 lg:py-12" aria-busy="true">
+          <div className="pointer-events-none select-none blur-[2px] opacity-70">
+            <div className="mb-6 min-w-0 sm:mb-10">
+              <div className="h-3 w-24 animate-pulse rounded bg-slate-200 sm:w-28" />
+              <div className="mt-3 h-7 w-44 animate-pulse rounded bg-slate-200 sm:h-8 sm:w-56" />
+            </div>
+            <div className="mb-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <div className="mb-3 size-8 animate-pulse rounded-lg bg-slate-200 sm:size-9" />
+                  <div className="h-6 w-12 animate-pulse rounded bg-slate-200 sm:h-8 sm:w-16" />
+                  <div className="mt-2 h-2.5 w-20 animate-pulse rounded bg-slate-200 sm:w-24" />
                 </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-                  <div className="mb-6 h-5 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
-                  <div className="space-y-3">
-                    {[0, 1, 2].map((i) => (
-                      <div
-                        key={i}
-                        className="space-y-2 rounded-lg bg-slate-50 p-3"
-                      >
-                        <div className="h-3.5 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
-                        <div className="h-3 w-36 animate-pulse rounded bg-slate-200 sm:w-40" />
+              ))}
+            </div>
+            <div className="mx-auto w-full max-w-md space-y-4 sm:max-w-lg lg:grid lg:max-w-none lg:grid-cols-3 lg:space-y-0 lg:gap-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
+                <div className="mb-6 h-5 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
+                <div className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex items-center justify-between rounded-xl bg-slate-50 p-4">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="h-3.5 w-40 animate-pulse rounded bg-slate-200 sm:w-48" />
+                        <div className="h-3 w-28 animate-pulse rounded bg-slate-200 sm:w-32" />
                       </div>
-                    ))}
-                  </div>
+                      <div className="h-5 w-12 animate-pulse rounded bg-slate-200 sm:w-14" />
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-
-            <p className="mt-8 text-center font-mono text-[10px] uppercase tracking-widest text-slate-400 sm:text-xs">
-              Loading your dashboard...
-            </p>
           </div>
         </div>
       </AppShell>
@@ -721,12 +540,10 @@ function DashboardPage() {
   if (error) {
     return (
       <AppShell>
-        <div className="mx-auto w-full min-w-0 max-w-7xl overflow-x-clip px-3 py-6 sm:px-6 sm:py-10 lg:py-12">
+        <div className="mx-auto w-full max-w-7xl px-3 py-6 sm:px-6 sm:py-10 lg:py-12">
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center sm:p-8">
             <AlertCircle className="mx-auto mb-3 size-7 text-red-600 sm:size-8" />
-            <p className="font-semibold text-red-700 sm:text-base">
-              Couldn't load your dashboard
-            </p>
+            <p className="font-semibold text-red-700 sm:text-base">Couldn't load your dashboard</p>
             <p className="mt-1 text-xs text-red-600 sm:text-sm">{error}</p>
             <button
               onClick={() => window.location.reload()}
@@ -740,12 +557,9 @@ function DashboardPage() {
     );
   }
 
-  // ===================================================
-  // RENDER
-  // ===================================================
   return (
     <AppShell>
-      <div className="mx-auto w-full min-w-0 max-w-7xl overflow-x-clip px-3 py-6 sm:px-6 sm:py-10 lg:py-12">
+      <div className="mx-auto w-full max-w-7xl px-3 py-6 sm:px-6 sm:py-10 lg:py-12">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -763,25 +577,14 @@ function DashboardPage() {
         </motion.div>
 
         <div className="mb-7 grid min-w-0 w-full max-w-full overflow-visible grid-cols-2 gap-1.5 xs:gap-2 sm:gap-3 md:gap-4 sm:mb-10 lg:mb-12 lg:grid-cols-4">
-          <StatCard
-            icon={ClipboardList}
-            label="Active Orders"
-            value={active.length}
-          />
-          <StatCard
-            icon={Package}
-            label="Total Orders"
-            value={safeOrders.length}
-          />
-          <StatCard
-            icon={ShoppingCart}
-            label="Cart Items"
-            value={cartCount}
-          />
+          <StatCard icon={ClipboardList} label="Active Orders" value={active.length} />
+          <StatCard icon={Package} label="Total Orders" value={safeOrders.length} />
+          <StatCard icon={ShoppingCart} label="Cart Items" value={cartCount} />
           <StatCard icon={Bell} label="Unread Alerts" value={0} highlight />
         </div>
 
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+          {/* ACTIVE ORDERS */}
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -790,9 +593,7 @@ function DashboardPage() {
           >
             <div className="mb-5 flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-bold text-brand-navy sm:text-lg">
-                  Active orders
-                </h2>
+                <h2 className="text-base font-bold text-brand-navy sm:text-lg">Active orders</h2>
                 <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
                   Your last 3 orders ready for pickup
                 </p>
@@ -810,12 +611,8 @@ function DashboardPage() {
                 <div className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-white shadow-sm sm:size-12">
                   <Package className="size-5 text-slate-400" />
                 </div>
-                <p className="text-sm font-medium text-slate-600">
-                  No active orders
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Your paid orders will appear here.
-                </p>
+                <p className="text-sm font-medium text-slate-600">No active orders</p>
+                <p className="mt-1 text-xs text-slate-400">Your paid orders will appear here.</p>
                 <Link
                   to="/components"
                   className="mt-4 inline-block rounded-lg bg-brand-navy px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
@@ -842,11 +639,7 @@ function DashboardPage() {
                             style={{ zIndex: 10 - idx }}
                           >
                             {item.image ? (
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="h-full w-full object-cover"
-                              />
+                              <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
                             ) : (
                               <Package className="size-4 text-slate-400" />
                             )}
@@ -871,8 +664,7 @@ function DashboardPage() {
                           {formatNaira(o.total)}
                         </div>
                         <div className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">
-                          {o.items.length} item
-                          {o.items.length > 1 && "s"}
+                          {o.items.length} item{o.items.length > 1 && "s"}
                         </div>
                       </div>
                     </div>
@@ -880,9 +672,7 @@ function DashboardPage() {
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                       <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500 sm:text-xs">
                         <Calendar className="size-3.5 shrink-0 text-slate-400" />
-                        <span className="truncate">
-                          Paid {formatShortDate(o.paidAt)}
-                        </span>
+                        <span className="truncate">Paid {formatShortDate(o.paidAt)}</span>
                       </div>
                       <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-emerald-600 sm:text-xs">
                         <PackageCheck className="size-3.5" />
@@ -895,6 +685,7 @@ function DashboardPage() {
             )}
           </motion.section>
 
+          {/* RECENT COLLECTED */}
           <motion.section
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -903,18 +694,11 @@ function DashboardPage() {
           >
             <div className="mb-5 flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-bold text-brand-navy sm:text-lg">
-                  Recent collected
-                </h2>
-                <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
-                  Your last 3 pickups
-                </p>
+                <h2 className="text-base font-bold text-brand-navy sm:text-lg">Recent collected</h2>
+                <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">Your last 3 pickups</p>
               </div>
               {collected.length > 0 && (
-                <Link
-                  to="/orders"
-                  className="shrink-0 text-xs font-semibold text-brand-accent sm:text-sm"
-                >
+                <Link to="/orders" className="shrink-0 text-xs font-semibold text-brand-accent sm:text-sm">
                   View all →
                 </Link>
               )}
@@ -925,12 +709,8 @@ function DashboardPage() {
                 <div className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-slate-100 sm:size-12">
                   <PackageCheck className="size-5 text-slate-400" />
                 </div>
-                <p className="text-sm text-slate-500">
-                  Nothing collected yet.
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Pickups will show up here once you collect them.
-                </p>
+                <p className="text-sm text-slate-500">Nothing collected yet.</p>
+                <p className="mt-1 text-xs text-slate-400">Pickups will show up here once you collect them.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -951,11 +731,7 @@ function DashboardPage() {
                             style={{ zIndex: 10 - idx }}
                           >
                             {item.image ? (
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="h-full w-full object-cover grayscale"
-                              />
+                              <img src={item.image} alt={item.name} className="h-full w-full object-cover grayscale" />
                             ) : (
                               <Package className="size-4 text-slate-400" />
                             )}
@@ -970,8 +746,7 @@ function DashboardPage() {
 
                       <div className="min-w-0 flex-1 basis-24">
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-700 ring-1 ring-emerald-200/60">
-                          <Check className="size-3" />
-                          Collected
+                          <Check className="size-3" /> Collected
                         </span>
                         <div className="mt-1.5 truncate font-mono text-[11px] text-slate-600 sm:text-xs">
                           {o.reference}
@@ -982,9 +757,7 @@ function DashboardPage() {
                         <div className="text-sm font-bold text-brand-navy sm:text-base">
                           {formatNaira(o.total)}
                         </div>
-                        <div className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">
-                          Paid
-                        </div>
+                        <div className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">Paid</div>
                       </div>
                     </div>
 
@@ -992,25 +765,16 @@ function DashboardPage() {
                       <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
                         <Calendar className="size-3 shrink-0 text-slate-400" />
                         <div className="min-w-0">
-                          <div className="text-[9px] uppercase tracking-widest text-slate-400">
-                            Paid
-                          </div>
-                          <div className="truncate text-slate-600">
-                            {formatShortDate(o.paidAt)}
-                          </div>
+                          <div className="text-[9px] uppercase tracking-widest text-slate-400">Paid</div>
+                          <div className="truncate text-slate-600">{formatShortDate(o.paidAt)}</div>
                         </div>
                       </div>
-
                       <div className="flex min-w-0 items-center gap-1.5 text-[11px]">
                         <PackageCheck className="size-3 shrink-0 text-emerald-500" />
                         <div className="min-w-0">
-                          <div className="text-[9px] uppercase tracking-widest text-slate-400">
-                            Collected
-                          </div>
+                          <div className="text-[9px] uppercase tracking-widest text-slate-400">Collected</div>
                           <div className="truncate text-slate-600">
-                            {o.collectedAt
-                              ? formatShortDate(o.collectedAt)
-                              : "—"}
+                            {o.collectedAt ? formatShortDate(o.collectedAt) : "—"}
                           </div>
                         </div>
                       </div>
@@ -1027,6 +791,7 @@ function DashboardPage() {
 }
 
 /* ---------------- STAT CARD ---------------- */
+/* Replaced AnimatedCounter with plain span to prevent mobile frame throttling */
 
 function StatCard({
   icon: Icon,
@@ -1045,9 +810,6 @@ function StatCard({
       : typeof value === "string" && value.trim() !== ""
         ? value.trim()
         : 0;
-
-  const numericValue =
-    typeof safeValue === "number" ? safeValue : Number(safeValue) || 0;
 
   const displayValue = String(safeValue);
 
@@ -1083,23 +845,11 @@ function StatCard({
             whiteSpace: "nowrap",
           }}
         >
-          {typeof safeValue === "number" ? (
-            <AnimatedCounter
-              value={numericValue}
-              className="min-w-0 max-w-full overflow-visible inline-flex tabular-nums"
-            />
-          ) : (
-            <span
-              className="min-w-0 max-w-full overflow-visible whitespace-nowrap tabular-nums"
-              style={{ textOverflow: "unset" }}
-            >
-              {displayValue}
-            </span>
-          )}
+          <span className="min-w-0 max-w-full overflow-visible whitespace-nowrap tabular-nums">
+            {displayValue}
+          </span>
         </div>
-        <span className="sr-only" aria-live="polite">
-          {displayValue}
-        </span>
+        <span className="sr-only" aria-live="polite">{displayValue}</span>
       </div>
 
       <div
