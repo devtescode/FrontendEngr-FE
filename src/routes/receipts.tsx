@@ -34,6 +34,7 @@ import {
   type OrderItem,
 } from "@/lib/ordersStore";
 import { API_BASE_URL } from "@/lib/config";
+import logoImg from "../components/Assets/image.webp";
 
 export const Route = createFileRoute("/receipts")({
   head: () => ({ meta: [{ title: "Receipts - EU Hardwarestore" }] }),
@@ -258,7 +259,9 @@ function ReceiptsIndexPage() {
               >
                 {/* LEFT ICON BLOCK */}
                 <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-navy to-slate-800 text-white shadow-sm">
-                  <ReceiptIcon className="size-6" />
+                  {/* <ReceiptIcon className="size-6" /> */}
+                  <img src={logoImg} alt="" />
+
                 </div>
 
                 {/* INFO */}
@@ -341,7 +344,7 @@ function ReceiptModal({
       await navigator.clipboard.writeText(order.reference);
       setCopiedRef(true);
       setTimeout(() => setCopiedRef(false), 2000);
-    } catch {}
+    } catch { }
   };
 
   const handleShare = async () => {
@@ -364,14 +367,14 @@ function ReceiptModal({
           url: window.location.href,
         });
         return;
-      } catch {}
+      } catch { }
     }
 
     try {
       await navigator.clipboard.writeText(text);
       setCopiedShare(true);
       setTimeout(() => setCopiedShare(false), 2000);
-    } catch {}
+    } catch { }
   };
 
   const handlePrint = () => window.print();
@@ -446,8 +449,12 @@ function ReceiptModal({
                   <div className="relative">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2.5">
-                        <div className="grid size-9 place-items-center rounded-xl bg-white/10 backdrop-blur-sm ring-1 ring-white/20">
-                          <Sparkles className="size-4 text-white" />
+                        <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-white/10  ring-white/20 sm:size-11">
+                          <img
+                            src={logoImg}
+                            alt={BRAND.name}
+                            className="block h-full w-full object-contain p-0.5"
+                          />
                         </div>
                         <div>
                           <div className="text-sm font-bold tracking-tight">
@@ -730,35 +737,31 @@ function StatCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border p-4 ${
-        highlight
-          ? "border-brand-navy bg-brand-navy text-white"
-          : "border-slate-200 bg-white"
-      }`}
+      className={`rounded-2xl border p-4 ${highlight
+        ? "border-brand-navy bg-brand-navy text-white"
+        : "border-slate-200 bg-white"
+        }`}
     >
       <div className="flex items-center gap-2">
         <div
-          className={`grid size-8 place-items-center rounded-lg ${
-            highlight
-              ? "bg-white/10 text-white"
-              : "bg-slate-100 text-slate-500"
-          }`}
+          className={`grid size-8 place-items-center rounded-lg ${highlight
+            ? "bg-white/10 text-white"
+            : "bg-slate-100 text-slate-500"
+            }`}
         >
           {icon}
         </div>
         <span
-          className={`text-[10px] font-medium uppercase tracking-widest ${
-            highlight ? "text-white/70" : "text-slate-400"
-          }`}
+          className={`text-[10px] font-medium uppercase tracking-widest ${highlight ? "text-white/70" : "text-slate-400"
+            }`}
         >
           {label}
         </span>
       </div>
 
       <div
-        className={`mt-3 text-xl font-bold ${
-          highlight ? "text-white" : "text-brand-navy"
-        }`}
+        className={`mt-3 text-xl font-bold ${highlight ? "text-white" : "text-brand-navy"
+          }`}
       >
         {value}
       </div>

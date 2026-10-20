@@ -315,9 +315,9 @@ function AdminLayoutShell({
         <div className="flex items-center justify-between border-b border-white/5 px-4 py-4 sm:px-5 sm:py-5">
           <div className="min-w-0">
             <Logo className="text-white" />
-            <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
+            {/* <div className="mt-1.5 font-mono text-white text-[10px] uppercase tracking-[0.2em] text-slate-500">
               Admin Console
-            </div>
+            </div> */}
           </div>
 
           <button
