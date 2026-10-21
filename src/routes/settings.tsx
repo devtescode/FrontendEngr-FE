@@ -15,10 +15,9 @@ import { AppShell } from "@/components/AppShell";
 import { pushToast } from "@/components/ComponentCard";
 import { FormInput } from "@/components/FormInput";
 import { RequireAuth } from "@/components/RequireAuth";
-import { useCurrentUser } from "@/lib/store";
-
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
+import { getCurrentUser } from "@/lib/auth";
+import { useChangePassword } from "@/hooks/useAuthMutations";
+import { toErrorMessage } from "@/lib/queryClient";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -34,7 +33,13 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  const user = useCurrentUser();
+  // The signed-in student, read from the session. The Zustand store only
+  // ever held locally mocked users, so this was always empty for real
+  // students.
+  const user = getCurrentUser();
+
+  const changePasswordMutation = useChangePassword();
+
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -80,33 +85,25 @@ function SettingsPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/engineering/changepassword`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ currentPassword, newPassword }),
+      const data = await changePasswordMutation.mutateAsync({
+        currentPassword,
+        newPassword,
       });
-
-      const data: { message?: string } | null = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        showError(data?.message || "Unable to update your password. Please try again.");
-        return;
-      }
 
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      const message = data?.message || "Your password has been updated successfully.";
+      const message =
+        (data as { message?: string })?.message ||
+        "Your password has been updated successfully.";
       setSuccess(message);
       pushToast("success", message);
     } catch (requestError) {
       showError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to connect to the server. Please try again.",
+        toErrorMessage(
+          requestError,
+          "Unable to connect to the server. Please try again."
+        )
       );
     } finally {
       setLoading(false);

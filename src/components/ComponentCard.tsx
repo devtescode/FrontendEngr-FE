@@ -14,8 +14,9 @@ import { useEffect, useState } from "react";
 import type { BackendComponent } from "@/lib/api";
 import { socket } from "@/lib/socket";
 
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
+import { useCartMutations, useCartQuery } from "@/hooks/useCartQuery";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 
 // =====================================================
 // TYPES
@@ -28,200 +29,6 @@ type Toast = {
   kind: ToastKind;
   message: string;
 };
-
-// =====================================================
-// GLOBAL CART CACHE
-// =====================================================
-
-type CachedCartItem = {
-  componentId: string;
-  quantity: number;
-};
-
-export const cartCache: {
-  items: CachedCartItem[];
-  loaded: boolean;
-} = {
-  items: [],
-  loaded: false,
-};
-
-const isObjCC = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
-const toStrCC = (v: unknown, fb = "") => {
-  if (v == null) return fb;
-  if (typeof v === "string") return v;
-  if (typeof v === "number" || typeof v === "bigint") return String(v);
-  if (isObjCC(v)) {
-    if (v._id != null) return String(v._id);
-    if (v.id != null) return String(v.id);
-  }
-  return String(v);
-};
-const toNumCC = (v: unknown, fb = 0) => {
-  if (v == null) return fb;
-  if (typeof v === "number") return Number.isFinite(v) ? v : fb;
-  if (typeof v === "string") {
-    const n = Number(v.trim());
-    return Number.isFinite(n) ? n : fb;
-  }
-  return fb;
-};
-
-/**
- * Extract the cart items array from any of the shapes
- * the backend might return:
- *   { items: [...] }
- *   { cart: { items: [...] } }
- *   [...]
- */
-function extractItems(data: any): any[] {
-  if (!data) return [];
-  if (Array.isArray(data.items)) return data.items;
-  if (isObjCC(data.cart) && Array.isArray(data.cart.items)) {
-    return data.cart.items;
-  }
-  if (Array.isArray(data)) return data;
-  return [];
-}
-
-/**
- * Only replace the shared cache when the payload is a real cart snapshot.
- * Unknown socket/message shapes must not wipe every card's quantity.
- */
-function hasCartShape(data: any): boolean {
-  if (!data) return false;
-  if (Array.isArray(data)) return true;
-  if (Array.isArray(data.items)) return true;
-  return isObjCC(data.cart) && Array.isArray(data.cart.items);
-}
-
-export function setCartCacheFromResponse(cart: any) {
-  const rawItems = extractItems(cart);
-  const items: CachedCartItem[] = [];
-
-  for (const it of rawItems) {
-    if (!isObjCC(it)) continue;
-    const comp = it.componentId;
-    let id: unknown = comp;
-    if (isObjCC(comp)) {
-      id = comp._id ?? comp.id ?? comp.componentId;
-    }
-    const idStr = toStrCC(id, "");
-    if (!idStr) continue;
-    const qty = toNumCC(it.quantity ?? it.qty ?? it.count ?? 0, 0);
-    if (qty <= 0) continue;
-    items.push({
-      componentId: idStr,
-      quantity: qty,
-    });
-  }
-
-  cartCache.items = items;
-  cartCache.loaded = true;
-}
-
-export function getCachedQuantity(
-  componentId: string | undefined
-): number {
-  if (!componentId) return 0;
-
-  const found = cartCache.items.find(
-    (it) => it.componentId === String(componentId)
-  );
-
-  return found?.quantity ?? 0;
-}
-
-// =====================================================
-// SHARED CART LOADER
-// =====================================================
-// Every ComponentCard used to request /engineering/cart
-// on mount. On a page with six cards that meant six
-// identical requests. This loader deduplicates them into
-// one request per session (or per explicit reset).
-//
-let cartLoadPromise: Promise<void> | null = null;
-let cartGeneration = 0;
-let activeCartAbort: AbortController | null = null;
-
-export function resetCartCache() {
-  cartGeneration += 1;
-
-  activeCartAbort?.abort();
-  activeCartAbort = null;
-
-  cartCache.items = [];
-  cartCache.loaded = false;
-  cartLoadPromise = null;
-
-  // The cart page keeps its own offline copy under this key. It must not
-  // survive a user switch.
-  try {
-    localStorage.removeItem("pulselab_cart");
-  } catch (error) {
-    console.error("Failed to clear saved cart:", error);
-  }
-}
-
-export async function ensureCartLoaded(): Promise<void> {
-  if (cartCache.loaded) return;
-  if (cartLoadPromise) return cartLoadPromise;
-
-  const token = sessionStorage.getItem("pulselab_token");
-
-  // Guests can browse the catalog without any cart request.
-  if (!token) return;
-
-  const generation = cartGeneration;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
-  const tracked: { promise: Promise<void> | null } = { promise: null };
-
-  activeCartAbort = controller;
-
-  const request = (async () => {
-    const response = await fetch(`${API_URL}/engineering/cart`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to load cart");
-    }
-
-    const cart = await response.json();
-
-    // Ignore a response that belongs to a previous user/session.
-    if (generation !== cartGeneration) return;
-
-    setCartCacheFromResponse(cart);
-  })()
-    .catch((error) => {
-      if ((error as { name?: string })?.name !== "AbortError") {
-        console.error("Failed to restore cart:", error);
-      }
-    })
-    .finally(() => {
-      clearTimeout(timeoutId);
-
-      if (activeCartAbort === controller) {
-        activeCartAbort = null;
-      }
-
-      // Don't let an old request clear a newer in-flight request.
-      if (cartLoadPromise === tracked.promise) {
-        cartLoadPromise = null;
-      }
-    });
-
-  tracked.promise = request;
-  cartLoadPromise = request;
-
-  return request;
-}
 
 // =====================================================
 // GLOBAL TOAST BUS
@@ -313,7 +120,7 @@ function ToastItem({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -16, scale: 0.94 }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
-      className={`pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border border-white/10 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur-md ring-1 ${config.ring}`}
+      className="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border border-white/10 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur-md ring-1 ${config.ring}"
     >
       <div
         className={`grid size-8 shrink-0 place-items-center rounded-lg ${config.bg}`}
@@ -358,104 +165,34 @@ export function ComponentCard({
   const componentId = c._id ?? c.id;
 
   // ===================================================
-  // CART READY GATE
+  // CART
   // ===================================================
-  // Guests must never wait on a cart request before a card can render. For
-  // signed-in users the shared loader resolves the cart once for the page.
-  const [cartReady, setCartReady] = useState(
-    () =>
-      cartCache.loaded ||
-      typeof window === "undefined" ||
-      !sessionStorage.getItem("pulselab_token")
-  );
+  // Every card on the page reads the same query key, so the cart is
+  // requested exactly once no matter how many cards are rendered.
+  const queryClient = useQueryClient();
+  const { cart, isLoading: cartLoading } = useCartQuery();
+  const {
+    addToCart,
+    updateQuantity,
+    removeFromCart,
+  } = useCartMutations();
 
-  const [quantity, setQuantity] = useState(() =>
-    getCachedQuantity(componentId)
-  );
+  const quantity =
+    cart.items.find((item) => item.componentId === componentId)?.quantity ?? 0;
+
+  const isMutating =
+    addToCart.isPending ||
+    updateQuantity.isPending ||
+    removeFromCart.isPending;
+
+  // Guests can browse the catalog without any cart request.
+  const cartReady = !cartLoading;
+
   const [loading, setLoading] = useState(false);
 
   const getToken = () => {
     return sessionStorage.getItem("pulselab_token");
   };
-
-  const sessionStillCurrent = (generation: number, requestToken: string) =>
-    generation === cartGeneration && getToken() === requestToken;
-
-  // ===================================================
-  // SYNC LOCAL QUANTITY INTO CACHE
-  // ===================================================
-  const syncCache = (nextQuantity: number) => {
-    if (!componentId) return;
-
-    const id = String(componentId);
-    const existing = cartCache.items.find(
-      (it) => it.componentId === id
-    );
-
-    if (nextQuantity === 0) {
-      cartCache.items = cartCache.items.filter(
-        (it) => it.componentId !== id
-      );
-      return;
-    }
-
-    if (existing) {
-      existing.quantity = nextQuantity;
-    } else {
-      cartCache.items.push({
-        componentId: id,
-        quantity: nextQuantity,
-      });
-    }
-  };
-
-  // ===================================================
-  // APPLY SERVER RESPONSE TO CACHE
-  // ===================================================
-  // Handles any response shape the backend returns
-  // ({ items }, { cart: { items } }, or [...]) and
-  // updates the local quantity accordingly.
-  //
-  const applyServerResponse = (data: any) => {
-    // If the server returned a real cart snapshot, refresh the whole cache.
-    if (hasCartShape(data)) {
-      setCartCacheFromResponse(data);
-      setQuantity(getCachedQuantity(componentId));
-    }
-  };
-
-  // ===================================================
-  // INITIAL LOAD
-  // ===================================================
-  // One shared request fills the cache for every card.
-  // Cart changes from the catalog, cart page, or socket
-  // events update the same cache afterwards.
-  //
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!componentId) {
-      setCartReady(true);
-      return;
-    }
-
-    void ensureCartLoaded()
-      .then(() => {
-        if (cancelled) return;
-
-        setQuantity(getCachedQuantity(componentId));
-        setCartReady(true);
-      })
-      .catch(() => {
-        // A storage failure must never leave the card's action permanently
-        // gated behind a skeleton.
-        if (!cancelled) setCartReady(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [componentId]);
 
   if (!componentId) {
     console.error("Component ID is missing:", c);
@@ -464,17 +201,19 @@ export function ComponentCard({
   // ===================================================
   // REAL-TIME CART UPDATE
   // ===================================================
+  // The backend pushes a fresh cart after an add and after a payment
+  // webhook. Invalidate the shared query so every card re-reads it.
   useEffect(() => {
     const handleCartUpdated = (cart: any) => {
       if (!sessionStorage.getItem("pulselab_token")) return;
-      if (!hasCartShape(cart)) return;
 
       // Ignore a queued event that belongs to another user.
       const currentUserId = sessionStorage.getItem("pulselab_userId");
       const rawUserId = cart?.userId;
-      const eventUserId = isObjCC(rawUserId)
-        ? rawUserId._id ?? rawUserId.id
-        : rawUserId;
+      const eventUserId =
+        rawUserId && typeof rawUserId === "object"
+          ? rawUserId._id ?? rawUserId.id
+          : rawUserId;
 
       if (
         currentUserId &&
@@ -484,9 +223,7 @@ export function ComponentCard({
         return;
       }
 
-      setCartCacheFromResponse(cart);
-      setQuantity(getCachedQuantity(componentId));
-      setCartReady(true);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cart.all });
     };
 
     socket.on("cart:updated", handleCartUpdated);
@@ -494,7 +231,7 @@ export function ComponentCard({
     return () => {
       socket.off("cart:updated", handleCartUpdated);
     };
-  }, [componentId]);
+  }, [queryClient]);
 
   // ===================================================
   // ADD TO CART (optimistic)
@@ -514,52 +251,22 @@ export function ComponentCard({
 
     if (isOutOfStock) return;
 
-    const requestGeneration = cartGeneration;
-    const previousQuantity = quantity;
-    setQuantity(1);
-    syncCache(1);
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/engineering/addtocart`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            componentId: componentId,
-            quantity: 1,
-          }),
-        }
-      );
+      await addToCart.mutateAsync({
+        componentId,
+        quantity: 1,
+        component: c,
+      });
 
-      const data = await response.json();
-      console.log("ADD TO CART RESPONSE:", data);
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to add item to cart"
-        );
-      }
-
-      if (!sessionStillCurrent(requestGeneration, token)) return;
-
-      applyServerResponse(data);
       pushToast("success", `${c.name} added to cart`);
     } catch (error: any) {
       console.error("Add to cart error:", error);
 
-      if (!sessionStillCurrent(requestGeneration, token)) return;
-
-      setQuantity(previousQuantity);
-      syncCache(previousQuantity);
-
       pushToast(
         "error",
-        error.message || "Failed to add item to cart"
+        error?.message || "Failed to add item to cart"
       );
     } finally {
       setLoading(false);
@@ -585,60 +292,24 @@ export function ComponentCard({
     if (quantity >= c.stock) {
       pushToast(
         "error",
-        `Only ${c.stock} unit${
-          c.stock === 1 ? "" : "s"
-        } available for ${c.name}.`
+        `Only ${c.stock} unit${c.stock === 1 ? "" : "s"} available for ${c.name}.`
       );
       return;
     }
 
-    const requestGeneration = cartGeneration;
-    const previousQuantity = quantity;
-    const nextQuantity = previousQuantity + 1;
-
-    setQuantity(nextQuantity);
-    syncCache(nextQuantity);
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/engineering/addtocart`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            componentId: componentId,
-            quantity: 1,
-          }),
-        }
-      );
-
-      const data = await response.json();
-      console.log("INCREASE RESPONSE:", data);
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to increase quantity"
-        );
-      }
-
-      if (!sessionStillCurrent(requestGeneration, token)) return;
-
-      applyServerResponse(data);
+      await updateQuantity.mutateAsync({
+        componentId,
+        quantity: quantity + 1,
+      });
     } catch (error: any) {
       console.error("Increase quantity error:", error);
 
-      if (!sessionStillCurrent(requestGeneration, token)) return;
-
-      setQuantity(previousQuantity);
-      syncCache(previousQuantity);
-
       pushToast(
         "error",
-        error.message || "Failed to increase quantity"
+        error?.message || "Failed to increase quantity"
       );
     } finally {
       setLoading(false);
@@ -663,80 +334,28 @@ export function ComponentCard({
 
     if (quantity <= 0) return;
 
-    const requestGeneration = cartGeneration;
-    const previousQuantity = quantity;
-    const isRemoving = previousQuantity === 1;
-    const nextQuantity = isRemoving ? 0 : previousQuantity - 1;
+    const isRemoving = quantity === 1;
 
-    setQuantity(nextQuantity);
-    syncCache(nextQuantity);
     setLoading(true);
 
     try {
       if (isRemoving) {
-        const response = await fetch(
-          `${API_URL}/engineering/cart/${componentId}`,
-          {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        await removeFromCart.mutateAsync({ componentId });
 
-        const data = await response.json();
-        console.log("REMOVE CART RESPONSE:", data);
-
-        if (!response.ok) {
-          throw new Error(
-            data.message || "Failed to remove item"
-          );
-        }
-
-        if (!sessionStillCurrent(requestGeneration, token)) return;
-
-        applyServerResponse(data);
         pushToast("info", `${c.name} removed from cart`);
         return;
       }
 
-      const response = await fetch(
-        `${API_URL}/engineering/cart/${componentId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            quantity: nextQuantity,
-          }),
-        }
-      );
-
-      const data = await response.json();
-      console.log("DECREASE RESPONSE:", data);
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to decrease quantity"
-        );
-      }
-
-      if (!sessionStillCurrent(requestGeneration, token)) return;
-
-      applyServerResponse(data);
+      await updateQuantity.mutateAsync({
+        componentId,
+        quantity: quantity - 1,
+      });
     } catch (error: any) {
       console.error("Decrease quantity error:", error);
 
-      if (!sessionStillCurrent(requestGeneration, token)) return;
-
-      setQuantity(previousQuantity);
-      syncCache(previousQuantity);
-
       pushToast(
         "error",
-        error.message || "Failed to decrease quantity"
+        error?.message || "Failed to decrease quantity"
       );
     } finally {
       setLoading(false);
@@ -840,7 +459,7 @@ export function ComponentCard({
         ) : quantity === 0 ? (
           <button
             type="button"
-            disabled={isOutOfStock || !componentId}
+            disabled={isOutOfStock || !componentId || isMutating}
             onClick={handleAddToCart}
             className="mt-auto flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-navy/90 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
           >
@@ -851,7 +470,7 @@ export function ComponentCard({
           <div className="mt-auto flex h-12 w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <button
               type="button"
-              disabled={loading}
+              disabled={loading || isMutating}
               onClick={handleDecrease}
               className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Decrease quantity"
@@ -870,7 +489,7 @@ export function ComponentCard({
 
             <button
               type="button"
-              disabled={loading}
+              disabled={loading || isMutating}
               onClick={handleIncrease}
               className="flex h-full w-14 items-center justify-center text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Increase quantity"

@@ -22,15 +22,19 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import {
+  usePickupSearch,
+  useUpdatePickupStatus,
+} from "@/hooks/useAdminQueries";
+import { toErrorMessage } from "@/lib/queryClient";
+import type { NormalizedOrder } from "@/lib/normalize";
+
 export const Route = createFileRoute("/admin/pickup")({
   head: () => ({
     meta: [{ title: "Student Pickup — Admin" }],
   }),
   component: PickupPage,
 });
-
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
 
 // =====================================================
 // TYPES
@@ -45,21 +49,7 @@ type PickupItem = {
   sku?: string | null;
 };
 
-type PickupOrder = {
-  id: string;
-  reference: string;
-  userId: string;
-  userName: string;
-  matric: string;
-  email: string | null;
-  items: PickupItem[];
-  total: number;
-  currency: string;
-  channel: string | null;
-  paidAt: string;
-  createdAt: string;
-  status: "Paid" | "Ready" | "Collected";
-};
+type PickupOrder = NormalizedOrder;
 
 type PendingConfirm = {
   order: PickupOrder;
@@ -99,10 +89,24 @@ const getToken = () =>
 
 function PickupPage() {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<PickupOrder[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searched, setSearched] = useState(false);
+  // The submitted term drives the query; typing alone never hits the API.
+  const [submitted, setSubmitted] = useState("");
+
+  const {
+    results: searchResults,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = usePickupSearch(submitted);
+
+  const updateStatus = useUpdatePickupStatus();
+
+  const searched = submitted.trim().length > 0;
+  const results = searched ? searchResults : null;
+
+  const error = isError
+    ? toErrorMessage(queryError, "Unable to search orders.")
+    : null;
 
   // Confirmation modal state
   const [pendingConfirm, setPendingConfirm] =
@@ -117,59 +121,14 @@ function PickupPage() {
 
     const q = query.trim();
     if (!q) {
-      setError(
-        "Enter a matric number, its last 4 digits, or an order reference."
-      );
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    setResults(null);
-    setSearched(true);
-
-    try {
-      const token = getToken();
-      if (!token) {
-        throw new Error("Please log in as admin.");
-      }
-
-      const url = `${API_URL}/admin/pickup/search?q=${encodeURIComponent(
-        q
-      )}`;
-
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const rawText = await response.text();
-      let data: any = null;
-      try {
-        data = rawText ? JSON.parse(rawText) : null;
-      } catch {
-        throw new Error(
-          `Search endpoint returned non-JSON (HTTP ${response.status}).`
-        );
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          data?.message || "Search failed. Please try again."
-        );
-      }
-
-      const orders: PickupOrder[] = Array.isArray(data?.orders)
-        ? data.orders
-        : [];
-
-      setResults(orders);
-    } catch (err: any) {
-      console.error("🔴 Pickup search failed:", err);
-      setError(err?.message || "Unable to search orders.");
-      setResults([]);
-    } finally {
-      setLoading(false);
+    if (q.length < 2) {
+      return;
     }
+
+    setSubmitted(q);
   };
 
   // ===================================================
@@ -177,9 +136,7 @@ function PickupPage() {
   // ===================================================
   const clearSearch = () => {
     setQuery("");
-    setResults(null);
-    setError(null);
-    setSearched(false);
+    setSubmitted("");
   };
 
   // ===================================================
@@ -197,50 +154,18 @@ function PickupPage() {
 
     const { order } = pendingConfirm;
 
-    const token = getToken();
-    if (!token) {
-      alert("Please log in as admin.");
-      return;
-    }
-
     setUpdating(true);
 
-    const previous = results;
-
-    // Optimistic update
-    setResults((prev) =>
-      prev
-        ? prev.map((o) =>
-            o.id === order.id
-              ? { ...o, status: "Collected" as const }
-              : o
-          )
-        : prev
-    );
-
     try {
-      const response = await fetch(
-        `${API_URL}/admin/pickup/${order.id}/status`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ status: "Collected" }),
-        }
-      );
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.message || "Failed to update status");
-      }
+      await updateStatus.mutateAsync({
+        orderId: order.id,
+        status: "Collected",
+      });
 
       setPendingConfirm(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Update status failed:", err);
-      alert(err?.message || "Failed to update status");
-      setResults(previous);
+      alert(toErrorMessage(err, "Failed to update status"));
     } finally {
       setUpdating(false);
     }

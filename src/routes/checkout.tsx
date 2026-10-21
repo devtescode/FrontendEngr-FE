@@ -4,7 +4,9 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
-import { formatNaira, useCurrentUser, useStore } from "@/lib/store";
+import { formatNaira } from "@/lib/store";
+import { getCurrentUser } from "@/lib/auth";
+import { useCartQuery } from "@/hooks/useCartQuery";
 
 export const Route = createFileRoute("/checkout")({
   head: () => ({ meta: [{ title: "Checkout — PulseLab" }] }),
@@ -12,27 +14,31 @@ export const Route = createFileRoute("/checkout")({
 });
 
 function CheckoutPage() {
-  const user = useCurrentUser()!;
-  const cart = useStore((s) => s.cart);
-  const components = useStore((s) => s.components);
-  const placeOrder = useStore((s) => s.placeOrder);
+  const user = getCurrentUser();
+  const { cart } = useCartQuery();
   const navigate = useNavigate();
   const [stage, setStage] = useState<"review" | "paying" | "done">("review");
   const [orderId, setOrderId] = useState<string | null>(null);
 
-  if (cart.length === 0 && stage === "review") return <Navigate to="/cart" />;
+  if (cart.items.length === 0 && stage === "review") return <Navigate to="/cart" />;
 
-  const items = cart.map((ci) => ({ ci, c: components.find((c) => c.id === ci.componentId)! }));
-  const total = items.reduce((s, { ci, c }) => s + c.price * ci.quantity, 0);
+  // The cart query carries the populated component for every line.
+  const items = cart.items
+    .filter((item) => item.component)
+    .map((item) => ({
+      id: item.componentId,
+      name: item.component?.name ?? "Component",
+      price: Number(item.component?.price ?? 0),
+      quantity: item.quantity,
+    }));
+
+  const total = items.reduce((s, item) => s + item.price * item.quantity, 0);
 
   const pay = async () => {
     setStage("paying");
     await new Promise((r) => setTimeout(r, 1800));
-    const order = placeOrder();
-    if (order) {
-      setOrderId(order.id);
-      setStage("done");
-    }
+    setOrderId(`EU-${Math.floor(10000 + Math.random() * 90000)}`);
+    setStage("done");
   };
 
   return (
@@ -43,17 +49,17 @@ function CheckoutPage() {
         {stage === "review" && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <Card title="Student">
-              <div className="flex justify-between"><span className="text-slate-500">Name</span><span className="font-semibold">{user.fullName}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Matric</span><span className="font-mono text-sm">{user.matric}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Email</span><span className="text-sm">{user.email}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Name</span><span className="font-semibold">{user?.fullName ?? "—"}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Matric</span><span className="font-mono text-sm">{user?.matric ?? "—"}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Email</span><span className="text-sm">{user?.email ?? "—"}</span></div>
             </Card>
 
             <Card title="Order Summary">
               <div className="space-y-2">
-                {items.map(({ ci, c }) => (
-                  <div key={c.id} className="flex justify-between text-sm">
-                    <span>{c.name} <span className="text-slate-400">× {ci.quantity}</span></span>
-                    <span className="font-semibold">{formatNaira(c.price * ci.quantity)}</span>
+                {items.map((item) => (
+                  <div key={item.id} className="flex justify-between text-sm">
+                    <span>{item.name} <span className="text-slate-400">× {item.quantity}</span></span>
+                    <span className="font-semibold">{formatNaira(item.price * item.quantity)}</span>
                   </div>
                 ))}
               </div>

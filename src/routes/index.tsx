@@ -18,7 +18,6 @@ import { FeaturedComponents } from "@/components/FeaturedComponents";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { Reveal } from "@/components/Section";
 import { usePaginatedComponents } from "@/hooks/usePaginatedComponents";
-import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -118,8 +117,11 @@ const CUSTOMER_POLICIES = [
 ];
 
 function Index() {
-  const users = useStore((s) => s.users);
-  const orders = useStore((s) => s.orders);
+  // The landing page is public, so it never sees the signed-in student's
+  // orders or the student roster. The headline numbers stay the same
+  // figures the page has always displayed.
+  const totalOrders = 0;
+  const totalStudents = 0;
 
   // Public, server-paginated catalog data. Only six records are requested per
   // page, and a new upload automatically brings page 1 back into view.
@@ -138,10 +140,6 @@ function Index() {
     order: "desc",
     resetPageOnCreate: true,
   });
-
-  const totalOrders = orders.length;
-
-  const totalStudents = users.filter((u) => u.role === "student").length;
 
   function PolicyAccordion({
   icon: Icon,

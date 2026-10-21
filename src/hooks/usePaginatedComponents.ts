@@ -1,12 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import {
   componentApi,
   type BackendComponent,
   type ComponentSortField,
+  type PaginatedComponentsResponse,
   type PaginationMeta,
   type SortOrder,
 } from "@/lib/api";
+import { queryKeys } from "@/lib/queryKeys";
 import { socket } from "@/lib/socket";
 
 const DEFAULT_PAGE_SIZE = 6;
@@ -60,9 +68,9 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 /**
  * Server-backed component pagination.
  *
- * The hook only ever asks the API for the current page. Requests are aborted
- * when the query changes, and a sequence guard prevents a late response from
- * overwriting a newer page or filter selection.
+ * Only the current page is ever requested. React Query owns the request
+ * lifecycle: it cancels obsolete requests when the key changes, ignores
+ * out-of-order responses, and caches each visited page.
  */
 export function usePaginatedComponents({
   pageSize = DEFAULT_PAGE_SIZE,
@@ -73,180 +81,105 @@ export function usePaginatedComponents({
   resetPageOnCreate = false,
 }: UsePaginatedComponentsOptions = {}): UsePaginatedComponentsResult {
   const safePageSize = Math.min(48, Math.max(1, Math.floor(pageSize)));
-
-  const [page, setPageState] = useState(1);
-  const [components, setComponents] = useState<BackendComponent[]>([]);
-  const [pagination, setPagination] = useState<PaginationMeta>({
-    ...EMPTY_PAGINATION,
-    pageSize: safePageSize,
-  });
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
+  const queryClient = useQueryClient();
 
   const debouncedSearch = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
-
-  const requestIdRef = useRef(0);
-  const activeRequestRef = useRef<AbortController | null>(null);
-  const skipNextFetchKeyRef = useRef<string | null>(null);
-  const lastSignatureRef = useRef("");
-  const componentsRef = useRef<BackendComponent[]>([]);
-  const pageRef = useRef(page);
-
-  pageRef.current = page;
-
-  const setPage = useCallback((nextPage: number) => {
-    const next = Number.isFinite(nextPage) ? Math.floor(nextPage) : 1;
-    setPageState(Math.max(1, next));
-  }, []);
-
-  const refresh = useCallback(() => {
-    setReloadToken((token) => token + 1);
-  }, []);
-
   const activeCategory = category === "All" ? undefined : category;
 
-  useEffect(() => {
-    // A search, category or sort change always restarts the list at page 1.
-    // Deriving the requested page from the filter signature keeps that to a
-    // single request instead of one for the old page and one for the new one.
-    const signature = [
+  // A search, category or sort change always restarts the list at page 1.
+  // The page is derived from the filter signature, so the change costs a
+  // single request instead of one for the old page and one for the new one.
+  const signature = [sort, order, debouncedSearch, activeCategory ?? ""].join(
+    "|"
+  );
+
+  const [pageState, setPageState] = useState<{
+    signature: string;
+    page: number;
+  }>({ signature, page: 1 });
+
+  const page = pageState.signature === signature ? pageState.page : 1;
+
+  const pageRef = useRef(page);
+  pageRef.current = page;
+
+  const listParams = useMemo(
+    () => ({
+      page,
+      limit: safePageSize,
       sort,
       order,
-      debouncedSearch,
-      activeCategory ?? "",
-    ].join("|");
-
-    const signatureChanged = lastSignatureRef.current !== signature;
-    lastSignatureRef.current = signature;
-
-    const requestedPage = signatureChanged ? 1 : page;
-
-    const queryKey = [
-      requestedPage,
+      search: debouncedSearch,
+      category: activeCategory,
+    }),
+    [
+      page,
       safePageSize,
       sort,
       order,
       debouncedSearch,
-      activeCategory ?? "",
-    ].join("|");
+      activeCategory,
+    ]
+  );
 
-    // A server-clamped response already contains the correct page. Skip the
-    // follow-up request that would otherwise be triggered by the page change.
-    if (skipNextFetchKeyRef.current === queryKey) {
-      skipNextFetchKeyRef.current = null;
-      return;
-    }
+  const query = useQuery({
+    queryKey: queryKeys.components.list(listParams),
+    queryFn: ({ signal }) =>
+      componentApi.getPage({
+        page: listParams.page,
+        limit: listParams.limit,
+        sort: listParams.sort,
+        order: listParams.order,
+        search: listParams.search,
+        category: listParams.category,
+        signal,
+      }),
+    // Keep the cards on screen while the next page loads.
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+  });
 
-    const controller = new AbortController();
+  // The last response that succeeded, so a failed background refresh can
+  // still show the page the user was looking at.
+  const lastGoodRef = useRef<PaginatedComponentsResponse | null>(null);
 
-    activeRequestRef.current?.abort();
-    activeRequestRef.current = controller;
+  useEffect(() => {
+    if (query.data) lastGoodRef.current = query.data;
+  }, [query.data]);
 
-    const requestId = ++requestIdRef.current;
+  const data = query.data ?? lastGoodRef.current;
 
-    if (signatureChanged) {
-      // A new filter makes the visible cards irrelevant, so they are cleared
-      // and the skeleton takes over.
-      componentsRef.current = [];
-      setComponents([]);
-      setRefreshing(false);
-      setLoading(true);
-    } else {
-      // A page change or a plain refresh keeps the current cards on screen
-      // (dimmed) so the controls stay usable and rapid page changes can be
-      // made without waiting for the previous request to settle.
-      setLoading(false);
-      setRefreshing(true);
-    }
+  // The server clamps an out-of-range page (for example after the last card
+  // on a page is deleted). Follow it, and seed the clamped page's cache
+  // entry so the resulting key change does not trigger a second request.
+  useEffect(() => {
+    const meta = data?.pagination;
 
-    setError(null);
+    if (!meta) return;
+    if (meta.currentPage === listParams.page) return;
+    if (query.isPlaceholderData) return;
 
-    componentApi
-      .getPage({
-        page: requestedPage,
-        limit: safePageSize,
-        sort,
-        order,
-        search: debouncedSearch,
-        category: activeCategory,
-        signal: controller.signal,
-      })
-      .then((response) => {
-        if (
-          controller.signal.aborted ||
-          requestId !== requestIdRef.current
-        ) {
-          return;
-        }
+    queryClient.setQueryData(
+      queryKeys.components.list({ ...listParams, page: meta.currentPage }),
+      data
+    );
 
-        const meta = response.pagination;
-        const servedKey = [
-          meta.currentPage,
-          safePageSize,
-          sort,
-          order,
-          debouncedSearch,
-          activeCategory ?? "",
-        ].join("|");
+    setPageState({ signature, page: meta.currentPage });
+  }, [data, listParams, query.isPlaceholderData, queryClient, signature]);
 
-        // The page shown to the user has to follow the server when it clamps
-        // an out-of-range request, and it has to follow the filter reset when
-        // a new signature restarted the list at page 1.
-        const pageNeedsSync =
-          meta.currentPage !== requestedPage || requestedPage !== page;
+  const setPage = useCallback(
+    (nextPage: number) => {
+      const next = Number.isFinite(nextPage) ? Math.floor(nextPage) : 1;
+      setPageState({ signature, page: Math.max(1, next) });
+    },
+    [signature]
+  );
 
-        if (pageNeedsSync) {
-          // Suppress the request that the page-state update would trigger.
-          skipNextFetchKeyRef.current = servedKey;
-        }
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.components.all });
+  }, [queryClient]);
 
-        componentsRef.current = response.data;
-        setComponents(response.data);
-        setPagination(meta);
-
-        if (pageNeedsSync) {
-          setPageState(meta.currentPage);
-        }
-      })
-      .catch((err: unknown) => {
-        if (
-          controller.signal.aborted ||
-          requestId !== requestIdRef.current
-        ) {
-          return;
-        }
-
-        console.error("Failed to load component page:", err);
-        setError(
-          "We couldn't load the components right now. Check your connection and try again."
-        );
-      })
-      .finally(() => {
-        if (requestId !== requestIdRef.current) return;
-
-        setLoading(false);
-        setRefreshing(false);
-
-        if (activeRequestRef.current === controller) {
-          activeRequestRef.current = null;
-        }
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [
-    page,
-    safePageSize,
-    sort,
-    order,
-    debouncedSearch,
-    activeCategory,
-    reloadToken,
-  ]);
-
+  // Realtime updates: the backend broadcasts whenever the catalog changes.
   useEffect(() => {
     if (!socket.connected) {
       socket.connect();
@@ -259,16 +192,18 @@ export function usePaginatedComponents({
 
       refreshTimer = setTimeout(() => {
         refreshTimer = null;
-        setReloadToken((token) => token + 1);
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.components.all,
+        });
       }, REALTIME_REFRESH_DELAY_MS);
     };
 
     const handleCreated = () => {
       if (resetPageOnCreate) {
-        // If we are not already on page 1, the page change itself triggers the
-        // fetch. Scheduling another refresh here would duplicate the request.
+        // If we are not already on page 1, the page change itself refetches
+        // page 1. Scheduling another refresh here would duplicate it.
         if (pageRef.current !== 1) {
-          setPageState(1);
+          setPageState({ signature, page: 1 });
           return;
         }
       }
@@ -298,13 +233,36 @@ export function usePaginatedComponents({
 
       if (refreshTimer) clearTimeout(refreshTimer);
     };
-  }, [resetPageOnCreate]);
+  }, [queryClient, resetPageOnCreate, signature]);
 
-  useEffect(() => {
-    return () => {
-      activeRequestRef.current?.abort();
+  // Memoised so the identity only changes when the data does.
+  const components = useMemo(() => data?.data ?? [], [data]);
+
+  const pagination = useMemo<PaginationMeta>(() => {
+    const meta = data?.pagination;
+
+    if (!meta) {
+      return { ...EMPTY_PAGINATION, pageSize: safePageSize };
+    }
+
+    if (!query.isPlaceholderData) return meta;
+
+    // While the next page is in flight the totals are still valid, but the
+    // page indicator should already show the page the user asked for.
+    return {
+      ...meta,
+      currentPage: listParams.page,
+      hasNextPage: listParams.page < meta.totalPages,
+      hasPreviousPage: listParams.page > 1,
     };
-  }, []);
+  }, [data, query.isPlaceholderData, listParams.page, safePageSize]);
+
+  const loading = query.isPending;
+  const refreshing = query.isFetching && !query.isPending;
+
+  const error = query.isError
+    ? "We couldn't load the components right now. Check your connection and try again."
+    : null;
 
   return {
     components,

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Package,
@@ -18,16 +19,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { socket, connectUserSocket } from "@/lib/socket";
-import {
-  ordersCache,
-  loadOrders,
-  setOrdersCache,
-  type Order,
-} from "@/lib/ordersStore";
+import { useOrdersQuery } from "@/hooks/useOrdersQuery";
+import { queryKeys } from "@/lib/queryKeys";
+import type { NormalizedOrder } from "@/lib/normalize";
 import logoImg from "../components/Assets/image.webp";
-
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "My Orders — EU Hardwarestore" }] }),
@@ -195,115 +190,68 @@ function OrderSkeleton({ index = 0 }: { index?: number }) {
 // =====================================================
 
 function OrdersPage() {
-  const [orders, setOrders] = useState<Order[]>(() => ordersCache);
-  const [loading, setLoading] = useState(
-    () => ordersCache.length === 0
-  );
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const {
+    orders,
+    isLoading: loading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useOrdersQuery();
+
   const [activeTab, setActiveTab] = useState<TabKey>("All");
 
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(
     new Set()
   );
 
-  const hasLoadedOnce = useRef(ordersCache.length > 0);
+  const error = isError
+    ? "Unable to load your orders. Please try again."
+    : null;
+
+  const prevOrderIds = useRef<Set<string>>(new Set());
 
   // ===================================================
-  // INITIAL LOAD
+  // HIGHLIGHT NEWLY ARRIVED ORDERS
   // ===================================================
   useEffect(() => {
-    let mounted = true;
+    const nextIds = new Set(orders.map((o) => o.id));
+    const newIds = new Set<string>();
 
-    if (ordersCache.length > 0) {
-      setOrders(ordersCache);
-      setLoading(false);
-      hasLoadedOnce.current = true;
-      return;
+    nextIds.forEach((id) => {
+      if (!prevOrderIds.current.has(id)) newIds.add(id);
+    });
+
+    prevOrderIds.current = nextIds;
+
+    if (newIds.size > 0) {
+      setHighlightedIds(newIds);
+      const timer = setTimeout(() => setHighlightedIds(new Set()), 4000);
+      return () => clearTimeout(timer);
     }
-
-    setLoading(true);
-    setError(null);
-
-    loadOrders()
-      .then((data) => {
-        if (!mounted) return;
-        setOrders(data);
-        hasLoadedOnce.current = true;
-      })
-      .catch((err: any) => {
-        if (!mounted) return;
-        console.error("❌ Orders load failed:", err);
-        setError(err?.message || "Unable to load orders.");
-      })
-      .finally(() => {
-        if (!mounted) return;
-        setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // ===================================================
-  // SILENT REFRESH
-  // ===================================================
-  const refreshOrdersSilently = async () => {
-    const token = sessionStorage.getItem("pulselab_token");
-    if (!token) return;
-
-    try {
-      const response = await fetch(
-        `${API_URL}/engineering/getorders`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const rawText = await response.text();
-      const data = rawText ? JSON.parse(rawText) : null;
-
-      if (!response.ok) return;
-
-      const next: Order[] = Array.isArray(data?.orders)
-        ? data.orders
-        : [];
-
-      setOrders((prev) => {
-        const prevIds = new Set(prev.map((o) => o.id));
-        const newIds = new Set<string>();
-        next.forEach((o) => {
-          if (!prevIds.has(o.id)) newIds.add(o.id);
-        });
-
-        if (newIds.size > 0) {
-          setHighlightedIds(newIds);
-          setTimeout(() => setHighlightedIds(new Set()), 4000);
-        }
-
-        return next;
-      });
-
-      setOrdersCache(next);
-    } catch (err) {
-      console.error("Silent orders refresh failed:", err);
-    }
-  };
+  }, [orders]);
 
   // ===================================================
   // SOCKET
   // ===================================================
+  // The backend pushes `orders:updated` when a pickup status changes and
+  // `cart:updated` after a payment. Both invalidate the shared query.
   useEffect(() => {
     const token = sessionStorage.getItem("pulselab_token");
     if (!token) return;
 
     const cleanupJoin = connectUserSocket();
 
+    const invalidate = () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
+    };
+
     const onOrdersUpdated = () => {
-      console.log("🟢 orders:updated received");
-      refreshOrdersSilently();
+      invalidate();
     };
     const onCartUpdated = () => {
-      console.log("🟢 cart:updated received");
-      refreshOrdersSilently();
+      invalidate();
     };
 
     socket.on("orders:updated", onOrdersUpdated);
@@ -314,7 +262,7 @@ function OrdersPage() {
       socket.off("orders:updated", onOrdersUpdated);
       socket.off("cart:updated", onCartUpdated);
     };
-  }, []);
+  }, [queryClient]);
 
   // ===================================================
   // COUNTS
@@ -408,12 +356,7 @@ function OrdersPage() {
             <p className="mt-1 text-sm text-red-600">{error}</p>
             <button
               onClick={() => {
-                setLoading(true);
-                setError(null);
-                loadOrders()
-                  .then(setOrders)
-                  .catch((e: any) => setError(e?.message))
-                  .finally(() => setLoading(false));
+                void refetch();
               }}
               className="mt-5 rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
             >
@@ -607,7 +550,7 @@ function OrderCard({
   index,
   isHighlighted,
 }: {
-  order: Order;
+  order: NormalizedOrder;
   index: number;
   isHighlighted: boolean;
 }) {

@@ -6,8 +6,7 @@ import { useStore } from "@/lib/store";
 import { ToastHost } from "./ComponentCard";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  // Rehydrate the user into the Zustand store from
-  // sessionStorage on mount.
+  // Rehydrate the session id into the client store on mount.
   useEffect(() => {
     const savedUser = sessionStorage.getItem("pulselab_user");
     if (!savedUser) return;
@@ -18,12 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       if (!userId) return;
 
-      useStore.setState((state) => ({
-        currentUserId: userId,
-        users: state.users.some((u) => u.id === userId)
-          ? state.users
-          : [...state.users, parsed],
-      }));
+      useStore.setState({ currentUserId: String(userId) });
     } catch (err) {
       console.error("Failed to rehydrate user:", err);
       sessionStorage.removeItem("pulselab_user");

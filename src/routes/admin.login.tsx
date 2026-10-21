@@ -6,12 +6,12 @@
   import { useEffect, useState } from "react";
   import logoImg from "../components/Assets/image.webp";
 
-
-  import { API_BASE_URL } from "@/lib/config";
-  const API_URL = API_BASE_URL;
-
-  const SESSION_USER = "admin_user";
-  const SESSION_TOKEN = "admin_token";
+  import {
+    useAdminExists,
+    useAdminLogin,
+    useAdminRegister,
+  } from "@/hooks/useAuthMutations";
+  import { toErrorMessage } from "@/lib/queryClient";
 
   export const Route = createFileRoute("/admin/login")({
     head: () => ({
@@ -22,6 +22,10 @@
 
   function AdminLogin() {
     const navigate = useNavigate();
+
+    const adminExistsMutation = useAdminExists();
+    const adminLoginMutation = useAdminLogin();
+    const adminRegisterMutation = useAdminRegister();
 
     const [email, setEmail] = useState("");
     const [username, setUsername] = useState("");
@@ -37,24 +41,12 @@
     useEffect(() => {
       let mounted = true;
 
-      const checkAdmin = async () => {
-        try {
-          const res = await fetch(`${API_URL}/admin/exists`);
-
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}`);
-          }
-
-          const data = await res.json();
-
-          console.log("ADMIN EXISTS RESPONSE:", data);
-
-          if (mounted) {
-            setHasAdmin(data.exists === true);
-          }
-        } catch (error) {
-          console.error("ADMIN EXISTS ERROR:", error);
-
+      adminExistsMutation
+        .mutateAsync()
+        .then((exists) => {
+          if (mounted) setHasAdmin(exists);
+        })
+        .catch(() => {
           if (mounted) {
             // If the endpoint fails, don't leave the page loading forever.
             setHasAdmin(true);
@@ -62,14 +54,12 @@
               "Unable to check admin status. You can still try signing in."
             );
           }
-        }
-      };
-
-      checkAdmin();
+        });
 
       return () => {
         mounted = false;
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // ----------------------------------
@@ -90,109 +80,23 @@
     // CREATE ADMIN
     // ----------------------------------
     if (isCreatingAdmin) {
-      const registerRes = await fetch(
-        `${API_URL}/admin/register`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            username: username.trim(),
-            email: email.trim(),
-            password,
-          }),
-        }
-      );
-
-      const registerData = await registerRes.json();
-
-      console.log("REGISTER RESPONSE:", registerData);
-
-      if (!registerRes.ok) {
-        setError(
-          registerData?.message ||
-            registerData?.error ||
-            "Unable to create admin"
-        );
-        return;
-      }
+      await adminRegisterMutation.mutateAsync({
+        username: username.trim(),
+        email: email.trim(),
+        password,
+      });
 
       // ----------------------------------
       // ADMIN CREATED
       // NOW LOGIN AUTOMATICALLY
       // ----------------------------------
-      console.log("Admin created successfully. Logging in...");
+      // The login mutation stores the session and clears every cached
+      // response left over from a previous admin.
+      await adminLoginMutation.mutateAsync({
+        email: email.trim(),
+        password,
+      });
 
-      const loginRes = await fetch(
-        `${API_URL}/admin/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-          }),
-        }
-      );
-
-      const loginData = await loginRes.json();
-
-      console.log("AUTO LOGIN RESPONSE:", loginData);
-
-      if (!loginRes.ok) {
-        setError(
-          loginData?.message ||
-            "Admin created, but automatic login failed."
-        );
-        return;
-      }
-
-      // ----------------------------------
-      // GET ADMIN + TOKEN
-      // ----------------------------------
-      const admin = loginData?.admin;
-      const token = loginData?.token;
-
-      if (!admin) {
-        setError(
-          "Admin was created but server did not return admin information."
-        );
-        return;
-      }
-
-      if (!token) {
-        setError(
-          "Admin was created but server did not return an authentication token."
-        );
-        return;
-      }
-
-      // ----------------------------------
-      // SAVE SESSION
-      // ----------------------------------
-      const adminUser = {
-        ...admin,
-        role: "admin",
-      };
-
-      sessionStorage.setItem(
-        SESSION_USER,
-        JSON.stringify(adminUser)
-      );
-
-      sessionStorage.setItem(
-        SESSION_TOKEN,
-        String(token)
-      );
-
-      console.log("ADMIN SESSION CREATED");
-
-      // ----------------------------------
-      // GO TO DASHBOARD
-      // ----------------------------------
       await navigate({
         to: "/admin",
         replace: true,
@@ -204,69 +108,11 @@
     // ----------------------------------
     // NORMAL ADMIN LOGIN
     // ----------------------------------
-    const loginRes = await fetch(
-      `${API_URL}/admin/login`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password,
-        }),
-      }
-    );
+    await adminLoginMutation.mutateAsync({
+      email: email.trim(),
+      password,
+    });
 
-    const loginData = await loginRes.json();
-
-    console.log("LOGIN RESPONSE:", loginData);
-
-    if (!loginRes.ok) {
-      setError(
-        loginData?.message ||
-          loginData?.error ||
-          "Invalid email or password"
-      );
-      return;
-    }
-
-    const admin = loginData?.admin;
-    const token = loginData?.token;
-
-    if (!admin) {
-      setError("Server did not return admin information.");
-      return;
-    }
-
-    if (!token) {
-      setError("Server did not return an authentication token.");
-      return;
-    }
-
-    // ----------------------------------
-    // SAVE SESSION
-    // ----------------------------------
-    const adminUser = {
-      ...admin,
-      role: "admin",
-    };
-
-    sessionStorage.setItem(
-      SESSION_USER,
-      JSON.stringify(adminUser)
-    );
-
-    sessionStorage.setItem(
-      SESSION_TOKEN,
-      String(token)
-    );
-
-    console.log("ADMIN LOGIN SESSION SAVED");
-
-    // ----------------------------------
-    // GO TO DASHBOARD
-    // ----------------------------------
     await navigate({
       to: "/admin",
       replace: true,
@@ -274,9 +120,7 @@
   } catch (error) {
     console.error("AUTH ERROR:", error);
 
-    setError(
-      "Unable to connect to the server. Make sure your backend is running."
-    );
+    setError(toErrorMessage(error, "Unable to sign in. Please try again."));
   } finally {
     setLoading(false);
   }

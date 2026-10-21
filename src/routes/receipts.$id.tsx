@@ -29,9 +29,8 @@
 
     import { AppShell } from "@/components/AppShell";
     import { RequireAuth } from "@/components/RequireAuth";
-    import { API_BASE_URL } from "@/lib/config";
-
-    const API_URL = API_BASE_URL;
+    import { useOrderQuery } from "@/hooks/useOrdersQuery";
+    import type { NormalizedOrder } from "@/lib/normalize";
 
     const BRAND = {
     name: "EU Hardwarestore",
@@ -54,30 +53,7 @@
     // TYPES
     // =====================================================
 
-    type OrderItem = {
-    componentId: string;
-    name: string;
-    price: number;
-    quantity: number;
-    image?: string | null;
-    sku?: string | null;
-    };
-
-    type Order = {
-    id: string;
-    reference: string;
-    items: OrderItem[];
-    subtotal: number;
-    total: number;
-    currency: string;
-    status: "Paid";
-    channel: string | null;
-    paidAt: string;
-    createdAt: string;
-    paystackTransactionId: string | null;
-    paystackFees: number;
-    customerEmail: string | null;
-    };
+    type Order = NormalizedOrder;
 
     // =====================================================
     // HELPERS
@@ -107,78 +83,20 @@
     const { id } = useParams({ from: "/receipts/$id" });
     const navigate = useNavigate();
 
-    const [order, setOrder] = useState<Order | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const {
+        order,
+        isLoading: loading,
+        isError,
+        error: queryError,
+        refetch,
+    } = useOrderQuery(id);
+
     const [copiedRef, setCopiedRef] = useState(false);
     const [copiedShare, setCopiedShare] = useState(false);
 
-    // ===================================================
-    // FETCH
-    // ===================================================
-    useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-        const token = sessionStorage.getItem("pulselab_token");
-
-        console.log("🔍 Receipt page — id:", id);
-        console.log("🔍 API_URL:", API_URL);
-        console.log("🔍 Token present:", !!token);
-
-        if (!token) {
-        setError("Please login first.");
-        setLoading(false);
-        return;
-        }
-
-        const url = `${API_URL}/engineering/orders/${id}`;
-        console.log("🔍 Fetching:", url);
-
-        try {
-        setLoading(true);
-
-        const response = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-
-        console.log("🔍 Status:", response.status);
-        console.log("🔍 Content-Type:", response.headers.get("content-type"));
-
-        const rawText = await response.text();
-        console.log("🔍 Raw body (first 500 chars):", rawText.slice(0, 500));
-
-        let data: any = null;
-        try {
-            data = rawText ? JSON.parse(rawText) : null;
-        } catch {
-            throw new Error(
-            `Receipt endpoint returned non-JSON (HTTP ${response.status}).`
-            );
-        }
-
-        if (!response.ok) {
-            throw new Error(data?.message || "Receipt not found.");
-        }
-
-        console.log("🔍 Parsed order:", data.order);
-
-        if (!cancelled) setOrder(data.order);
-        } catch (err: any) {
-        console.error("🔴 Receipt load failed:", err);
-        if (!cancelled) {
-            setError(err?.message || "Unable to load receipt.");
-        }
-        } finally {
-        if (!cancelled) setLoading(false);
-        }
-    };
-
-    load();
-    return () => {
-        cancelled = true;
-    };
-    }, [id]);
+    const error = isError
+        ? "We couldn't load this receipt. Please try again."
+        : null;
 
     // ===================================================
     // ACTIONS
@@ -532,7 +450,7 @@
                 <div className="flex justify-between text-slate-500">
                     <span>Subtotal</span>
                     <span className="font-semibold text-slate-700">
-                    {formatNaira(order.subtotal)}
+                    {formatNaira(order.subtotal ?? order.total)}
                     </span>
                 </div>
 
@@ -543,11 +461,11 @@
                     </span>
                 </div>
 
-                {order.paystackFees > 0 && (
+                {(order.paystackFees ?? 0) > 0 && (
                     <div className="flex justify-between text-slate-400">
                     <span className="text-xs">Gateway Fee</span>
                     <span className="text-xs">
-                        {formatNaira(order.paystackFees)}
+                        {formatNaira(order.paystackFees ?? 0)}
                     </span>
                     </div>
                 )}

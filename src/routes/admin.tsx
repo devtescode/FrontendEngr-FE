@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -28,13 +29,16 @@ import {
 import { RequireAuth } from "@/components/RequireAuth";
 import { Logo } from "@/components/Logo";
 import { useStore } from "@/lib/store";
-import type { PaymentOrder } from "@/lib/store";
 import { useAdminRealtime } from "@/lib/useAdminRealtime";
-import { fetchAdminOverview } from "../lib/adminApi";
+import { useAdminOverview } from "@/hooks/useAdminQueries";
+import { clearAdminSession } from "@/lib/auth";
+import { disconnectUserSocket } from "@/lib/socket";
+import type { BackendComponent } from "@/lib/api";
+import type { NormalizedOrder } from "@/lib/normalize";
 import { useEffect, useMemo, useState } from "react";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Admin — EU Hardwarestore" }] }),
+  head: () => ({ meta: [{ title: "Admin â€” EU Hardwarestore" }] }),
   component: AdminLayout,
 });
 
@@ -73,9 +77,9 @@ const timeOf = (iso?: string | null) => {
 };
 
 function timeAgo(iso?: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "â€”";
   const then = timeOf(iso);
-  if (!then) return "—";
+  if (!then) return "â€”";
 
   const diff = Date.now() - then;
   if (diff < 0) return "just now";
@@ -103,9 +107,9 @@ function timeAgo(iso?: string | null): string {
 }
 
 function formatDateTime(iso?: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "â€”";
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
+  if (isNaN(d.getTime())) return "â€”";
   return d.toLocaleString("en-NG", {
     day: "2-digit",
     month: "short",
@@ -120,7 +124,7 @@ function formatDateTime(iso?: string | null): string {
 
 type OrderStage = "unpaid" | "paid" | "ready" | "collected";
 
-function stageOf(order: PaymentOrder): OrderStage {
+function stageOf(order: NormalizedOrder): OrderStage {
   const paid = String(order?.paymentStatus ?? "").toLowerCase() === "paid";
   const pickup = String(order?.pickupStatus ?? "").toLowerCase();
 
@@ -154,8 +158,8 @@ const STAGE_META: Record<OrderStage, { label: string; chip: string; dot: string 
 };
 
 /** Total paid for an order, in naira. */
-function orderTotal(order: PaymentOrder): number {
-  const kobo = Number(order?.amountKobo ?? order?.amount);
+function orderTotal(order: NormalizedOrder): number {
+  const kobo = Number(order?.amountKobo ?? 0);
   if (Number.isFinite(kobo) && kobo > 0) return kobo / 100;
 
   const naira = Number(order?.amountNaira);
@@ -167,7 +171,7 @@ function orderTotal(order: PaymentOrder): number {
   );
 }
 
-function orderUnitCount(order: PaymentOrder): number {
+function orderUnitCount(order: NormalizedOrder): number {
   const provided = Number(order?.itemCount);
   if (Number.isFinite(provided) && provided > 0) return provided;
   return (order?.items ?? []).reduce((sum, i) => sum + Number(i?.quantity ?? 0), 0);
@@ -205,42 +209,37 @@ function AdminShell() {
   useAdminRealtime();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  const [hydrating, setHydrating] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const {
+    orders,
+    components,
+    userCount,
+    isLoading: hydrating,
+    isFetching: refreshing,
+    isError,
+    refetch,
+  } = useAdminOverview();
+
   const [apiOnline, setApiOnline] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    if (isError) {
+      setApiOnline(false);
+      return;
+    }
 
-    fetchAdminOverview()
-      .then(() => {
-        if (cancelled) return;
-        setApiOnline(true);
-        setLastUpdated(new Date());
-      })
-      .catch((e) => {
-        console.error("overview:", e);
-        if (!cancelled) setApiOnline(false);
-      })
-      .finally(() => !cancelled && setHydrating(false));
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setApiOnline(true);
+    setLastUpdated(new Date());
+  }, [isError, orders, components]);
 
   const refresh = async () => {
-    setRefreshing(true);
     try {
-      await fetchAdminOverview();
+      await refetch();
       setApiOnline(true);
       setLastUpdated(new Date());
     } catch (e) {
       console.error(e);
       setApiOnline(false);
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -249,7 +248,14 @@ function AdminShell() {
   return (
     <AdminLayoutShell apiOnline={apiOnline}>
       {pathname === "/admin" ? (
-        <AdminOverview onRefresh={refresh} refreshing={refreshing} lastUpdated={lastUpdated} />
+        <AdminOverview
+          orders={orders}
+          components={components}
+          userCount={userCount}
+          onRefresh={refresh}
+          refreshing={refreshing}
+          lastUpdated={lastUpdated}
+        />
       ) : (
         <Outlet />
       )}
@@ -267,6 +273,7 @@ function AdminLayoutShell({
   const [open, setOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const logout = useStore((s) => s.logout);
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   /* Lock the page behind the mobile drawer so the content
@@ -371,13 +378,19 @@ function AdminLayoutShell({
                 Engr-BE API
               </p>
               <p className="truncate text-xs font-medium text-slate-300">
-                {apiOnline ? "Connected" : "Reconnecting…"}
+                {apiOnline ? "Connected" : "Reconnectingâ€¦"}
               </p>
             </div>
           </div> */}
 
           <button
             onClick={() => {
+              // Drop every cached response and the admin session so the
+              // next admin to sign in on this browser cannot read the
+              // previous admin's data.
+              queryClient.clear();
+              clearAdminSession();
+              disconnectUserSocket();
               logout();
               navigate({ to: "/admin/login" });
             }}
@@ -415,17 +428,20 @@ function AdminLayoutShell({
 type OrderFilter = "all" | "awaiting" | "collected";
 
 function AdminOverview({
+  orders,
+  components,
+  userCount,
   onRefresh,
   refreshing,
   lastUpdated,
 }: {
+  orders: NormalizedOrder[];
+  components: BackendComponent[];
+  userCount: number;
   onRefresh: () => void;
   refreshing: boolean;
   lastUpdated: Date | null;
 }) {
-  const orders = useStore((s) => s.orders);
-  const components = useStore((s) => s.components);
-  const users = useStore((s) => s.users);
   const [filter, setFilter] = useState<OrderFilter>("all");
 
   /* ---------------------------------------------------
@@ -437,16 +453,16 @@ function AdminOverview({
     const map = new Map<string, string>();
     for (const c of components) {
       const img = resolveImage(c?.image);
-      if (c?.id && img) map.set(c.id, img);
+      if (c?._id && img) map.set(c._id, img);
     }
     return map;
   }, [components]);
 
   const stats = useMemo(() => {
-    const isPaid = (o: PaymentOrder) => String(o?.paymentStatus ?? "").toLowerCase() === "paid";
-    const isCollected = (o: PaymentOrder) =>
+    const isPaid = (o: NormalizedOrder) => String(o?.paymentStatus ?? "").toLowerCase() === "paid";
+    const isCollected = (o: NormalizedOrder) =>
       String(o?.pickupStatus ?? "").toLowerCase() === "collected";
-    const isReady = (o: PaymentOrder) => String(o?.pickupStatus ?? "").toLowerCase() === "ready";
+    const isReady = (o: NormalizedOrder) => String(o?.pickupStatus ?? "").toLowerCase() === "ready";
 
     const paidOrders = orders.filter(isPaid);
 
@@ -467,7 +483,8 @@ function AdminOverview({
       })
       .reduce((sum, o) => sum + orderTotal(o), 0);
 
-    const totalUsers = users.filter((u) => u.role !== "admin").length;
+    // The overview endpoint reports the student count directly.
+    const totalUsers = userCount;
 
     return {
       total: orders.length,
@@ -485,7 +502,7 @@ function AdminOverview({
       totalComponents: components.length,
       totalUsers,
     };
-  }, [orders, components, users]);
+  }, [orders, components, userCount]);
 
   /* ---------------------------------------------------
      The 5 most recent orders, newest first.
@@ -535,7 +552,7 @@ function AdminOverview({
           <div className="min-w-0">
             {/* <p className="flex items-center gap-2 text-sm font-medium text-brand-accent">
               <Server className="size-4" />
-              Engr-BE · Admin Console
+              Engr-BE Â· Admin Console
             </p> */}
 
             <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
@@ -572,7 +589,7 @@ function AdminOverview({
             icon={<ShoppingCart className="size-5" />}
             label="Total Orders"
             value={stats.total}
-            hint={`${stats.paidCount} paid · ${stats.unpaid} unpaid`}
+            hint={`${stats.paidCount} paid Â· ${stats.unpaid} unpaid`}
           />
 
           <StatCard
@@ -587,7 +604,7 @@ function AdminOverview({
             icon={<HandCoins className="size-5" />}
             label="Awaiting Pickup"
             value={stats.awaitingPickup}
-            hint="Paid · not collected"
+            hint="Paid Â· not collected"
             tone="amber"
           />
 
@@ -656,7 +673,7 @@ function AdminOverview({
                 <p className="mt-1 text-xs text-slate-500">
                   {filter === "all"
                     ? `The ${Math.min(recent.length, 5)} most recent orders`
-                    : `${matchingCount} order${matchingCount === 1 ? "" : "s"} · showing the latest ${recent.length}`}
+                    : `${matchingCount} order${matchingCount === 1 ? "" : "s"} Â· showing the latest ${recent.length}`}
                 </p>
               </div>
 
@@ -812,7 +829,7 @@ function AdminOverview({
 
                     return (
                       <div
-                        key={c.id}
+                        key={c._id ?? c.id}
                         className="flex items-center gap-2.5 rounded-2xl border border-white/5 bg-white/[0.02] p-2 transition-all duration-200 hover:bg-white/[0.04] sm:gap-3 sm:p-2.5"
                       >
                         <div className="size-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950 sm:size-11">
@@ -833,7 +850,7 @@ function AdminOverview({
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-white">{c.name}</p>
                           <p className="mt-0.5 truncate font-mono text-[10px] text-slate-500 sm:text-[11px]">
-                            {c.sku || "—"}
+                            {c.sku || "â€”"}
                           </p>
                         </div>
 
@@ -868,14 +885,14 @@ function AdminOverview({
 }
 
 /* ============================================================
-   LATEST ORDERS — ROW
+   LATEST ORDERS â€” ROW
    ============================================================ */
 
 function OrderRow({
   order,
   imageByComponent,
 }: {
-  order: PaymentOrder;
+  order: NormalizedOrder;
   imageByComponent: Map<string, string>;
 }) {
   const stage = stageOf(order);
@@ -948,14 +965,14 @@ function OrderRow({
         </div>
 
         <p className="mt-1 truncate text-[11px] text-slate-500 sm:text-xs">
-          {firstLabel} · {unitCount} unit{unitCount === 1 ? "" : "s"}
+          {firstLabel} Â· {unitCount} unit{unitCount === 1 ? "" : "s"}
         </p>
 
-        {/* AMOUNT — mobile only (on desktop it sits on the right) */}
+        {/* AMOUNT â€” mobile only (on desktop it sits on the right) */}
         <p className="mt-1.5 text-sm font-bold text-white sm:hidden">{formatNaira(total)}</p>
       </div>
 
-      {/* AMOUNT + TIME — desktop */}
+      {/* AMOUNT + TIME â€” desktop */}
       <div className="hidden shrink-0 text-right sm:block">
         <p className="text-sm font-bold text-white">{formatNaira(total)}</p>
         <p className="mt-0.5 text-[11px] text-slate-500" title={formatDateTime(order.createdAt)}>

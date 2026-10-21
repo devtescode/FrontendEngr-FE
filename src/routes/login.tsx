@@ -13,8 +13,8 @@ import {
 } from "react";
 import {  useStore } from "@/lib/store";
 import { connectUserSocket, socket } from "@/lib/socket";
-import { resetOrdersCache } from "@/lib/ordersStore";
-import { resetCartCache } from "@/components/ComponentCard";
+import { useUserLogin } from "@/hooks/useAuthMutations";
+import { toErrorMessage } from "@/lib/queryClient";
 import { Mail, Lock, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
@@ -24,10 +24,6 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-import { API_BASE_URL } from "@/lib/config";
-
-const API_URL = API_BASE_URL;
-
 function LoginPage() {
   // const user = useCurrentUser();
   const navigate = useNavigate();
@@ -36,6 +32,8 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const loginMutation = useUserLogin();
 
   // --------------------------------
   // RESTORE USER SESSION
@@ -102,117 +100,34 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/engineering/userlogin`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: cleanEmail,
-            password,
-          }),
-        }
-      );
+      // The mutation performs the request, clears every cached response
+      // from the previous account and writes the new session.
+      const response = await loginMutation.mutateAsync({
+        email: cleanEmail,
+        password,
+      });
 
-      let data: {
-        message?: string;
-        token?: string;
-        user?: {
-          id?: string;
-          _id?: string;
-          userId?: string;
-          role?: string;
-          [key: string]: unknown;
-        };
-      } = {};
+      const userData = response.user as {
+        id?: string;
+        role?: string;
+      };
 
-      try {
-        data = await response.json();
-      } catch {
-        data = {};
-      }
-
-      if (!response.ok) {
-        setError(
-          data?.message || "Invalid email or password."
-        );
-        return;
-      }
-
-      // --------------------------------
-      // GET USER DATA
-      // --------------------------------
-      const userData = data?.user;
-
-      if (!userData) {
-        setError(
-          "Login successful, but user information was not returned."
-        );
-        return;
-      }
-
-      // --------------------------------
-      // GET USER ID
-      // --------------------------------
-      const userId =
-        userData.id ??
-        userData._id ??
-        userData.userId;
-
-      if (!userId) {
-        setError("User ID was not returned by the server.");
-        return;
-      }
-
-      // --------------------------------
-      // GET TOKEN
-      // --------------------------------
-      const token = data?.token;
-
-      if (!token) {
-        setError(
-          "Server did not return an authentication token."
-        );
-        return;
-      }
-
-      console.log("Logged in user:", userData);
+      const userId = String(userData?.id ?? "");
 
       // =================================================
       // CLEAR PREVIOUS USER'S CACHES
       // =================================================
       // A new login means we're switching users (or
-      // re-authenticating the same user). Reset all
-      // session-scoped caches BEFORE storing the new
-      // token, so no component can read stale data
-      // from the previous user.
+      // re-authenticating the same user). The login mutation
+      // already cleared every cached response; this tears down
+      // the previous user's socket connection.
       //
-      resetOrdersCache();
-      resetCartCache();
-      useStore.getState().clearCart();
-
       // If a socket is already connected as the previous
       // user, tear it down before joining the new room.
       // (connectUserSocket will reconnect below.)
       if (socket.connected) {
         socket.disconnect();
       }
-
-      // --------------------------------
-      // SAVE SESSION
-      // --------------------------------
-      sessionStorage.setItem(
-        "pulselab_user",
-        JSON.stringify({
-          ...userData,
-          id: userId,
-        })
-      );
-
-      sessionStorage.setItem("pulselab_token", token);
-      sessionStorage.setItem("pulselab_userId", String(userId));
 
       // --------------------------------
       // UPDATE ZUSTAND
@@ -226,8 +141,8 @@ function LoginPage() {
       // --------------------------------
       // Reconnect and join the room under the new
       // user's ID. `connectUserSocket` reads the token
-      // from sessionStorage, so it must run AFTER we
-      // store the token above.
+      // from sessionStorage, so it must run AFTER the
+      // token was stored by the mutation.
       //
       socket.connect();
       connectUserSocket();
@@ -246,12 +161,10 @@ function LoginPage() {
           replace: true,
         });
       }
-    } catch (error) {
-      console.error("Login error:", error);
+    } catch (mutationError) {
+      console.error("Login error:", mutationError);
 
-      setError(
-        "Unable to connect to the server. Please try again."
-      );
+      setError(toErrorMessage(mutationError, "Unable to sign in. Please try again."));
     } finally {
       setLoading(false);
     }

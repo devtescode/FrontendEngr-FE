@@ -22,10 +22,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
-import {
-  ComponentCard,
-  ensureCartLoaded,
-} from "@/components/ComponentCard";
+import { ComponentCard } from "@/components/ComponentCard";
 import { ComponentGridSkeleton } from "@/components/ComponentGridSkeleton";
 import { Pagination } from "@/components/Pagination";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -126,11 +123,6 @@ function CatalogIndex() {
     category: cat,
   });
 
-  // One shared cart request for every card on the page.
-  useEffect(() => {
-    void ensureCartLoaded();
-  }, []);
-
   // Connection indicator only. Component data refreshes are owned by the
   // pagination hook so there is exactly one listener per event.
   useEffect(() => {
@@ -208,8 +200,8 @@ function CatalogIndex() {
             </h1>
 
             <p className="mt-3 text-sm leading-6 text-slate-500 sm:text-base">
-              Browse lab-verified parts, check live stock, and add what you
-              need to your cart. Recently updated components appear first.
+              Browse components, check live stock, and add what you need to your cart. 
+              Recently updated components appear first.
             </p>
           </div>
 

@@ -1,20 +1,23 @@
 import { useNavigate, useRouterState, Link, type LinkProps } from "@tanstack/react-router";
-import { resetOrdersCache } from "@/lib/ordersStore";
-import { resetCartCache } from "@/components/ComponentCard";
+import { useQueryClient } from "@tanstack/react-query";
 import { disconnectUserSocket } from "@/lib/socket";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, ShoppingCart, LogOut, Menu, X } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Logo } from "./Logo";
 import { useCurrentUser, useStore } from "@/lib/store";
+import { useCartQuery } from "@/hooks/useCartQuery";
 
 export function Navbar() {
   const user = useCurrentUser();
+  const queryClient = useQueryClient();
 
-  const cart = useStore((s) => s.cart);
+  // The cart badge reads the shared cart query, so it is always in sync
+  // with the catalog cards and the cart page.
+  const { cart } = useCartQuery();
+
   const notifications = useStore((s) => s.notifications);
   const logout = useStore((s) => s.logout);
-  const clearCart = useStore((s) => s.clearCart);
   const markRead = useStore((s) => s.markNotificationRead);
 
   const navigate = useNavigate();
@@ -28,8 +31,8 @@ export function Navbar() {
 
   const cartCount = useMemo(
     () =>
-      cart.reduce((total, item: any) => {
-        const q = Number(item?.quantity ?? item?.qty ?? 0);
+      cart.items.reduce((total, item) => {
+        const q = Number(item?.quantity ?? 0);
         return total + (Number.isFinite(q) ? q : 0);
       }, 0),
     [cart]
@@ -59,9 +62,9 @@ export function Navbar() {
   // LOGOUT
   // =====================================================
   const Logout = () => {
-    resetOrdersCache();
-    resetCartCache();
-    clearCart();
+    // Drop every cached server response so the next account that signs in
+    // on this browser can never read the previous user's data.
+    queryClient.clear();
     disconnectUserSocket();
     logout();
     sessionStorage.clear();

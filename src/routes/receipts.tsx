@@ -27,13 +27,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
-import {
-  ordersCache,
-  loadOrders,
-  type Order,
-  type OrderItem,
-} from "@/lib/ordersStore";
-import { API_BASE_URL } from "@/lib/config";
+import { useOrdersQuery } from "@/hooks/useOrdersQuery";
+import type {
+  NormalizedOrder,
+  NormalizedOrderItem,
+} from "@/lib/normalize";
 import logoImg from "../components/Assets/image.webp";
 
 export const Route = createFileRoute("/receipts")({
@@ -91,43 +89,19 @@ const formatDateTime = (iso: string) => {
 // =====================================================
 
 function ReceiptsIndexPage() {
-  const [orders, setOrders] = useState<Order[]>(() => ordersCache);
-  const [loading, setLoading] = useState(ordersCache.length === 0);
-  const [error, setError] = useState<string | null>(null);
+  // Shares its cache with /orders — one request serves both pages.
+  const {
+    orders,
+    isLoading: loading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useOrdersQuery();
+
+  const error = isError ? "Unable to load your receipts." : null;
 
   // Currently open receipt (null = modal closed)
-  const [openOrder, setOpenOrder] = useState<Order | null>(null);
-
-  // ===================================================
-  // LOAD
-  // ===================================================
-  useEffect(() => {
-    let cancelled = false;
-
-    if (ordersCache.length > 0) {
-      setOrders(ordersCache);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    loadOrders()
-      .then((data) => {
-        if (!cancelled) setOrders(data);
-      })
-      .catch((err: any) => {
-        if (!cancelled) {
-          setError(err?.message || "Unable to load receipts.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [openOrder, setOpenOrder] = useState<NormalizedOrder | null>(null);
 
   // ===================================================
   // LOCK BODY SCROLL WHEN MODAL IS OPEN
@@ -336,7 +310,7 @@ function ReceiptModal({
   order,
   onClose,
 }: {
-  order: Order | null;
+  order: NormalizedOrder | null;
   onClose: () => void;
 }) {
   const [copiedRef, setCopiedRef] = useState(false);
@@ -696,7 +670,7 @@ function MetaCell({
   );
 }
 
-function ItemRow({ item }: { item: OrderItem }) {
+function ItemRow({ item }: { item: NormalizedOrderItem }) {
   return (
     <li className="flex items-center gap-3 rounded-xl bg-slate-50/70 p-2.5 ring-1 ring-slate-100">
       <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-slate-100">

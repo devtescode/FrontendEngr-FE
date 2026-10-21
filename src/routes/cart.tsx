@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -8,20 +9,17 @@ import {
   ShoppingCart,
   AlertCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { socket } from "@/lib/socket";
 import { RequireAuth } from "@/components/RequireAuth";
-import {
-  pushToast,
-  setCartCacheFromResponse,
-} from "@/components/ComponentCard";
-
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
-
-const CART_STORAGE_KEY = "pulselab_cart";
+import { pushToast } from "@/components/ComponentCard";
+import { useCartMutations, useCartQuery } from "@/hooks/useCartQuery";
+import { queryKeys } from "@/lib/queryKeys";
+import { toErrorMessage } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/apiClient";
+import type { NormalizedCartItem } from "@/lib/normalize";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({
@@ -39,27 +37,7 @@ export const Route = createFileRoute("/cart")({
 // TYPES
 // =====================================================
 
-type ComponentData = {
-  _id: string;
-  sku: string;
-  name: string;
-  price: number;
-  stock: number;
-  image?: string;
-  description?: string;
-  category?: string;
-};
-
-type CartItem = {
-  componentId: ComponentData | string;
-  quantity: number;
-};
-
-type CartData = {
-  _id?: string;
-  userId?: string;
-  items: CartItem[];
-};
+type CartItem = NormalizedCartItem;
 
 // =====================================================
 // CART PAGE
@@ -67,21 +45,15 @@ type CartData = {
 
 function CartPage() {
   const location = useLocation();
+  const queryClient = useQueryClient();
 
-  const [cart, setCart] = useState<CartData>(() => {
-    try {
-      const savedCart = localStorage.getItem(CART_STORAGE_KEY);
-      if (savedCart) {
-        const parsedCart = JSON.parse(savedCart);
-        if (parsedCart && Array.isArray(parsedCart.items)) {
-          return parsedCart;
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load saved cart:", error);
-    }
-    return { items: [] };
-  });
+  // The cart is server state: one shared query for the whole page.
+  const { cart, isLoading: cartLoading } = useCartQuery();
+  const {
+    addToCart,
+    updateQuantity,
+    removeFromCart,
+  } = useCartMutations();
 
   const [updating, setUpdating] = useState<string | null>(null);
 
@@ -89,10 +61,7 @@ function CartPage() {
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  const hasFetched = useRef(false);
-
-  const getToken = () =>
-    sessionStorage.getItem("pulselab_token");
+  const getToken = () => sessionStorage.getItem("pulselab_token");
 
   // ===================================================
   // RESET PAYMENT STATE ON ROUTE CHANGE
@@ -104,274 +73,21 @@ function CartPage() {
   }, [location.pathname]);
 
   // ===================================================
-  // SAFE COERCION & NORMALIZE CART
-  // ===================================================
-  const isObjCart = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
-  const toStrCart = (v: unknown, fb = "") => {
-    if (v == null) return fb;
-    if (typeof v === "string") return v;
-    if (typeof v === "number" || typeof v === "bigint") return String(v);
-    if (isObjCart(v)) {
-      if (v._id != null) return String(v._id);
-      if (v.id != null) return String(v.id);
-    }
-    return String(v);
-  };
-  const toNumCart = (v: unknown, fb = 0) => {
-    if (v == null) return fb;
-    if (typeof v === "number") return Number.isFinite(v) ? v : fb;
-    if (typeof v === "string") {
-      const n = Number(v.trim());
-      return Number.isFinite(n) ? n : fb;
-    }
-    return fb;
-  };
-
-  const normalizeCart = (data: any): CartData => {
-    if (!data) return { items: [] };
-
-    const source = isObjCart(data) ? data : Array.isArray(data) ? { items: data } : {};
-    if (Array.isArray(source.items)) {
-      const normalizedItems = source.items
-        .map((it: any) => {
-          if (!it) return null;
-          if (isObjCart(it)) {
-            const componentId = it.componentId;
-            if (componentId && isObjCart(componentId)) {
-              const cid = componentId._id ?? componentId.id ?? "";
-              if (!cid) return null;
-              const normalizedComp = { ...componentId, _id: String(cid) };
-              return {
-                ...it,
-                componentId: normalizedComp,
-                quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-              };
-            }
-            if (typeof componentId === "string") {
-              const cid = componentId.trim();
-              if (!cid) return null;
-              return {
-                ...it,
-                componentId: cid,
-                quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-              };
-            }
-            // try to coerce
-            const cid2 = toStrCart(componentId, "");
-            if (!cid2) return null;
-            return {
-              ...it,
-              componentId: cid2,
-              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-            };
-          }
-          return null;
-        })
-        .filter((it: any): it is CartItem => !!it && it.quantity > 0);
-      return { ...source, items: normalizedItems as CartItem[] };
-    }
-
-    if (source.cart && isObjCart(source.cart) && Array.isArray(source.cart.items)) {
-      const normalizedItems = source.cart.items
-        .map((it: any) => {
-          if (!isObjCart(it)) return null;
-          const componentId = it.componentId;
-          if (componentId && isObjCart(componentId)) {
-            const cid = componentId._id ?? componentId.id ?? "";
-            if (!cid) return null;
-            return {
-              ...it,
-              componentId: { ...componentId, _id: String(cid) },
-              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-            };
-          }
-          if (typeof componentId === "string") {
-            const cid = componentId.trim();
-            if (!cid) return null;
-            return {
-              ...it,
-              componentId: cid,
-              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-            };
-          }
-          const cid2 = toStrCart(componentId, "");
-          if (!cid2) return null;
-          return {
-            ...it,
-            componentId: cid2,
-            quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-          };
-        })
-        .filter((it: any): it is CartItem => !!it && it.quantity > 0);
-      return { ...source.cart, items: normalizedItems as CartItem[] };
-    }
-
-    if (Array.isArray(source)) {
-      const normalizedItems = source
-        .map((it: any) => {
-          if (!isObjCart(it)) return null;
-          const componentId = it.componentId;
-          if (componentId && isObjCart(componentId)) {
-            const cid = componentId._id ?? componentId.id ?? "";
-            if (!cid) return null;
-            return {
-              ...it,
-              componentId: { ...componentId, _id: String(cid) },
-              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-            };
-          }
-          if (typeof componentId === "string") {
-            const cid = componentId.trim();
-            if (!cid) return null;
-            return {
-              ...it,
-              componentId: cid,
-              quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-            };
-          }
-          const cid2 = toStrCart(componentId, "");
-          if (!cid2) return null;
-          return {
-            ...it,
-            componentId: cid2,
-            quantity: toNumCart(it.quantity ?? it.qty ?? 0, 0),
-          };
-        })
-        .filter((it: any): it is CartItem => !!it && it.quantity > 0);
-      return { items: normalizedItems as CartItem[] };
-    }
-
-    return { items: [] };
-  };
-
-  // ===================================================
-  // APPLY CART UPDATE
-  // ===================================================
-  // One helper for every mutation success path:
-  //   1. Update localStorage
-  //   2. Update local React state
-  //   3. Update the shared cart cache (for ComponentCard)
-  //
-  const applyCartUpdate = (rawData: any) => {
-    const normalized = normalizeCart(rawData);
-
-    updateCart(normalized);
-    setCartCacheFromResponse(rawData);
-  };
-
-  const saveCartLocally = (updatedCart: CartData) => {
-    try {
-      localStorage.setItem(
-        CART_STORAGE_KEY,
-        JSON.stringify(updatedCart)
-      );
-    } catch (error) {
-      console.error("Failed to save cart locally:", error);
-    }
-  };
-
-  const updateCart = (updatedCart: CartData) => {
-    setCart(updatedCart);
-    saveCartLocally(updatedCart);
-  };
-
-  const getComponentId = (
-    componentId: ComponentData | string
-  ): string => {
-    if (typeof componentId === "string") return componentId;
-    return componentId?._id || "";
-  };
-
-  // ===================================================
-  // FETCH CART (from server)
-  // ===================================================
-  const fetchCart = async (opts?: { silent?: boolean }) => {
-    const token = getToken();
-    if (!token) return;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    try {
-      console.log("🛒 FETCHING CART...");
-
-      const response = await fetch(`${API_URL}/engineering/cart`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-        signal: controller.signal,
-      });
-
-      const data = await response.json();
-      console.log("🛒 GET CART RESPONSE:", data);
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Failed to load cart");
-      }
-
-      // Always apply through the same helper so cache
-      // and localStorage stay in sync.
-      applyCartUpdate(data);
-    } catch (error: any) {
-      if (error?.name === "AbortError") {
-        console.error("🛒 Cart request timed out.");
-      } else {
-        console.error("🛒 Cart fetch error:", error);
-      }
-    } finally {
-      clearTimeout(timeout);
-    }
-  };
-
-  // ===================================================
-  // LOAD CART ON MOUNT
-  // ===================================================
-  useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    fetchCart();
-  }, []);
-
-  // ===================================================
-  // REFETCH ON RETURN TO /cart
-  // ===================================================
-  useEffect(() => {
-    if (location.pathname !== "/cart") return;
-    if (!hasFetched.current) return;
-    fetchCart({ silent: true });
-  }, [location.pathname]);
-
-  // ===================================================
   // REAL-TIME CART UPDATE
   // ===================================================
+  // The backend pushes a fresh cart after an add and after a payment
+  // webhook. Invalidating the shared query refreshes every consumer.
   useEffect(() => {
-    const handleCartUpdated = (updatedCart: any) => {
-      console.log("🛒🔥 REAL-TIME CART UPDATE:", updatedCart);
-      applyCartUpdate(updatedCart);
-    };
-
-    const handleConnect = () => {
-      console.log("🟢 Cart socket connected:", socket.id);
-      fetchCart({ silent: true });
-    };
-
-    const handleDisconnect = (reason: string) => {
-      console.log("🔴 Cart socket disconnected:", reason);
+    const handleCartUpdated = () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cart.all });
     };
 
     socket.on("cart:updated", handleCartUpdated);
-    socket.on("connect", handleConnect);
-    socket.on("disconnect", handleDisconnect);
-
-    if (socket.connected) {
-      fetchCart({ silent: true });
-    }
 
     return () => {
       socket.off("cart:updated", handleCartUpdated);
-      socket.off("connect", handleConnect);
-      socket.off("disconnect", handleDisconnect);
     };
-  }, []);
+  }, [queryClient]);
 
   // ===================================================
   // REMOVE ITEM
@@ -387,42 +103,21 @@ function CartPage() {
       return;
     }
 
-    const itemName = cartItems.find(
-      (it) => getComponentId(it.componentId) === componentId
-    )?.componentId;
-
     const name =
-      itemName && typeof itemName === "object"
-        ? itemName.name
-        : "Item";
+      cartItems.find((it) => it.componentId === componentId)?.component?.name ??
+      "Item";
 
     try {
       setUpdating(componentId);
 
-      const response = await fetch(
-        `${API_URL}/engineering/cart/${componentId}`,
-        {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      const data = await response.json();
-      console.log("🗑️ REMOVE CART RESPONSE:", data);
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Failed to remove item");
-      }
-
-      // ⬇️ Syncs cache AND localStorage in one call
-      applyCartUpdate(data);
+      await removeFromCart.mutateAsync({ componentId });
 
       pushToast("info", `${name} removed from cart`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Remove cart item error:", error);
       pushToast(
         "error",
-        error?.message || "Failed to remove item"
+        toErrorMessage(error, "Failed to remove item")
       );
     } finally {
       setUpdating(null);
@@ -439,54 +134,37 @@ function CartPage() {
       return;
     }
 
-    const componentId = getComponentId(item.componentId);
+    const componentId = item.componentId;
     if (!componentId) {
       pushToast("error", "Component ID is missing.");
       return;
     }
 
-    if (
-      typeof item.componentId !== "string" &&
-      item.componentId.stock !== undefined
-    ) {
-      if (item.quantity >= item.componentId.stock) {
-        pushToast(
-          "error",
-          `Only ${item.componentId.stock} unit${
-            item.componentId.stock === 1 ? "" : "s"
-          } available.`
-        );
-        return;
-      }
+    const stock = Number(item.component?.stock ?? 0);
+
+    if (stock > 0 && item.quantity >= stock) {
+      pushToast(
+        "error",
+        `Only ${stock} unit${stock === 1 ? "" : "s"} available.`
+      );
+      return;
     }
 
     try {
       setUpdating(componentId);
 
-      const response = await fetch(`${API_URL}/engineering/addtocart`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ componentId, quantity: 1 }),
+      await addToCart.mutateAsync({
+        componentId,
+        quantity: 1,
+        component: item.component
+          ? ({ ...item.component } as any)
+          : undefined,
       });
-
-      const data = await response.json();
-      console.log("➕ INCREASE CART RESPONSE:", data);
-
-      if (!response.ok) {
-        throw new Error(
-          data?.message || "Failed to increase quantity"
-        );
-      }
-
-      applyCartUpdate(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Increase quantity error:", error);
       pushToast(
         "error",
-        error?.message || "Failed to increase quantity"
+        toErrorMessage(error, "Failed to increase quantity")
       );
     } finally {
       setUpdating(null);
@@ -503,70 +181,33 @@ function CartPage() {
       return;
     }
 
-    const componentId = getComponentId(item.componentId);
+    const componentId = item.componentId;
     if (!componentId) {
       pushToast("error", "Component ID is missing.");
       return;
     }
 
-    const name =
-      typeof item.componentId === "object"
-        ? item.componentId.name
-        : "Item";
+    const name = item.component?.name ?? "Item";
 
     try {
       setUpdating(componentId);
 
       if (item.quantity <= 1) {
-        const response = await fetch(
-          `${API_URL}/engineering/cart/${componentId}`,
-          {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        await removeFromCart.mutateAsync({ componentId });
 
-        const data = await response.json();
-        console.log("🗑️ REMOVE FROM DECREASE:", data);
-
-        if (!response.ok) {
-          throw new Error(data?.message || "Failed to remove item");
-        }
-
-        applyCartUpdate(data);
         pushToast("info", `${name} removed from cart`);
         return;
       }
 
-      const newQuantity = item.quantity - 1;
-
-      const response = await fetch(
-        `${API_URL}/engineering/cart/${componentId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ quantity: newQuantity }),
-        }
-      );
-
-      const data = await response.json();
-      console.log("➖ DECREASE CART RESPONSE:", data);
-
-      if (!response.ok) {
-        throw new Error(
-          data?.message || "Failed to decrease quantity"
-        );
-      }
-
-      applyCartUpdate(data);
-    } catch (error: any) {
+      await updateQuantity.mutateAsync({
+        componentId,
+        quantity: item.quantity - 1,
+      });
+    } catch (error: unknown) {
       console.error("Decrease quantity error:", error);
       pushToast(
         "error",
-        error?.message || "Failed to decrease quantity"
+        toErrorMessage(error, "Failed to decrease quantity")
       );
     } finally {
       setUpdating(null);
@@ -579,13 +220,9 @@ function CartPage() {
   const total = useMemo(() => {
     if (!Array.isArray(cart?.items)) return 0;
 
-    return cart.items.reduce((sum, item: any) => {
-      const component = item?.componentId;
-      if (!component || typeof component === "string") return sum;
-      if (typeof component !== "object") return sum;
-
-      const price = Number(component?.price ?? 0) || 0;
-      const quantity = Number(item?.quantity ?? item?.qty ?? 0) || 0;
+    return cart.items.reduce((sum, item) => {
+      const price = Number(item?.component?.price ?? 0) || 0;
+      const quantity = Number(item?.quantity ?? 0) || 0;
       if (!Number.isFinite(price) || !Number.isFinite(quantity)) return sum;
       return sum + price * quantity;
     }, 0);
@@ -597,8 +234,8 @@ function CartPage() {
   const totalQuantity = useMemo(() => {
     if (!Array.isArray(cart?.items)) return 0;
 
-    return cart.items.reduce((sum, item: any) => {
-      const q = Number(item?.quantity ?? item?.qty ?? 0);
+    return cart.items.reduce((sum, item) => {
+      const q = Number(item?.quantity ?? 0);
       return sum + (Number.isFinite(q) ? q : 0);
     }, 0);
   }, [cart]);
@@ -639,33 +276,17 @@ function CartPage() {
     setIsRedirecting(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/paystack/initialize`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const data = await apiRequest<{
+        authorizationUrl?: string;
+        reference?: string;
+      }>("/api/paystack/initialize", {
+        method: "POST",
+        auth: "user",
+        headers: { "Content-Type": "application/json" },
+      });
 
-      const rawText = await response.text();
-      let data: any = null;
-      try {
-        data = rawText ? JSON.parse(rawText) : null;
-      } catch {
-        throw new Error(
-          response.ok
-            ? "Server returned an invalid response."
-            : `Payment endpoint not found (HTTP ${response.status}).`
-        );
-      }
-
-      if (!response.ok || !data?.authorizationUrl) {
-        throw new Error(
-          data?.message || "Unable to initialize payment"
-        );
+      if (!data?.authorizationUrl) {
+        throw new Error("Unable to initialize payment");
       }
 
       if (data.reference) {
@@ -676,9 +297,11 @@ function CartPage() {
       }
 
       window.location.href = data.authorizationUrl;
-    } catch (error: any) {
-      const message =
-        error?.message || "Unable to start payment. Please try again.";
+    } catch (error: unknown) {
+      const message = toErrorMessage(
+        error,
+        "Unable to start payment. Please try again."
+      );
       setCheckoutError(message);
       pushToast("error", message);
       setIsRedirecting(false);
@@ -726,15 +349,13 @@ function CartPage() {
             <div className="space-y-3 lg:col-span-2">
               <AnimatePresence mode="popLayout">
                 {cartItems.map((item, index) => {
-                  if (
-                    !item.componentId ||
-                    typeof item.componentId === "string"
-                  ) {
-                    return null;
-                  }
+                  const component = item.component;
 
-                  const component = item.componentId;
-                  const componentId = component._id;
+                  // The server only populates the component on some
+                  // endpoints; without it there is nothing to render.
+                  if (!component) return null;
+
+                  const componentId = item.componentId;
                   if (!componentId) return null;
 
                   const isUpdating = updating === componentId;

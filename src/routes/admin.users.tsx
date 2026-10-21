@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useAdminUsers } from "@/hooks/useAdminQueries";
+import { toErrorMessage } from "@/lib/queryClient";
+
 export const Route = createFileRoute("/admin/users")({
   head: () => ({
     meta: [{ title: "Students — Admin" }],
@@ -21,83 +24,36 @@ export const Route = createFileRoute("/admin/users")({
   component: AdminUsers,
 });
 
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
-
 type UserType = {
   _id: string;
+  id: string;
   fullName: string;
   email: string;
   matric: string;
   phoneNumber?: string;
   level?: string | number;
   gender?: string;
+  role?: string;
   createdAt?: string;
 };
 
 function AdminUsers() {
-  const [users, setUsers] = useState<UserType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const {
+    users,
+    isLoading: loading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useAdminUsers();
+
+  const error = isError
+    ? toErrorMessage(queryError, "Failed to load users")
+    : "";
 
   const [search, setSearch] = useState("");
 
   const [selectedUser, setSelectedUser] =
     useState<UserType | null>(null);
-
-  /*
-   * =====================================================
-   * FETCH USERS
-   * =====================================================
-   */
-
-  const loadUsers = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const token =
-        sessionStorage.getItem(
-          "admin_token"
-        );
-
-      const response = await fetch(
-        `${API_URL}/admin/getallusers`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-            "Failed to load users"
-        );
-      }
-
-      setUsers(data.users || []);
-    } catch (error: any) {
-      console.error(
-        "Failed to load users:",
-        error
-      );
-
-      setError(
-        error.message ||
-          "Failed to load users"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadUsers();
-  }, []);
 
   /*
    * =====================================================
@@ -212,7 +168,9 @@ function AdminUsers() {
           </div>
 
           <button
-            onClick={loadUsers}
+            onClick={() => {
+              void refetch();
+            }}
             className="flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
             <RefreshCw className="h-4 w-4" />
@@ -231,12 +189,12 @@ function AdminUsers() {
             <span>{error}</span>
 
             <button
-              onClick={() =>
-                setError("")
-              }
-              className="rounded-lg p-1 hover:bg-red-500/10"
+              onClick={() => {
+                void refetch();
+              }}
+              className="rounded-lg px-2 py-1 text-xs font-semibold hover:bg-red-500/10"
             >
-              <X className="h-4 w-4" />
+              Retry
             </button>
 
           </div>

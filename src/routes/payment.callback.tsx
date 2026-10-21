@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Loader2, CheckCircle2, XCircle, Ban } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
+import { useVerifyPayment } from "@/hooks/useAuthMutations";
+import { queryKeys } from "@/lib/queryKeys";
+import { toErrorMessage } from "@/lib/queryClient";
 
 export const Route = createFileRoute("/payment/callback")({
   head: () => ({ meta: [{ title: "Verifying Payment — EU Hardwarestore" }] }),
@@ -15,11 +17,23 @@ type Status = "verifying" | "success" | "failed" | "cancelled";
 
 function PaymentCallbackPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const verifyPayment = useVerifyPayment();
+
   const [status, setStatus] = useState<Status>("verifying");
   const [message, setMessage] = useState("Verifying your payment...");
 
   // Guard against React 18 StrictMode double-invoking the effect.
   const hasVerified = useRef(false);
+
+  // The redirect timer must not fire after the page is gone.
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimer.current) clearTimeout(redirectTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (hasVerified.current) return;
@@ -55,7 +69,7 @@ function PaymentCallbackPage() {
         );
 
         // Auto-return to cart so the Pay button resets.
-        setTimeout(() => {
+        redirectTimer.current = setTimeout(() => {
           navigate({ to: "/cart" });
         }, 2500);
         return;
@@ -75,29 +89,15 @@ function PaymentCallbackPage() {
       // VERIFY WITH BACKEND
       // =================================================
       try {
-        const response = await fetch(
-          `${API_URL}/api/paystack/verify?reference=${encodeURIComponent(reference)}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const data = await verifyPayment.mutateAsync({ reference });
 
-        const rawText = await response.text();
-        let data: any = null;
-        try {
-          data = rawText ? JSON.parse(rawText) : null;
-        } catch {
-          throw new Error(
-            `Verification endpoint not found (HTTP ${response.status}).`
-          );
-        }
-
-        if (!response.ok || data?.status !== "success") {
+        if (!data || (data as { status?: string })?.status !== "success") {
           // Backend explicitly says payment didn't succeed.
           sessionStorage.removeItem("pulselab_pending_reference");
           setStatus("failed");
           setMessage(
-            data?.message || "Payment was not successful."
+            (data as { message?: string })?.message ||
+              "Payment was not successful."
           );
           return;
         }
@@ -105,24 +105,28 @@ function PaymentCallbackPage() {
         // =================================================
         // SUCCESS
         // =================================================
-        localStorage.removeItem("pulselab_cart");
         sessionStorage.removeItem("pulselab_pending_reference");
+
+        // The order now exists and the cart was emptied server side.
+        // Drop the cached copies so /orders and the cart badge are correct.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.cart.all });
 
         setStatus("success");
         setMessage("Payment verified! Redirecting to your orders...");
 
-        setTimeout(() => {
+        redirectTimer.current = setTimeout(() => {
           navigate({ to: "/orders" });
         }, 2000);
-      } catch (error: any) {
+      } catch (error: unknown) {
         sessionStorage.removeItem("pulselab_pending_reference");
         setStatus("failed");
-        setMessage(error?.message || "Unable to verify payment.");
+        setMessage(toErrorMessage(error, "Unable to verify payment."));
       }
     };
 
     verify();
-  }, [navigate]);
+  }, [navigate, queryClient, verifyPayment]);
 
   return (
     <AppShell>

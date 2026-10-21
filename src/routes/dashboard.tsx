@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Package,
@@ -14,11 +15,16 @@ import { useState, useEffect } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
-import { formatNaira, useCurrentUser } from "@/lib/store";
+import { formatNaira } from "@/lib/store";
 import { socket, connectUserSocket } from "@/lib/socket";
-
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
+import { getCurrentUser, getUserToken } from "@/lib/auth";
+import { useOrdersQuery } from "@/hooks/useOrdersQuery";
+import { useCartQuery } from "@/hooks/useCartQuery";
+import { queryKeys } from "@/lib/queryKeys";
+import type {
+  NormalizedOrder as Order,
+  NormalizedOrderItem as OrderItem,
+} from "@/lib/normalize";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -30,350 +36,6 @@ export const Route = createFileRoute("/dashboard")({
     </RequireAuth>
   ),
 });
-
-// =====================================================
-// TYPES & HELPERS
-// =====================================================
-
-const isObjDash = (v: unknown): v is Record<string, any> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
-
-const toStr = (v: unknown, fb = ""): string => {
-  if (v == null) return fb;
-  if (typeof v === "string") return v;
-  if (typeof v === "number" || typeof v === "bigint") return String(v);
-  if (isObjDash(v)) {
-    if (v.$oid != null) return String(v.$oid);
-    if (v._id != null) return toStr(v._id, fb);
-    if (v.id != null) return toStr(v.id, fb);
-  }
-  return String(v);
-};
-
-const toNum = (v: unknown, fb = 0): number => {
-  if (v == null) return fb;
-  if (typeof v === "number") return Number.isFinite(v) ? v : fb;
-  if (typeof v === "string") {
-    const n = Number(v.trim());
-    return Number.isFinite(n) ? n : fb;
-  }
-  return fb;
-};
-
-const toNullStr = (v: unknown): string | null => {
-  if (v == null) return null;
-  if (typeof v === "string") {
-    const t = v.trim();
-    return t === "" ? null : t;
-  }
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  if (isObjDash(v)) {
-    if (v.url != null) return toNullStr(v.url);
-    if (v.src != null) return toNullStr(v.src);
-    if (v.image != null) return toNullStr(v.image);
-    if (v.thumbnail != null) return toNullStr(v.thumbnail);
-  }
-  return null;
-};
-
-const pickObjDash = (obj: any, keys: string[]) => {
-  if (!isObjDash(obj)) return null;
-  for (const k of keys) {
-    if (isObjDash(obj[k])) return obj[k];
-  }
-  return null;
-};
-
-const readQty = (it: any): number => {
-  if (!isObjDash(it)) return 0;
-  const raw =
-    it.quantity ?? it.qty ?? it.count ?? it.units ?? it.qtyOrdered ?? it.amount;
-  const n = toNum(raw, 0);
-  return n > 0 ? n : 0;
-};
-
-type OrderItem = {
-  componentId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image?: string | null;
-  sku?: string | null;
-};
-
-type Order = {
-  id: string;
-  reference: string;
-  items: OrderItem[];
-  total: number;
-  currency: string;
-  status: "Paid" | "Ready" | "Collected";
-  channel: string | null;
-  paidAt: string;
-  createdAt: string;
-  collectedAt?: string | null;
-  itemCount?: number;
-};
-
-type CartItem = {
-  componentId: string | { _id: string; id?: string } | any;
-  quantity: number;
-  [k: string]: any;
-};
-
-type Cart = {
-  _id?: string;
-  userId?: string;
-  items: CartItem[];
-};
-
-// =====================================================
-// MODULE-LEVEL CACHE
-// =====================================================
-
-let ordersCache: Order[] = [];
-let cartCache: Cart = { items: [] };
-let dashboardLoaded = false;
-let inflight: Promise<void> | null = null;
-
-export const resetDashboardCache = () => {
-  ordersCache = [];
-  cartCache = { items: [] };
-  dashboardLoaded = false;
-  inflight = null;
-};
-
-// =====================================================
-// TOKEN
-// =====================================================
-
-const getToken = (): string | null => {
-  try {
-    return (
-      sessionStorage.getItem("pulselab_token") ||
-      sessionStorage.getItem("token") ||
-      sessionStorage.getItem("auth_token") ||
-      localStorage.getItem("pulselab_token") ||
-      localStorage.getItem("token") ||
-      localStorage.getItem("auth_token") ||
-      null
-    );
-  } catch {
-    return null;
-  }
-};
-
-// =====================================================
-// FETCH WITH TIMEOUT
-// =====================================================
-
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit = {},
-  ms = 20000
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (err: any) {
-    if (err?.name === "AbortError") {
-      throw new Error(`Request timed out after ${ms / 1000}s.`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-// =====================================================
-// NORMALIZE ORDER
-// =====================================================
-
-function normalizeOrder(raw: any): Order | null {
-  const source = isObjDash(raw) ? raw : {};
-  const id = toStr(source.id ?? source._id ?? source.orderId ?? source.uuid, "");
-  if (!id) return null;
-
-  const items: OrderItem[] = Array.isArray(source.items)
-    ? source.items
-      .map((it: any): OrderItem | null => {
-        if (!isObjDash(it)) return null;
-        const populated =
-          it.componentId && isObjDash(it.componentId)
-            ? it.componentId
-            : pickObjDash(it, ["component", "product", "item"]);
-
-        const componentId = toStr(
-          populated?._id ??
-          populated?.id ??
-          it.componentId ??
-          (isObjDash(it.componentId) ? it.componentId._id : undefined),
-          ""
-        );
-        if (!componentId) return null;
-
-        const quantity = readQty(it);
-        if (quantity <= 0) return null;
-
-        return {
-          componentId,
-          name: toStr(it.name ?? populated?.name ?? "", ""),
-          price: toNum(
-            it.price ?? populated?.price ?? it.unitPrice ?? it.amount ?? 0,
-            0
-          ),
-          quantity,
-          image:
-            toNullStr(populated?.image ?? populated?.thumbnail ?? it.image) ??
-            null,
-          sku: toNullStr(populated?.sku ?? it.sku ?? "") ?? null,
-        };
-      })
-      .filter((i): i is OrderItem => !!i)
-    : [];
-
-  const rawStatus = source.status ?? source.pickupStatus ?? source.paymentStatus;
-  const status: Order["status"] =
-    rawStatus === "Ready" || rawStatus === "Collected" ? rawStatus : "Paid";
-
-  const totalFromItems = items.reduce(
-    (sum, it) => sum + it.price * it.quantity,
-    0
-  );
-  const total = toNum(
-    source.total ??
-    source.amount ??
-    source.amountNaira ??
-    source.grandTotal ??
-    source.amountDue ??
-    totalFromItems,
-    totalFromItems
-  );
-
-  const paidAtCandidate =
-    source.paidAt ??
-    source.paid_at ??
-    source.createdAt ??
-    source.created_at ??
-    new Date().toISOString();
-
-  return {
-    id,
-    reference: toStr(
-      source.reference ?? source.ref ?? source.orderReference ?? "",
-      ""
-    ),
-    items,
-    total,
-    currency: toStr(source.currency ?? "NGN", "NGN"),
-    status,
-    channel: source.channel ?? source.paymentMethod ?? null,
-    paidAt: toStr(paidAtCandidate, new Date().toISOString()),
-    createdAt: toStr(source.createdAt ?? source.created_at ?? paidAtCandidate, ""),
-    collectedAt: source.collectedAt ?? source.collected_at ?? null,
-    itemCount: typeof source.itemCount === "number" ? source.itemCount : items.reduce((s, it) => s + it.quantity, 0),
-  };
-}
-
-function extractOrdersArray(ordersData: any): any[] {
-  if (Array.isArray(ordersData?.orders)) return ordersData.orders;
-  if (Array.isArray(ordersData)) return ordersData;
-  if (Array.isArray(ordersData?.data)) return ordersData.data;
-  if (Array.isArray(ordersData?.data?.orders)) return ordersData.data.orders;
-  if (Array.isArray(ordersData?.result)) return ordersData.result;
-  return [];
-}
-
-function extractCart(data: any): Cart {
-  if (!data || typeof data !== "object") return { items: [] };
-  const tryItems = (arr: any): CartItem[] | null =>
-    Array.isArray(arr) ? (arr as CartItem[]) : null;
-
-  const direct = tryItems(data);
-  if (direct) return { items: direct };
-
-  const itemsKey = tryItems(data.items);
-  if (itemsKey) return { ...data, items: itemsKey };
-
-  if (isObjDash(data.cart)) {
-    const cartItems = tryItems(data.cart.items);
-    if (cartItems) return { ...data.cart, items: cartItems };
-    const cartProducts = tryItems(data.cart.products);
-    if (cartProducts) return { ...data.cart, items: cartProducts };
-  }
-
-  if (Array.isArray(data.data)) return { items: data.data };
-  if (isObjDash(data.data)) {
-    const dItems = tryItems(data.data.items);
-    if (dItems) return { ...data.data, items: dItems };
-    if (isObjDash(data.data.cart)) {
-      const dcItems = tryItems(data.data.cart.items);
-      if (dcItems) return { ...data.data.cart, items: dcItems };
-    }
-  }
-
-  const resultItems = tryItems(data.result);
-  if (resultItems) return { items: resultItems };
-
-  const productItems = tryItems(data.products);
-  if (productItems) return { items: productItems };
-
-  return { items: [] };
-}
-
-// =====================================================
-// LOAD DATA
-// =====================================================
-
-async function loadDashboardData(): Promise<void> {
-  if (inflight) return inflight;
-
-  inflight = (async () => {
-    const token = getToken();
-    if (!token) throw new Error("Please login first.");
-
-    const headers = { Authorization: `Bearer ${token}` };
-
-    // Fetch Orders
-    try {
-      const res = await fetchWithTimeout(`${API_URL}/engineering/userordersdb`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        ordersCache = extractOrdersArray(data)
-          .map(normalizeOrder)
-          .filter((o): o is Order => !!o);
-      } else {
-        console.error("Orders fetch failed with status:", res.status);
-      }
-    } catch (e) {
-      console.error("Orders fetch error:", e);
-    }
-
-    // Fetch Cart
-    try {
-      const res = await fetchWithTimeout(`${API_URL}/engineering/cartuserdb`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        cartCache = extractCart(data);
-      } else {
-        console.error("Cart fetch failed with status:", res.status);
-      }
-    } catch (e) {
-      console.error("Cart fetch error:", e);
-    }
-
-    dashboardLoaded = true;
-  })().finally(() => {
-    inflight = null;
-  });
-
-  return inflight;
-}
-
-// =====================================================
-// HELPERS
-// =====================================================
 
 const formatShortDate = (iso: string | null | undefined) => {
   if (!iso) return "—";
@@ -393,81 +55,46 @@ const formatShortDate = (iso: string | null | undefined) => {
 // =====================================================
 
 function DashboardPage() {
-  const user = useCurrentUser();
+  const queryClient = useQueryClient();
 
-  const [orders, setOrders] = useState<Order[]>(() =>
-    Array.isArray(ordersCache) ? ordersCache : []
-  );
-  const [cart, setCart] = useState<Cart>(() =>
-    cartCache && Array.isArray(cartCache.items) ? cartCache : { items: [] }
-  );
-  const [loading, setLoading] = useState(
-    () => !dashboardLoaded && (ordersCache?.length ?? 0) === 0
-  );
-  const [error, setError] = useState<string | null>(null);
+  // The session user, read from storage. The Zustand store used to be
+  // asked for this, but it only ever held locally mocked users, so the
+  // dashboard rendered a permanent skeleton for real students.
+  const user = getCurrentUser();
 
-  // Initial Load
-  useEffect(() => {
-    let mounted = true;
-    const isFirstLoad = !dashboardLoaded;
+  // Both queries are shared with /orders and /cart — one request serves
+  // every page that needs them.
+  const {
+    orders,
+    isLoading: ordersLoading,
+    isError: ordersError,
+  } = useOrdersQuery();
 
-    if (isFirstLoad) {
-      setLoading(true);
-      setError(null);
-    }
+  const { cart, isLoading: cartLoading } = useCartQuery();
 
-    loadDashboardData()
-      .then(() => {
-        if (!mounted) return;
-        setOrders(Array.isArray(ordersCache) ? ordersCache : []);
-        setCart(cartCache && Array.isArray(cartCache.items) ? cartCache : { items: [] });
-      })
-      .catch((err: any) => {
-        if (!mounted) return;
-        const hasOrders = (ordersCache?.length ?? 0) > 0;
-        const hasCart = (cartCache?.items?.length ?? 0) > 0;
-        if (!hasOrders && !hasCart) {
-          setError(err?.message || "Failed to load dashboard data.");
-        }
-      })
-      .finally(() => {
-        if (!mounted) return;
-        setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const loading = ordersLoading || cartLoading;
+  const error = ordersError ? "Failed to load dashboard data." : null;
 
   // Real-time Updates
   useEffect(() => {
-    let mounted = true;
-    if (!getToken()) return;
+    if (!getUserToken()) return;
 
     const cleanupJoin = connectUserSocket();
 
-    const refresh = async () => {
-      try {
-        await loadDashboardData();
-        if (!mounted) return;
-        setOrders(Array.isArray(ordersCache) ? ordersCache : []);
-        setCart(cartCache && Array.isArray(cartCache.items) ? cartCache : { items: [] });
-      } catch (e) {
-        console.error("Silent refresh failed:", e);
-      }
+    const invalidate = () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orders.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cart.all });
     };
 
-    socket.on("orders:updated", refresh);
-    socket.on("cart:updated", refresh);
+    socket.on("orders:updated", invalidate);
+    socket.on("cart:updated", invalidate);
 
     return () => {
-      mounted = false;
       cleanupJoin();
-      socket.off("orders:updated", refresh);
-      socket.off("cart:updated", refresh);
+      socket.off("orders:updated", invalidate);
+      socket.off("cart:updated", invalidate);
     };
-  }, []);
+  }, [queryClient]);
 
   // ===================================================
   // DERIVED (FIXED: Removed useMemo to prevent mobile hydration bugs)
@@ -488,10 +115,24 @@ function DashboardPage() {
   // GUARDS
   // ===================================================
   if (!user) {
+    // A token without a stored profile means the session is incomplete.
+    // The old implementation rendered an endless skeleton here.
     return (
       <AppShell>
-        <div className="flex h-[60vh] items-center justify-center">
-          <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200" />
+        <div className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-2xl border border-slate-200 bg-white p-10 text-center">
+          <AlertCircle className="size-8 text-amber-500" />
+          <h2 className="text-lg font-bold text-brand-navy">
+            Your session has expired
+          </h2>
+          <p className="text-sm text-slate-500">
+            Please sign in again to see your dashboard.
+          </p>
+          <Link
+            to="/login"
+            className="rounded-lg bg-brand-navy px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-navy/90"
+          >
+            Sign in
+          </Link>
         </div>
       </AppShell>
     );

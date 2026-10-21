@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -27,6 +28,9 @@ import {
 
 import type { Category } from "@/lib/data";
 import { socket } from "@/lib/socket";
+import { getAdminToken } from "@/lib/auth";
+import { queryKeys } from "@/lib/queryKeys";
+import { useComponentMutations } from "@/hooks/useAdminQueries";
 
 export const Route = createFileRoute("/admin/components")({
   head: () => ({
@@ -139,11 +143,30 @@ function skuExists(
 // =====================================================
 
 function AdminComponents() {
-  const [components, setComponents] = useState<BackendComponent[]>([]);
+  const queryClient = useQueryClient();
+
+  // =====================================================
+  // DATA
+  // =====================================================
+  // The inventory table needs every row — the SKU allocator scans the
+  // whole list — so it uses one query for the full collection.
+  const {
+    data: components = [],
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.components.adminList(),
+    queryFn: ({ signal }) => componentApi.getAll(signal),
+    enabled: Boolean(getAdminToken()),
+    staleTime: 15_000,
+  });
+
+  const { create, update, remove } = useComponentMutations();
+
   const [editing, setEditing] = useState<
     BackendComponent | "new" | null
   >(null);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
 
@@ -171,78 +194,43 @@ function AdminComponents() {
   };
 
   // =====================================================
-  // FETCH
+  // LOAD ERROR
   // =====================================================
-  const fetchComponents = async () => {
-    try {
-      setLoading(true);
-
-      const response = await componentApi.getAll();
-      setComponents(response);
-    } catch (error: any) {
-      console.error("Fetch components error:", error);
-      pushToast(
-        "error",
-        error?.message || "Failed to load components"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchComponents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!isError) return;
+
+    pushToast(
+      "error",
+      queryError instanceof Error
+        ? queryError.message
+        : "Failed to load components"
+    );
+  }, [isError, queryError]);
 
   // =====================================================
   // REAL-TIME UPDATES
   // =====================================================
+  // The backend broadcasts catalog changes. Invalidating the query
+  // re-reads the list, which also keeps the SKU allocator in sync.
   useEffect(() => {
-    const handleUpdated = (component: BackendComponent) => {
-      const incomingId = getComponentId(component);
-      if (!incomingId) return;
-
-      setComponents((current) =>
-        current.map((item) =>
-          getComponentId(item) === incomingId ? component : item
-        )
-      );
-    };
-
-    const handleCreated = (component: BackendComponent) => {
-      const incomingId = getComponentId(component);
-      if (!incomingId) return;
-
-      setComponents((current) => {
-        const exists = current.some(
-          (item) => getComponentId(item) === incomingId
-        );
-        if (exists) return current;
-        return [component, ...current];
+    const invalidate = () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.components.adminList(),
       });
     };
 
-    const handleDeleted = (component: BackendComponent) => {
-      const id = getComponentId(component);
-      if (!id) return;
-
-      setComponents((current) =>
-        current.filter((item) => getComponentId(item) !== id)
-      );
-    };
-
-    socket.on("component:updated", handleUpdated);
-    socket.on("component:created", handleCreated);
-    socket.on("component:deleted", handleDeleted);
+    socket.on("component:updated", invalidate);
+    socket.on("component:created", invalidate);
+    socket.on("component:deleted", invalidate);
+    socket.on("components:refreshed", invalidate);
 
     return () => {
-      socket.off("component:updated", handleUpdated);
-      socket.off("component:created", handleCreated);
-      socket.off("component:deleted", handleDeleted);
+      socket.off("component:updated", invalidate);
+      socket.off("component:created", invalidate);
+      socket.off("component:deleted", invalidate);
+      socket.off("components:refreshed", invalidate);
     };
-  }, []);
-  
+  }, [queryClient]);
 
   // =====================================================
   // COUNTS
@@ -286,9 +274,9 @@ function AdminComponents() {
     if (value) {
       result = result.filter(
         (component) =>
-          component.name.toLowerCase().includes(value) ||
-          component.sku.toLowerCase().includes(value) ||
-          component.category.toLowerCase().includes(value)
+          component.name?.toLowerCase().includes(value) ||
+          component.sku?.toLowerCase().includes(value) ||
+          component.category?.toLowerCase().includes(value)
       );
     }
 
@@ -325,10 +313,10 @@ function AdminComponents() {
           );
         }
 
-        const created = await componentApi.create(
-          { ...data, sku: generatedSKU },
-          imageFile
-        );
+        const created = await create.mutateAsync({
+          data: { ...data, sku: generatedSKU },
+          imageFile,
+        });
 
         const createdId = getComponentId(created);
         if (!createdId) {
@@ -336,13 +324,6 @@ function AdminComponents() {
             "Server did not return the created component."
           );
         }
-
-        setComponents((prev) => {
-          const exists = prev.some(
-            (c) => getComponentId(c) === createdId
-          );
-          return exists ? prev : [created, ...prev];
-        });
 
         pushToast(
           "success",
@@ -373,17 +354,11 @@ function AdminComponents() {
           );
         }
 
-        const updated = await componentApi.update(
-          editingId,
-          { ...data, sku: generatedSKU },
-          imageFile
-        );
-
-        setComponents((prev) =>
-          prev.map((c) =>
-            getComponentId(c) === editingId ? updated : c
-          )
-        );
+        const updated = await update.mutateAsync({
+          id: editingId,
+          data: { ...data, sku: generatedSKU },
+          imageFile,
+        });
 
         pushToast(
           "success",
@@ -431,11 +406,7 @@ function AdminComponents() {
     try {
       setDeleting(true);
 
-      await componentApi.delete(id);
-
-      setComponents((prev) =>
-        prev.filter((item) => getComponentId(item) !== id)
-      );
+      await remove.mutateAsync({ id });
 
       pushToast(
         "success",

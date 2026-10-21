@@ -24,15 +24,16 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useAdminCollected } from "@/hooks/useAdminQueries";
+import { toErrorMessage } from "@/lib/queryClient";
+import type { NormalizedOrder } from "@/lib/normalize";
+
 export const Route = createFileRoute("/admin/collected")({
   head: () => ({
     meta: [{ title: "Collected Orders — Admin" }],
   }),
   component: CollectedPage,
 });
-
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
 
 // =====================================================
 // TYPES
@@ -47,22 +48,7 @@ type CollectedItem = {
   sku?: string | null;
 };
 
-type CollectedOrder = {
-  id: string;
-  reference: string;
-  userId: string;
-  userName: string;
-  matric: string;
-  email: string | null;
-  items: CollectedItem[];
-  total: number;
-  currency: string;
-  channel: string | null;
-  paidAt: string;
-  createdAt: string;
-  collectedAt: string | null;
-  status: "Collected";
-};
+type CollectedOrder = NormalizedOrder;
 
 // =====================================================
 // HELPERS
@@ -110,73 +96,21 @@ const getToken = () =>
 // =====================================================
 
 function CollectedPage() {
-  const [orders, setOrders] = useState<CollectedOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    orders,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useAdminCollected();
+
+  const error = isError
+    ? toErrorMessage(queryError, "Unable to load collected orders.")
+    : null;
+
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recent" | "oldest" | "highest">(
     "recent"
   );
-
-  // ===================================================
-  // LOAD
-  // ===================================================
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      const token = getToken();
-      if (!token) {
-        setError("Please log in as admin.");
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(null);
-
-        const response = await fetch(
-          `${API_URL}/admin/pickup/collected`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        const rawText = await response.text();
-        let data: any = null;
-        try {
-          data = rawText ? JSON.parse(rawText) : null;
-        } catch {
-          throw new Error(
-            `Endpoint returned non-JSON (HTTP ${response.status}).`
-          );
-        }
-
-        if (!response.ok) {
-          throw new Error(
-            data?.message || "Unable to load collected orders."
-          );
-        }
-
-        const list: CollectedOrder[] = Array.isArray(data?.orders)
-          ? data.orders
-          : [];
-
-        if (!cancelled) setOrders(list);
-      } catch (err: any) {
-        if (!cancelled) {
-          console.error("🔴 Load collected failed:", err);
-          setError(err?.message || "Unable to load collected orders.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // ===================================================
   // STATS

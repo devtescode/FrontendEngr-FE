@@ -17,48 +17,32 @@ import { useEffect, useMemo, useState } from "react";
 
 export const Route = createFileRoute("/admin/orders")({
   head: () => ({
-    meta: [{ title: "User Carts — Admin" }],
+    meta: [{ title: "User Carts â€” Admin" }],
   }),
   component: AdminCarts,
 });
 
-import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
-
-type CartItem = {
-  componentId: {
-    _id: string;
-    name: string;
-    sku: string;
-    price: number;
-    image?: string;
-    category?: string;
-  };
-  quantity: number;
-};
-
-type UserCart = {
-  _id: string;
-
-  userId: {
-    _id: string;
-    fullName: string;
-    email: string;
-    matric: string;
-  };
-
-  items: CartItem[];
-
-  updatedAt?: string;
-};
+import {
+  useAdminCarts,
+  type AdminCart,
+} from "@/hooks/useAdminQueries";
+import { toErrorMessage } from "@/lib/queryClient";
 
 const formatNaira = (amount: number) =>
-  `₦${amount.toLocaleString("en-NG")}`;
+  `â‚¦${amount.toLocaleString("en-NG")}`;
 
 function AdminCarts() {
-  const [carts, setCarts] = useState<UserCart[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const {
+    carts,
+    isLoading: loading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useAdminCarts();
+
+  const error = isError
+    ? toErrorMessage(queryError, "Failed to load carts")
+    : "";
 
   const [search, setSearch] = useState("");
 
@@ -69,71 +53,8 @@ function AdminCarts() {
    * CART CURRENTLY BEING VIEWED
    */
   const [selectedCart, setSelectedCart] =
-    useState<UserCart | null>(null);
+    useState<AdminCart | null>(null);
 
-  /*
-   * =====================================================
-   * FETCH CARTS
-   * =====================================================
-   */
-
-  useEffect(() => {
-  if (selectedCart) {
-    document.body.style.overflow = "hidden";
-  } else {
-    document.body.style.overflow = "";
-  }
-
-  return () => {
-    document.body.style.overflow = "";
-  };
-}, [selectedCart]);
-
-  useEffect(() => {
-    const loadCarts = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const token =
-          sessionStorage.getItem("admin_token");
-
-        const response = await fetch(
-          `${API_URL}/admin/getallcarts`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.message ||
-              "Failed to load carts"
-          );
-        }
-
-        setCarts(data.carts || []);
-      } catch (error: any) {
-        console.error(
-          "Failed to load carts:",
-          error
-        );
-
-        setError(
-          error.message ||
-            "Failed to load carts"
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadCarts();
-  }, []);
 
   /*
    * =====================================================
@@ -173,7 +94,7 @@ function AdminCarts() {
    */
 
   const getCartTotal = (
-    cart: UserCart
+    cart: AdminCart
   ) => {
     return cart.items.reduce(
       (total, item) => {
@@ -321,12 +242,12 @@ function AdminCarts() {
             <span>{error}</span>
 
             <button
-              onClick={() =>
-                setError("")
-              }
-              className="rounded-lg p-1 hover:bg-red-500/10"
+              onClick={() => {
+                void refetch();
+              }}
+              className="rounded-lg px-2 py-1 text-xs font-semibold hover:bg-red-500/10"
             >
-              <X className="h-4 w-4" />
+              Retry
             </button>
           </div>
         )}
@@ -356,7 +277,7 @@ function AdminCarts() {
           <SummaryCard
             icon={
               <span className="text-lg font-bold">
-                ₦
+                â‚¦
               </span>
             }
             label="Cart Value"
@@ -552,7 +473,7 @@ function AdminCarts() {
                               </span>
 
                               <span className="text-slate-700">
-                                •
+                                â€¢
                               </span>
 
                               <span className="text-slate-500">
@@ -700,7 +621,7 @@ function AdminCarts() {
                                 </span>
 
                                 <span className="inline-flex rounded-lg bg-white/5 px-3 py-1.5 text-sm font-bold text-white">
-                                  ×{" "}
+                                  Ã—{" "}
                                   {
                                     item.quantity
                                   }
@@ -783,7 +704,7 @@ function CartDetails({
   cart,
   onClose,
 }: {
-  cart: UserCart;
+  cart: AdminCart;
   onClose: () => void;
 }) {
   const user = cart.userId;
@@ -922,7 +843,7 @@ function CartDetails({
               <p className="mt-1 text-xs text-slate-500">
                 {cart.items.length} component
                 {cart.items.length !==
-                  1 && "s"} ·{" "}
+                  1 && "s"} Â·{" "}
                 {totalUnits} total units
               </p>
             </div>
@@ -1041,7 +962,7 @@ function CartDetails({
                             {formatNaira(
                               unitPrice
                             )}{" "}
-                            ×{" "}
+                            Ã—{" "}
                             {
                               item.quantity
                             }

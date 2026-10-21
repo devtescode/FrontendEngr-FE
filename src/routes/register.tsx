@@ -5,9 +5,9 @@ import {
 } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useStore } from "@/lib/store";
 import { Field } from "./login";
-import { API_BASE_URL } from "@/lib/config";
+import { useUserRegister } from "@/hooks/useAuthMutations";
+import { toErrorMessage } from "@/lib/queryClient";
 
 // icons
 import {
@@ -27,12 +27,9 @@ export const Route = createFileRoute("/register")({
   }),
   component: RegisterPage,
 });
-// import { API_BASE_URL } from "@/lib/config";
-const API_URL = API_BASE_URL;
-
 function RegisterPage() {
-  const register = useStore((s) => s.register);
   const navigate = useNavigate();
+  const registerMutation = useUserRegister();
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -77,35 +74,19 @@ function RegisterPage() {
     }
 
     try {
-      const response = await fetch(
-        `${API_URL}/engineering/usersignup`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fullName,
-            email,
-            matric: formattedMatric,
-            phoneNumber,
-            gender,
-            password,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setLoading(false);
-        return setError(data.message || "Registration failed");
-      }
+      await registerMutation.mutateAsync({
+        fullName,
+        email,
+        matric: formattedMatric,
+        phoneNumber,
+        gender,
+        password,
+      });
 
       navigate({ to: "/login" });
     } catch (error) {
       setLoading(false);
-      setError("Unable to connect to server");
+      setError(toErrorMessage(error, "Unable to connect to server"));
     }
   };
   return (
