@@ -14,9 +14,10 @@ import {
   MapPin,
 } from "lucide-react";
 import { NavAppShell } from "@/components/NavAppShell";
-import { ComponentCard } from "@/components/ComponentCard";
+import { FeaturedComponents } from "@/components/FeaturedComponents";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { Reveal } from "@/components/Section";
+import { usePaginatedComponents } from "@/hooks/usePaginatedComponents";
 import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/")({
@@ -117,16 +118,28 @@ const CUSTOMER_POLICIES = [
 ];
 
 function Index() {
-  const components = useStore((s) => s.components);
   const users = useStore((s) => s.users);
   const orders = useStore((s) => s.orders);
 
-  // now compute safely
-  const featured = components.slice(0, 6);
+  // Public, server-paginated catalog data. Only six records are requested per
+  // page, and a new upload automatically brings page 1 back into view.
+  const {
+    components,
+    pagination,
+    page: componentsPage,
+    setPage: setComponentsPage,
+    loading: componentsLoading,
+    refreshing: componentsRefreshing,
+    error: componentsError,
+    refresh: refreshComponents,
+  } = usePaginatedComponents({
+    pageSize: 6,
+    sort: "createdAt",
+    order: "desc",
+    resetPageOnCreate: true,
+  });
 
   const totalOrders = orders.length;
-
-  const totalStock = components.reduce((a, c) => a + c.stock, 0);
 
   const totalStudents = users.filter((u) => u.role === "student").length;
 
@@ -295,7 +308,7 @@ function Index() {
       <section className="mx-auto max-w-7xl px-6 -mt-12">
         <Reveal className="grid grid-cols-2 md:grid-cols-4 gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <Stat label="Orders Fulfilled" value={totalOrders + 1248} />
-          <Stat label="Components in Stock" value={totalStock} />
+          <Stat label="Components Listed" value={pagination.totalItems} />
           <Stat label="Students Served" value={totalStudents + 840} />
           <Stat label="Avg Pickup" value={12} suffix=" min" />
         </Reveal>
@@ -334,32 +347,16 @@ function Index() {
       </section>
 
       {/* Featured */}
-      <section className="mx-auto max-w-7xl px-6 py-12">
-        <Reveal className="mb-12 flex items-end justify-between">
-          <div>
-            <h2 className="text-3xl font-bold text-brand-navy">
-              Featured Components
-            </h2>
-
-            <p className="mt-2 text-slate-500">
-              Available for immediate laboratory collection.
-            </p>
-          </div>
-
-          <Link
-            to="/components"
-            className="hidden md:inline-flex items-center gap-2 text-brand-accent font-semibold text-sm hover:gap-3 transition-all"
-          >
-            View all <ArrowRight className="size-4" />
-          </Link>
-        </Reveal>
-
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {featured.map((c, i) => (
-            <ComponentCard key={c.id} c={c} index={i} />
-          ))}
-        </div>
-      </section>
+      <FeaturedComponents
+        components={components}
+        pagination={pagination}
+        page={componentsPage}
+        loading={componentsLoading}
+        refreshing={componentsRefreshing}
+        error={componentsError}
+        onPageChange={setComponentsPage}
+        onRefresh={refreshComponents}
+      />
 
       {/* Dashboard preview */}
       <section className="bg-brand-navy py-24 text-white mt-16">
@@ -683,7 +680,7 @@ function Stat({
       <div className="text-3xl md:text-4xl font-bold text-brand-navy tracking-tight">
         <AnimatedCounter value={value} suffix={suffix} />
       </div>
-3
+
       <div className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mt-1">
         {label}
       </div>

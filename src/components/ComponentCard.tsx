@@ -2,7 +2,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Package,
   ShoppingCart,
-  ArrowUpRight,
   Minus,
   Plus,
   CheckCircle2,
@@ -85,6 +84,17 @@ function extractItems(data: any): any[] {
   return [];
 }
 
+/**
+ * Only replace the shared cache when the payload is a real cart snapshot.
+ * Unknown socket/message shapes must not wipe every card's quantity.
+ */
+function hasCartShape(data: any): boolean {
+  if (!data) return false;
+  if (Array.isArray(data)) return true;
+  if (Array.isArray(data.items)) return true;
+  return isObjCC(data.cart) && Array.isArray(data.cart.items);
+}
+
 export function setCartCacheFromResponse(cart: any) {
   const rawItems = extractItems(cart);
   const items: CachedCartItem[] = [];
@@ -122,9 +132,95 @@ export function getCachedQuantity(
   return found?.quantity ?? 0;
 }
 
+// =====================================================
+// SHARED CART LOADER
+// =====================================================
+// Every ComponentCard used to request /engineering/cart
+// on mount. On a page with six cards that meant six
+// identical requests. This loader deduplicates them into
+// one request per session (or per explicit reset).
+//
+let cartLoadPromise: Promise<void> | null = null;
+let cartGeneration = 0;
+let activeCartAbort: AbortController | null = null;
+
 export function resetCartCache() {
+  cartGeneration += 1;
+
+  activeCartAbort?.abort();
+  activeCartAbort = null;
+
   cartCache.items = [];
   cartCache.loaded = false;
+  cartLoadPromise = null;
+
+  // The cart page keeps its own offline copy under this key. It must not
+  // survive a user switch.
+  try {
+    localStorage.removeItem("pulselab_cart");
+  } catch (error) {
+    console.error("Failed to clear saved cart:", error);
+  }
+}
+
+export async function ensureCartLoaded(): Promise<void> {
+  if (cartCache.loaded) return;
+  if (cartLoadPromise) return cartLoadPromise;
+
+  const token = sessionStorage.getItem("pulselab_token");
+
+  // Guests can browse the catalog without any cart request.
+  if (!token) return;
+
+  const generation = cartGeneration;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const tracked: { promise: Promise<void> | null } = { promise: null };
+
+  activeCartAbort = controller;
+
+  const request = (async () => {
+    const response = await fetch(`${API_URL}/engineering/cart`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to load cart");
+    }
+
+    const cart = await response.json();
+
+    // Ignore a response that belongs to a previous user/session.
+    if (generation !== cartGeneration) return;
+
+    setCartCacheFromResponse(cart);
+  })()
+    .catch((error) => {
+      if ((error as { name?: string })?.name !== "AbortError") {
+        console.error("Failed to restore cart:", error);
+      }
+    })
+    .finally(() => {
+      clearTimeout(timeoutId);
+
+      if (activeCartAbort === controller) {
+        activeCartAbort = null;
+      }
+
+      // Don't let an old request clear a newer in-flight request.
+      if (cartLoadPromise === tracked.promise) {
+        cartLoadPromise = null;
+      }
+    });
+
+  tracked.promise = request;
+  cartLoadPromise = request;
+
+  return request;
 }
 
 // =====================================================
@@ -257,12 +353,21 @@ export function ComponentCard({
   const isOutOfStock = c.stock <= 0;
   const isLowStock = c.stock > 0 && c.stock <= 5;
 
-  const componentId = c._id;
+  // The backend normally returns `_id`, but accepting `id` too keeps cached
+  // and socket-normalized components working in the public catalog.
+  const componentId = c._id ?? c.id;
 
   // ===================================================
   // CART READY GATE
   // ===================================================
-  const [cartReady, setCartReady] = useState(cartCache.loaded);
+  // Guests must never wait on a cart request before a card can render. For
+  // signed-in users the shared loader resolves the cart once for the page.
+  const [cartReady, setCartReady] = useState(
+    () =>
+      cartCache.loaded ||
+      typeof window === "undefined" ||
+      !sessionStorage.getItem("pulselab_token")
+  );
 
   const [quantity, setQuantity] = useState(() =>
     getCachedQuantity(componentId)
@@ -272,6 +377,9 @@ export function ComponentCard({
   const getToken = () => {
     return sessionStorage.getItem("pulselab_token");
   };
+
+  const sessionStillCurrent = (generation: number, requestToken: string) =>
+    generation === cartGeneration && getToken() === requestToken;
 
   // ===================================================
   // SYNC LOCAL QUANTITY INTO CACHE
@@ -309,11 +417,8 @@ export function ComponentCard({
   // updates the local quantity accordingly.
   //
   const applyServerResponse = (data: any) => {
-    const rawItems = extractItems(data);
-
-    // If the server returned a payload with items,
-    // refresh the whole cache from it.
-    if (rawItems.length > 0 || Array.isArray(data?.items) || Array.isArray(data?.cart?.items)) {
+    // If the server returned a real cart snapshot, refresh the whole cache.
+    if (hasCartShape(data)) {
       setCartCacheFromResponse(data);
       setQuantity(getCachedQuantity(componentId));
     }
@@ -322,59 +427,34 @@ export function ComponentCard({
   // ===================================================
   // INITIAL LOAD
   // ===================================================
-  // ALWAYS refetch the cart on mount, even if the
-  // cache is loaded. This is what ensures that a cart
-  // change made elsewhere (e.g. on /cart) is reflected
-  // the moment we navigate back to /components.
+  // One shared request fills the cache for every card.
+  // Cart changes from the catalog, cart page, or socket
+  // events update the same cache afterwards.
   //
   useEffect(() => {
     let cancelled = false;
 
-    const loadCart = async () => {
-      const token = sessionStorage.getItem("pulselab_token");
+    if (!componentId) {
+      setCartReady(true);
+      return;
+    }
 
-      if (!token || !componentId) {
-        setCartReady(true);
-        return;
-      }
-
-      try {
-        const response = await fetch(
-          `${API_URL}/engineering/cart`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to load cart");
-        }
-
-        const cart = await response.json();
-
+    void ensureCartLoaded()
+      .then(() => {
         if (cancelled) return;
 
-        setCartCacheFromResponse(cart);
         setQuantity(getCachedQuantity(componentId));
         setCartReady(true);
-      } catch (error) {
-        console.error(
-          "Failed to restore cart quantity:",
-          error
-        );
+      })
+      .catch(() => {
+        // A storage failure must never leave the card's action permanently
+        // gated behind a skeleton.
         if (!cancelled) setCartReady(true);
-      }
-    };
-
-    loadCart();
+      });
 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [componentId]);
 
   if (!componentId) {
@@ -386,6 +466,24 @@ export function ComponentCard({
   // ===================================================
   useEffect(() => {
     const handleCartUpdated = (cart: any) => {
+      if (!sessionStorage.getItem("pulselab_token")) return;
+      if (!hasCartShape(cart)) return;
+
+      // Ignore a queued event that belongs to another user.
+      const currentUserId = sessionStorage.getItem("pulselab_userId");
+      const rawUserId = cart?.userId;
+      const eventUserId = isObjCC(rawUserId)
+        ? rawUserId._id ?? rawUserId.id
+        : rawUserId;
+
+      if (
+        currentUserId &&
+        eventUserId &&
+        String(eventUserId) !== currentUserId
+      ) {
+        return;
+      }
+
       setCartCacheFromResponse(cart);
       setQuantity(getCachedQuantity(componentId));
       setCartReady(true);
@@ -396,7 +494,6 @@ export function ComponentCard({
     return () => {
       socket.off("cart:updated", handleCartUpdated);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [componentId]);
 
   // ===================================================
@@ -406,7 +503,7 @@ export function ComponentCard({
     const token = getToken();
 
     if (!token) {
-      pushToast("error", "Please login first.");
+      pushToast("info", "Sign in to add items to your cart.");
       return;
     }
 
@@ -417,6 +514,7 @@ export function ComponentCard({
 
     if (isOutOfStock) return;
 
+    const requestGeneration = cartGeneration;
     const previousQuantity = quantity;
     setQuantity(1);
     syncCache(1);
@@ -447,10 +545,14 @@ export function ComponentCard({
         );
       }
 
+      if (!sessionStillCurrent(requestGeneration, token)) return;
+
       applyServerResponse(data);
       pushToast("success", `${c.name} added to cart`);
     } catch (error: any) {
       console.error("Add to cart error:", error);
+
+      if (!sessionStillCurrent(requestGeneration, token)) return;
 
       setQuantity(previousQuantity);
       syncCache(previousQuantity);
@@ -471,7 +573,7 @@ export function ComponentCard({
     const token = getToken();
 
     if (!token) {
-      pushToast("error", "Please login first.");
+      pushToast("info", "Sign in to add items to your cart.");
       return;
     }
 
@@ -490,6 +592,7 @@ export function ComponentCard({
       return;
     }
 
+    const requestGeneration = cartGeneration;
     const previousQuantity = quantity;
     const nextQuantity = previousQuantity + 1;
 
@@ -522,9 +625,13 @@ export function ComponentCard({
         );
       }
 
+      if (!sessionStillCurrent(requestGeneration, token)) return;
+
       applyServerResponse(data);
     } catch (error: any) {
       console.error("Increase quantity error:", error);
+
+      if (!sessionStillCurrent(requestGeneration, token)) return;
 
       setQuantity(previousQuantity);
       syncCache(previousQuantity);
@@ -545,7 +652,7 @@ export function ComponentCard({
     const token = getToken();
 
     if (!token) {
-      pushToast("error", "Please login first.");
+      pushToast("info", "Sign in to add items to your cart.");
       return;
     }
 
@@ -556,6 +663,7 @@ export function ComponentCard({
 
     if (quantity <= 0) return;
 
+    const requestGeneration = cartGeneration;
     const previousQuantity = quantity;
     const isRemoving = previousQuantity === 1;
     const nextQuantity = isRemoving ? 0 : previousQuantity - 1;
@@ -585,6 +693,8 @@ export function ComponentCard({
           );
         }
 
+        if (!sessionStillCurrent(requestGeneration, token)) return;
+
         applyServerResponse(data);
         pushToast("info", `${c.name} removed from cart`);
         return;
@@ -613,9 +723,13 @@ export function ComponentCard({
         );
       }
 
+      if (!sessionStillCurrent(requestGeneration, token)) return;
+
       applyServerResponse(data);
     } catch (error: any) {
       console.error("Decrease quantity error:", error);
+
+      if (!sessionStillCurrent(requestGeneration, token)) return;
 
       setQuantity(previousQuantity);
       syncCache(previousQuantity);
@@ -638,7 +752,7 @@ export function ComponentCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.05 }}
       whileHover={{ y: -6 }}
-      className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl"
+      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl"
     >
       {/* IMAGE */}
       <div className="relative h-66 overflow-hidden bg-slate-50">
@@ -678,19 +792,10 @@ export function ComponentCard({
             </span>
           )}
         </div>
-
-        {/* VIEW */}
-        <button
-          type="button"
-          className="absolute bottom-4 right-4 flex h-10 w-10 translate-y-2 items-center justify-center rounded-full bg-white text-slate-700 opacity-0 shadow-md transition-all duration-300 hover:bg-brand-navy hover:text-white group-hover:translate-y-0 group-hover:opacity-100"
-          aria-label={`View ${c.name}`}
-        >
-          <ArrowUpRight className="h-5 w-5" />
-        </button>
       </div>
 
       {/* CONTENT */}
-      <div className="mx-2 mb-4 mt-3 p-2">
+      <div className="mx-2 mb-4 mt-3 flex flex-1 flex-col p-2 pb-5">
         <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
           SKU: {c.sku}
         </p>
@@ -731,19 +836,19 @@ export function ComponentCard({
 
         {/* CART ACTION */}
         {!cartReady ? (
-          <div className="mt-5 h-12 w-full animate-pulse rounded-xl bg-slate-100" />
+          <div className="mt-auto h-12 w-full animate-pulse rounded-xl bg-slate-100" />
         ) : quantity === 0 ? (
           <button
             type="button"
             disabled={isOutOfStock || !componentId}
             onClick={handleAddToCart}
-            className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-navy/90 hover:shadow-lg disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            className="mt-auto flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-navy/90 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
           >
             <ShoppingCart className="h-4 w-4" />
             {isOutOfStock ? "Out of Stock" : "Add to Cart"}
           </button>
         ) : (
-          <div className="mt-5 flex h-12 w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="mt-auto flex h-12 w-full items-center justify-between overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <button
               type="button"
               disabled={loading}

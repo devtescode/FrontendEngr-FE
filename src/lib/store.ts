@@ -123,10 +123,10 @@ interface AppState {
 }
 
 const ADMIN: User = {
-  id: "admin-seed",
+  id: "admin",
   fullName: "Lab Administrator",
-  email: "admin@elizade.edu.ng",
-  matric: "ADMIN",
+  email: "",
+  matric: "",
   password: "admin123",
   role: "admin",
 };

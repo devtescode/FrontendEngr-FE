@@ -1,5 +1,6 @@
 import { useNavigate, useRouterState, Link, type LinkProps } from "@tanstack/react-router";
 import { resetOrdersCache } from "@/lib/ordersStore";
+import { resetCartCache } from "@/components/ComponentCard";
 import { disconnectUserSocket } from "@/lib/socket";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, ShoppingCart, LogOut, Menu, X } from "lucide-react";
@@ -13,6 +14,7 @@ export function Navbar() {
   const cart = useStore((s) => s.cart);
   const notifications = useStore((s) => s.notifications);
   const logout = useStore((s) => s.logout);
+  const clearCart = useStore((s) => s.clearCart);
   const markRead = useStore((s) => s.markNotificationRead);
 
   const navigate = useNavigate();
@@ -58,6 +60,8 @@ export function Navbar() {
   // =====================================================
   const Logout = () => {
     resetOrdersCache();
+    resetCartCache();
+    clearCart();
     disconnectUserSocket();
     logout();
     sessionStorage.clear();

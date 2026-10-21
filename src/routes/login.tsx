@@ -14,6 +14,7 @@ import {
 import {  useStore } from "@/lib/store";
 import { connectUserSocket, socket } from "@/lib/socket";
 import { resetOrdersCache } from "@/lib/ordersStore";
+import { resetCartCache } from "@/components/ComponentCard";
 import { Mail, Lock, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
@@ -189,6 +190,8 @@ function LoginPage() {
       // from the previous user.
       //
       resetOrdersCache();
+      resetCartCache();
+      useStore.getState().clearCart();
 
       // If a socket is already connected as the previous
       // user, tear it down before joining the new room.

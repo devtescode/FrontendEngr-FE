@@ -4,6 +4,7 @@ const API_URL = API_BASE_URL;
 
 export type BackendComponent = {
   _id?: string;
+  id?: string;
   sku: string;
   name: string;
   category:
@@ -19,9 +20,50 @@ export type BackendComponent = {
   description: string;
   details: string;
   image?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
-type ComponentData = Omit<BackendComponent, "_id" | "image">;
+export type ComponentSortField =
+  | "createdAt"
+  | "updatedAt"
+  | "price"
+  | "stock"
+  | "soldCount"
+  | "name"
+  | "sku";
+
+export type SortOrder = "asc" | "desc";
+
+export type PaginationMeta = {
+  currentPage: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+export type PaginatedComponentsResponse = {
+  success: boolean;
+  data: BackendComponent[];
+  pagination: PaginationMeta;
+};
+
+export type ComponentPageParams = {
+  page?: number;
+  limit?: number;
+  sort?: ComponentSortField;
+  order?: SortOrder;
+  search?: string;
+  category?: string;
+  signal?: AbortSignal;
+};
+
+type ComponentData = Omit<
+  BackendComponent,
+  "_id" | "id" | "image" | "createdAt" | "updatedAt"
+>;
 
 // =====================================================
 // AUTH
@@ -118,12 +160,25 @@ function createFormData(
 // Wraps an AbortController with a timeout so a hung
 // request doesn't block the UI forever.
 //
-function withTimeout(ms: number) {
+function withTimeout(ms: number, externalSignal?: AbortSignal) {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", abort, { once: true });
+    }
+  }
+
   const timer = setTimeout(() => controller.abort(), ms);
   return {
     signal: controller.signal,
-    clear: () => clearTimeout(timer),
+    clear: () => {
+      clearTimeout(timer);
+      externalSignal?.removeEventListener("abort", abort);
+    },
   };
 }
 
@@ -168,6 +223,62 @@ export const componentApi = {
         );
       }
       console.error("getAll request failed:", err);
+      throw err;
+    } finally {
+      clear();
+    }
+  },
+
+  // ==============================================
+  // GET PAGINATED (public catalog)
+  // ==============================================
+  getPage: async (
+    params: ComponentPageParams = {}
+  ): Promise<PaginatedComponentsResponse> => {
+    const query = new URLSearchParams();
+
+    if (params.page !== undefined) query.set("page", String(params.page));
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    if (params.sort) query.set("sort", params.sort);
+    if (params.order) query.set("order", params.order);
+    if (params.search?.trim()) query.set("search", params.search.trim());
+    if (params.category && params.category !== "All") {
+      query.set("category", params.category);
+    }
+
+    const { signal, clear } = withTimeout(15000, params.signal);
+
+    try {
+      const res = await fetch(
+        `${API_URL}/engineering/components?${query.toString()}`,
+        {
+          headers: { Accept: "application/json" },
+          signal,
+        }
+      );
+
+      const data = await handleResponse<PaginatedComponentsResponse>(res);
+
+      if (
+        !data ||
+        data.success !== true ||
+        !Array.isArray(data.data) ||
+        !data.pagination
+      ) {
+        throw new Error("Unexpected response from the component service.");
+      }
+
+      return data;
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        // An external abort belongs to a newer request; let the caller ignore it.
+        if (params.signal?.aborted) throw err;
+
+        console.error("getPage request aborted due to timeout");
+        throw new Error("Request timed out. Check your connection and try again.");
+      }
+
+      console.error("getPage request failed:", err);
       throw err;
     } finally {
       clear();
