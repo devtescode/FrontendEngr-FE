@@ -9,7 +9,7 @@ import { toErrorMessage } from "@/lib/queryClient";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
-    meta: [{ title: "Forgot password — PulseLab" }],
+    meta: [{ title: "Forgot password — EU hardwarestore" }],
   }),
   component: ForgotPasswordPage,
 });
