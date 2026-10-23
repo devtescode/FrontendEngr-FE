@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiRequest } from "@/lib/apiClient";
 import {
@@ -217,6 +217,74 @@ export function useChangePassword() {
           newPassword: variables.newPassword,
         }),
       });
+    },
+  });
+}
+
+/* ============================================================
+   PASSWORD RECOVERY
+   ============================================================ */
+
+export type PasswordRecoveryResponse = {
+  success?: boolean;
+  message?: string;
+  code?: "TOKEN_INVALID" | "TOKEN_EXPIRED";
+};
+
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: async (variables: {
+      email: string;
+    }): Promise<PasswordRecoveryResponse> => {
+      return apiRequest("/engineering/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: variables.email.trim() }),
+        // The backend waits on the email provider before answering.
+        timeoutMs: 30_000,
+      });
+    },
+  });
+}
+
+/**
+ * Checks a reset link without consuming it. The token is only
+ * ever held in memory — never written to storage.
+ */
+export function useValidateResetToken(token: string) {
+  return useQuery({
+    queryKey: ["password-reset", "validate", token],
+    queryFn: ({ signal }) =>
+      apiRequest<PasswordRecoveryResponse>(
+        `/engineering/reset-password/${encodeURIComponent(token)}`,
+        { signal }
+      ),
+    enabled: Boolean(token),
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: async (variables: {
+      token: string;
+      password: string;
+      confirmPassword: string;
+    }): Promise<PasswordRecoveryResponse> => {
+      return apiRequest(
+        `/engineering/reset-password/${encodeURIComponent(variables.token)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            password: variables.password,
+            confirmPassword: variables.confirmPassword,
+          }),
+        }
+      );
     },
   });
 }

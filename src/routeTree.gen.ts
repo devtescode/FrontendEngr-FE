@@ -16,6 +16,8 @@ import { Route as ReceiptsRouteImport } from './routes/receipts'
 import { Route as ReceiptsIdRouteImport } from './routes/receipts.$id'
 import { Route as PaymentCallbackRouteImport } from './routes/payment.callback'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as ResetPasswordTokenRouteImport } from './routes/reset-password.$token'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ComponentsRouteImport } from './routes/components'
 import { Route as CheckoutRouteImport } from './routes/checkout'
@@ -62,6 +64,16 @@ const PaymentCallbackRoute = PaymentCallbackRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordTokenRoute = ResetPasswordTokenRouteImport.update({
+  id: '/reset-password/$token',
+  path: '/reset-password/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -134,6 +146,8 @@ export interface FileRoutesByFullPath {
   '/components': typeof ComponentsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/reset-password/$token': typeof ResetPasswordTokenRoute
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
@@ -155,6 +169,8 @@ export interface FileRoutesByTo {
   '/components': typeof ComponentsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/reset-password/$token': typeof ResetPasswordTokenRoute
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
@@ -177,6 +193,8 @@ export interface FileRoutesById {
   '/components': typeof ComponentsRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/reset-password/$token': typeof ResetPasswordTokenRoute
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
@@ -200,6 +218,8 @@ export interface FileRouteTypes {
     | '/components'
     | '/dashboard'
     | '/login'
+    | '/forgot-password'
+    | '/reset-password/$token'
     | '/orders'
     | '/payment/callback'
     | '/receipts'
@@ -221,6 +241,8 @@ export interface FileRouteTypes {
     | '/components'
     | '/dashboard'
     | '/login'
+    | '/forgot-password'
+    | '/reset-password/$token'
     | '/orders'
     | '/payment/callback'
     | '/receipts'
@@ -242,6 +264,8 @@ export interface FileRouteTypes {
     | '/components'
     | '/dashboard'
     | '/login'
+    | '/forgot-password'
+    | '/reset-password/$token'
     | '/orders'
     | '/payment/callback'
     | '/receipts'
@@ -264,6 +288,8 @@ export interface RootRouteChildren {
   ComponentsRoute: typeof ComponentsRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  ResetPasswordTokenRoute: typeof ResetPasswordTokenRoute
   OrdersRoute: typeof OrdersRoute
   PaymentCallbackRoute: typeof PaymentCallbackRoute
   ReceiptsRoute: typeof ReceiptsRouteWithChildren
@@ -322,6 +348,20 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password/$token': {
+      id: '/reset-password/$token'
+      path: '/reset-password/$token'
+      fullPath: '/reset-password/$token'
+      preLoaderRoute: typeof ResetPasswordTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -448,6 +488,8 @@ const rootRouteChildren: RootRouteChildren = {
   ComponentsRoute: ComponentsRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  ResetPasswordTokenRoute: ResetPasswordTokenRoute,
   OrdersRoute: OrdersRoute,
   PaymentCallbackRoute: PaymentCallbackRoute,
   ReceiptsRoute: ReceiptsRouteWithChildren,
