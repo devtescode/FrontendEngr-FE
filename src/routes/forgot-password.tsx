@@ -133,7 +133,7 @@ function ForgotPasswordPage() {
               </div>
 
               <h1 className="mt-5 text-2xl sm:text-3xl font-bold text-brand-navy">
-                Forgot your password?
+                Forgotten password?
               </h1>
 
               <p className="text-slate-500 mt-2 text-sm leading-relaxed">
