@@ -1,15 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLayoutEffect, useState, type ReactNode, type SyntheticEvent } from "react";
-import { CircleCheck, CircleX, Clock, Loader2, Lock, LockKeyhole, ShieldCheck } from "lucide-react";
+import {
+  CircleCheck,
+  CircleX,
+  Clock,
+  Loader2,
+  Lock,
+  LockKeyhole,
+  MailWarning,
+  ShieldCheck,
+} from "lucide-react";
 
 import { Field } from "./login";
 import {
+  getApiErrorBody,
+  getApiErrorCode,
   useResetPassword,
   useValidateResetToken,
-  type PasswordRecoveryResponse,
 } from "@/hooks/useAuthMutations";
-import { ApiError } from "@/lib/apiClient";
 import { toErrorMessage } from "@/lib/queryClient";
 
 export const Route = createFileRoute("/reset-password/$token")({
@@ -39,14 +48,14 @@ function useNoReferrer() {
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
 
-type LinkProblem = "TOKEN_INVALID" | "TOKEN_EXPIRED";
+type LinkProblem = "TOKEN_INVALID" | "TOKEN_EXPIRED" | "EMAIL_NOT_VERIFIED";
 
 function linkProblemFrom(error: unknown): LinkProblem | null {
-  if (!(error instanceof ApiError)) return null;
+  const code = getApiErrorCode(error);
 
-  const code = (error.body as PasswordRecoveryResponse | null)?.code;
-
-  return code === "TOKEN_INVALID" || code === "TOKEN_EXPIRED" ? code : null;
+  return code === "TOKEN_INVALID" || code === "TOKEN_EXPIRED" || code === "EMAIL_NOT_VERIFIED"
+    ? code
+    : null;
 }
 
 function ResetPasswordPage() {
@@ -86,7 +95,14 @@ function ResetPasswordPage() {
     (submitted || (confirmPassword.length > 0 && confirmPassword.length >= password.length)) &&
     confirmError;
 
-  const linkProblem = linkProblemFrom(resetPassword.error) ?? linkProblemFrom(validation.error);
+  const linkProblemError = linkProblemFrom(resetPassword.error)
+    ? resetPassword.error
+    : linkProblemFrom(validation.error)
+      ? validation.error
+      : null;
+  const linkProblem = linkProblemFrom(linkProblemError);
+  const unverifiedEmail =
+    linkProblem === "EMAIL_NOT_VERIFIED" ? getApiErrorBody(linkProblemError)?.email : undefined;
 
   const submit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -122,6 +138,27 @@ function ResetPasswordPage() {
           title="Password reset"
           description="Your password has been updated and you've been signed out of other sessions. You can now sign in with your new password."
           action={<PrimaryLink to="/login">Back to Login</PrimaryLink>}
+        />
+      ),
+    };
+  } else if (linkProblem === "EMAIL_NOT_VERIFIED") {
+    view = {
+      key: "email-not-verified",
+      content: (
+        <StatusView
+          tone="warning"
+          icon={<MailWarning size={26} aria-hidden="true" />}
+          title="Verify your email first"
+          description="You need to verify your email address before you can reset your password. Verify your email, then request a new reset link."
+          action={
+            <Link
+              to="/verify-email"
+              search={{ email: unverifiedEmail, reason: "forgot-password" }}
+              className={primaryButtonClass}
+            >
+              Verify my email
+            </Link>
+          }
         />
       ),
     };

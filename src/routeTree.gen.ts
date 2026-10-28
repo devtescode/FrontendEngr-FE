@@ -18,6 +18,8 @@ import { Route as PaymentCallbackRouteImport } from './routes/payment.callback'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ResetPasswordTokenRouteImport } from './routes/reset-password.$token'
+import { Route as VerifyEmailIndexRouteImport } from './routes/verify-email.index'
+import { Route as VerifyEmailTokenRouteImport } from './routes/verify-email.$token'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ComponentsRouteImport } from './routes/components'
 import { Route as CheckoutRouteImport } from './routes/checkout'
@@ -74,6 +76,16 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const ResetPasswordTokenRoute = ResetPasswordTokenRouteImport.update({
   id: '/reset-password/$token',
   path: '/reset-password/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailIndexRoute = VerifyEmailIndexRouteImport.update({
+  id: '/verify-email/',
+  path: '/verify-email/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailTokenRoute = VerifyEmailTokenRouteImport.update({
+  id: '/verify-email/$token',
+  path: '/verify-email/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -148,6 +160,8 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password/$token': typeof ResetPasswordTokenRoute
+  '/verify-email/': typeof VerifyEmailIndexRoute
+  '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
@@ -171,6 +185,8 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password/$token': typeof ResetPasswordTokenRoute
+  '/verify-email': typeof VerifyEmailIndexRoute
+  '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
@@ -195,6 +211,8 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password/$token': typeof ResetPasswordTokenRoute
+  '/verify-email/': typeof VerifyEmailIndexRoute
+  '/verify-email/$token': typeof VerifyEmailTokenRoute
   '/orders': typeof OrdersRoute
   '/payment/callback': typeof PaymentCallbackRoute
   '/receipts': typeof ReceiptsRoute
@@ -220,6 +238,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/forgot-password'
     | '/reset-password/$token'
+    | '/verify-email/'
+    | '/verify-email/$token'
     | '/orders'
     | '/payment/callback'
     | '/receipts'
@@ -243,6 +263,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/forgot-password'
     | '/reset-password/$token'
+    | '/verify-email'
+    | '/verify-email/$token'
     | '/orders'
     | '/payment/callback'
     | '/receipts'
@@ -266,6 +288,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/forgot-password'
     | '/reset-password/$token'
+    | '/verify-email/'
+    | '/verify-email/$token'
     | '/orders'
     | '/payment/callback'
     | '/receipts'
@@ -290,6 +314,8 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   ResetPasswordTokenRoute: typeof ResetPasswordTokenRoute
+  VerifyEmailIndexRoute: typeof VerifyEmailIndexRoute
+  VerifyEmailTokenRoute: typeof VerifyEmailTokenRoute
   OrdersRoute: typeof OrdersRoute
   PaymentCallbackRoute: typeof PaymentCallbackRoute
   ReceiptsRoute: typeof ReceiptsRouteWithChildren
@@ -362,6 +388,20 @@ declare module '@tanstack/react-router' {
       path: '/reset-password/$token'
       fullPath: '/reset-password/$token'
       preLoaderRoute: typeof ResetPasswordTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email/': {
+      id: '/verify-email/'
+      path: '/verify-email'
+      fullPath: '/verify-email/'
+      preLoaderRoute: typeof VerifyEmailIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email/$token': {
+      id: '/verify-email/$token'
+      path: '/verify-email/$token'
+      fullPath: '/verify-email/$token'
+      preLoaderRoute: typeof VerifyEmailTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -490,6 +530,8 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   ResetPasswordTokenRoute: ResetPasswordTokenRoute,
+  VerifyEmailIndexRoute: VerifyEmailIndexRoute,
+  VerifyEmailTokenRoute: VerifyEmailTokenRoute,
   OrdersRoute: OrdersRoute,
   PaymentCallbackRoute: PaymentCallbackRoute,
   ReceiptsRoute: ReceiptsRouteWithChildren,

@@ -4,9 +4,13 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Field } from "./login";
-import { useUserRegister } from "@/hooks/useAuthMutations";
+import {
+  getApiErrorBody,
+  getApiErrorCode,
+  useUserRegister,
+} from "@/hooks/useAuthMutations";
 import { toErrorMessage } from "@/lib/queryClient";
 
 // icons
@@ -38,13 +42,20 @@ function RegisterPage() {
   const [password, setPassword] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [accountExists, setAccountExists] = useState(false);
   const [loading, setLoading] = useState(false);
-
-
+  // Guards against double submits before the `loading` state re-renders.
+  const submittingRef = useRef(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (submittingRef.current) {
+      return;
+    }
+
     setError(null);
+    setAccountExists(false);
     setLoading(true);
 
     const formattedMatric = matric.trim().toUpperCase();
@@ -73,20 +84,54 @@ function RegisterPage() {
       return setError("Password must be at least 6 characters.");
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    submittingRef.current = true;
+
     try {
-      await registerMutation.mutateAsync({
+      const res = await registerMutation.mutateAsync({
         fullName,
-        email,
+        email: cleanEmail,
         matric: formattedMatric,
         phoneNumber,
         gender,
         password,
       });
 
-      navigate({ to: "/login" });
+      // The account is not usable until the email is verified, so send
+      // the student to the "check your inbox" page rather than login.
+      await navigate({
+        to: "/verify-email",
+        search: {
+          email: res?.email ?? cleanEmail,
+          reason:
+            res?.code === "VERIFICATION_EMAIL_FAILED" ? "send-failed" : "sent",
+        },
+      });
     } catch (error) {
-      setLoading(false);
+      const code = getApiErrorCode(error);
+      const body = getApiErrorBody(error);
+
+      if (code === "EMAIL_NOT_VERIFIED") {
+        await navigate({
+          to: "/verify-email",
+          search: { email: body?.email ?? cleanEmail, reason: "unverified" },
+        });
+        return;
+      }
+
+      if (code === "ACCOUNT_EXISTS") {
+        setAccountExists(true);
+        setError(
+          body?.message ??
+            "An account with this email already exists. Please log in."
+        );
+        return;
+      }
+
       setError(toErrorMessage(error, "Unable to connect to server"));
+    } finally {
+      submittingRef.current = false;
+      setLoading(false);
     }
   };
   return (
@@ -175,13 +220,35 @@ function RegisterPage() {
           />
 
           {error && (
-            <p className="text-sm text-red-600">{error}</p>
+            <div
+              role="alert"
+              className="rounded-sm border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+            >
+              {error}
+              {accountExists && (
+                <>
+                  {" "}
+                  <Link
+                    to="/login"
+                    className="rounded-sm font-semibold text-brand-accent transition hover:text-brand-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2"
+                  >
+                    Log in
+                  </Link>
+                </>
+              )}
+            </div>
           )}
+
+          <p className="text-xs text-slate-500">
+            We'll email you a verification link. You'll need to verify your
+            email address before you can log in.
+          </p>
 
           <button
             type="submit"
             disabled={loading}
-            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${loading
+            aria-busy={loading}
+            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 ${loading
                 ? "bg-slate-400 text-white cursor-not-allowed"
                 : "bg-brand-navy text-white hover:bg-slate-800"
               }`}

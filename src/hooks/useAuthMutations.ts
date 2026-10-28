@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiRequest } from "@/lib/apiClient";
+import { ApiError, apiRequest } from "@/lib/apiClient";
 import {
   clearAdminSession,
   clearUserSession,
@@ -11,6 +11,32 @@ import {
   type SessionUser,
 } from "@/lib/auth";
 import { queryKeys } from "@/lib/queryKeys";
+
+/* ============================================================
+   SHARED RESPONSE HELPERS
+   ============================================================ */
+
+export type AuthResponse = {
+  success?: boolean;
+  code?: string;
+  message?: string;
+  email?: string;
+  retryAfterSeconds?: number;
+};
+
+export function getApiErrorBody(error: unknown): AuthResponse | undefined {
+  if (!(error instanceof ApiError)) return undefined;
+
+  const body = error.body;
+
+  return body && typeof body === "object" ? (body as AuthResponse) : undefined;
+}
+
+export function getApiErrorCode(error: unknown): string | undefined {
+  const code = getApiErrorBody(error)?.code;
+
+  return typeof code === "string" ? code : undefined;
+}
 
 /* ============================================================
    USER LOGIN
@@ -100,7 +126,7 @@ export function useUserRegister() {
   return useMutation({
     mutationFn: async (
       variables: RegisterVariables
-    ): Promise<{ success?: boolean; message?: string }> => {
+    ): Promise<AuthResponse> => {
       return apiRequest("/engineering/usersignup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,6 +138,48 @@ export function useUserRegister() {
           gender: variables.gender,
           password: variables.password,
         }),
+        // The backend waits on the email provider before answering.
+        timeoutMs: 30_000,
+      });
+    },
+  });
+}
+
+/* ============================================================
+   EMAIL VERIFICATION
+   ============================================================ */
+
+/**
+ * Verifies an email link. A query rather than a mutation: a mutation
+ * started from an effect loses its result when StrictMode remounts the
+ * page, leaving it stuck on "verifying". Repeat calls are safe — the
+ * backend answers ALREADY_VERIFIED.
+ */
+export function useVerifyEmail(token: string) {
+  return useQuery<AuthResponse, Error>({
+    queryKey: ["email-verification", "verify", token],
+    queryFn: ({ signal }) =>
+      apiRequest<AuthResponse>(`/engineering/verify-email/${encodeURIComponent(token)}`, {
+        method: "POST",
+        signal,
+      }),
+    enabled: Boolean(token),
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
+export function useResendVerification() {
+  return useMutation<AuthResponse, Error, { email: string }>({
+    mutationFn: async (variables) => {
+      return apiRequest<AuthResponse>("/engineering/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: variables.email.trim() }),
+        timeoutMs: 30_000,
       });
     },
   });

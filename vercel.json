@@ -30,6 +30,15 @@
       ]
     },
     {
+      "source": "/verify-email/(.*)",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    },
+    {
       "source": "/assets/(.*)",
       "headers": [
         {

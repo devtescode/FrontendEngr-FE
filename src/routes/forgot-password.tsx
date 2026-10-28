@@ -1,16 +1,16 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState, type SyntheticEvent } from "react";
-import { ArrowLeft, KeyRound, Loader2, Mail, MailCheck } from "lucide-react";
+import { ArrowLeft, KeyRound, Loader2, Mail, MailCheck, MailWarning } from "lucide-react";
 
 import { Field } from "./login";
-import { useForgotPassword } from "@/hooks/useAuthMutations";
+import { getApiErrorBody, getApiErrorCode, useForgotPassword } from "@/hooks/useAuthMutations";
 import { toErrorMessage } from "@/lib/queryClient";
 import { ApiError } from "@/lib/apiClient";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
-    meta: [{ title: "Forgot password — EU hardwarestore" }],
+    meta: [{ title: "Forgot password" }],
   }),
   component: ForgotPasswordPage,
 });
@@ -19,11 +19,14 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function ForgotPasswordPage() {
   const forgotPassword = useForgotPassword();
+  const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  // Set when the account exists but its email address hasn't been verified yet.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
 
   const loading = forgotPassword.isPending;
 
@@ -33,6 +36,7 @@ function ForgotPasswordPage() {
     if (loading) return;
 
     setError(null);
+    setUnverifiedEmail(null);
 
     const cleanEmail = email.trim();
 
@@ -54,6 +58,14 @@ function ForgotPasswordPage() {
     } catch (mutationError) {
       if (mutationError instanceof ApiError && mutationError.status === 404) {
         setFieldError("No account found with that email address.");
+        return;
+      }
+      if (
+        mutationError instanceof ApiError &&
+        mutationError.status === 403 &&
+        getApiErrorCode(mutationError) === "EMAIL_NOT_VERIFIED"
+      ) {
+        setUnverifiedEmail(getApiErrorBody(mutationError)?.email ?? cleanEmail);
         return;
       }
       setError(
@@ -154,6 +166,7 @@ function ForgotPasswordPage() {
                     onChange={(value) => {
                       setEmail(value);
                       if (fieldError) setFieldError(null);
+                      if (unverifiedEmail) setUnverifiedEmail(null);
                     }}
                     type="email"
                     placeholder="you@example.com"
@@ -171,6 +184,40 @@ function ForgotPasswordPage() {
                     </p>
                   )}
                 </div>
+
+                {unverifiedEmail && (
+                  <div
+                    role="alert"
+                    className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800"
+                  >
+                    <div className="flex gap-2.5">
+                      <MailWarning
+                        size={18}
+                        className="mt-0.5 shrink-0 text-amber-600"
+                        aria-hidden="true"
+                      />
+                      <div>
+                        <p className="font-semibold">Verify your email first</p>
+                        <p className="mt-1 leading-relaxed">
+                          You need to verify your email address before you can reset your password.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate({
+                          to: "/verify-email",
+                          search: { email: unverifiedEmail, reason: "forgot-password" },
+                        })
+                      }
+                      className="mt-3 w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 bg-brand-navy text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2"
+                    >
+                      Verify my email
+                    </button>
+                  </div>
+                )}
 
                 {error && (
                   <div

@@ -13,25 +13,57 @@ import {
 } from "react";
 import {  useStore } from "@/lib/store";
 import { connectUserSocket, socket } from "@/lib/socket";
-import { useUserLogin } from "@/hooks/useAuthMutations";
+import {
+  getApiErrorBody,
+  getApiErrorCode,
+  useUserLogin,
+} from "@/hooks/useAuthMutations";
 import { toErrorMessage } from "@/lib/queryClient";
-import { Mail, Lock, Loader2, Eye, EyeOff } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  Loader2,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  MailWarning,
+} from "lucide-react";
+
+type LoginSearch = {
+  /** Set by the verify-email page after a successful verification. */
+  verified?: boolean;
+};
+
+function isTruthyFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
 
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [{ title: "Sign in — PulseLab" }],
   }),
+  validateSearch: (search: Record<string, unknown>): LoginSearch => {
+    const { verified, ...rest } = search;
+
+    return {
+      ...rest,
+      ...(isTruthyFlag(verified) ? { verified: true } : {}),
+    };
+  },
   component: LoginPage,
 });
 
 function LoginPage() {
   // const user = useCurrentUser();
   const navigate = useNavigate();
+  const { verified } = Route.useSearch();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Email to hand to the verify-email page when the account is unverified.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
 
   const loginMutation = useUserLogin();
 
@@ -89,6 +121,7 @@ function LoginPage() {
     }
 
     setError(null);
+    setUnverifiedEmail(null);
 
     const cleanEmail = email.trim();
 
@@ -162,6 +195,14 @@ function LoginPage() {
         });
       }
     } catch (mutationError) {
+      // Unverified accounts get a 403 without a token, so no session
+      // was written — just explain and offer the verification flow.
+      if (getApiErrorCode(mutationError) === "EMAIL_NOT_VERIFIED") {
+        const body = getApiErrorBody(mutationError);
+        setUnverifiedEmail(body?.email ?? cleanEmail);
+        return;
+      }
+
       console.error("Login error:", mutationError);
 
       setError(toErrorMessage(mutationError, "Unable to sign in. Please try again."));
@@ -184,6 +225,17 @@ function LoginPage() {
         <p className="text-slate-500 mt-1 text-sm">
           Sign in with your details
         </p>
+
+        {verified && !unverifiedEmail && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-6 flex items-start gap-2 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700"
+          >
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <span>Your email has been verified. You can now log in.</span>
+          </div>
+        )}
 
         <form
           onSubmit={submit}
@@ -221,6 +273,34 @@ function LoginPage() {
 
           {error && (
             <p className="text-sm text-red-600">{error}</p>
+          )}
+
+          {unverifiedEmail && (
+            <div
+              role="alert"
+              className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800"
+            >
+              <div className="flex items-start gap-2">
+                <MailWarning size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                <p>
+                  Please verify your email address before logging in. Check
+                  your inbox for the verification link, or request a new one.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  navigate({
+                    to: "/verify-email",
+                    search: { email: unverifiedEmail, reason: "login" },
+                  })
+                }
+                className="mt-3 w-full h-12 rounded-lg border border-brand-navy bg-white font-semibold text-brand-navy transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2"
+              >
+                Verify my email
+              </button>
+            </div>
           )}
 
           <button
