@@ -6,6 +6,7 @@ import { ArrowLeft, KeyRound, Loader2, Mail, MailCheck } from "lucide-react";
 import { Field } from "./login";
 import { useForgotPassword } from "@/hooks/useAuthMutations";
 import { toErrorMessage } from "@/lib/queryClient";
+import { ApiError } from "@/lib/apiClient";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
@@ -51,6 +52,10 @@ function ForgotPasswordPage() {
       await forgotPassword.mutateAsync({ email: cleanEmail });
       setSentTo(cleanEmail);
     } catch (mutationError) {
+      if (mutationError instanceof ApiError && mutationError.status === 404) {
+        setFieldError("No account found with that email address.");
+        return;
+      }
       setError(
         toErrorMessage(
           mutationError,
@@ -93,9 +98,9 @@ function ForgotPasswordPage() {
               </h1>
 
               <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                If an account exists for{" "}
-                <span className="font-semibold text-brand-navy break-all">{sentTo}</span>, you'll
-                receive an email with a link to reset your password. The link expires in 30 minutes.
+                We've sent a password reset link to{" "}
+                <span className="font-semibold text-brand-navy break-all">{sentTo}</span>. The link
+                expires in 30 minutes.
               </p>
 
               <p className="mt-3 text-sm leading-relaxed text-slate-500">
