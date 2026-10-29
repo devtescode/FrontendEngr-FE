@@ -19,7 +19,7 @@ import {
   CheckCircle2,
   Info,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   componentApi,
@@ -31,6 +31,10 @@ import { socket } from "@/lib/socket";
 import { getAdminToken } from "@/lib/auth";
 import { queryKeys } from "@/lib/queryKeys";
 import { useComponentMutations } from "@/hooks/useAdminQueries";
+import { useClientPagination } from "@/hooks/useClientPagination";
+import { Pagination } from "@/components/Pagination";
+
+const COMPONENTS_PAGE_SIZE = 5;
 
 export const Route = createFileRoute("/admin/components")({
   head: () => ({
@@ -294,6 +298,37 @@ function AdminComponents() {
   }, [components, search, stockFilter]);
 
   // =====================================================
+  // PAGINATION (client-side; the full list stays loaded for counts/SKUs)
+  // =====================================================
+  const {
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageItems,
+    rangeStart,
+    rangeEnd,
+  } = useClientPagination(filteredComponents, COMPONENTS_PAGE_SIZE, [
+    search,
+    stockFilter,
+  ]);
+
+  const inventoryCardRef = useRef<HTMLDivElement>(null);
+
+  const handlePageChange = (next: number) => {
+    setPage(next);
+    const card = inventoryCardRef.current;
+    if (!card) return;
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    card.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "start",
+    });
+  };
+
+  // =====================================================
   // SAVE
   // =====================================================
   const handleSave = async ({ data, imageFile }: SaveData) => {
@@ -542,7 +577,10 @@ function AdminComponents() {
       </div>
 
       {/* TABLE */}
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl">
+      <div
+        ref={inventoryCardRef}
+        className="scroll-mt-4 overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl"
+      >
         <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.02] px-5 py-4">
           <div>
             <h2 className="font-semibold text-white">
@@ -560,7 +598,9 @@ function AdminComponents() {
           </div>
 
           <div className="hidden text-xs text-slate-500 sm:block">
-            {filteredComponents.length} of {components.length} shown
+            {totalItems === 0
+              ? `0 of ${components.length} shown`
+              : `${rangeStart}–${rangeEnd} of ${totalItems} shown`}
           </div>
         </div>
 
@@ -599,132 +639,148 @@ function AdminComponents() {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-sm">
-              <thead className="bg-white/[0.03] text-xs uppercase tracking-widest text-slate-500">
-                <tr>
-                  <th className="px-5 py-4 text-left">Product</th>
-                  <th className="px-5 py-4 text-left">Category</th>
-                  <th className="px-5 py-4 text-left">SKU</th>
-                  <th className="px-5 py-4 text-right">Price</th>
-                  <th className="px-5 py-4 text-center">In stock</th>
-                  <th className="px-5 py-4 text-center">Purchased</th>
-                  <th className="px-5 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[920px] text-sm">
+                <thead className="bg-white/[0.03] text-xs uppercase tracking-widest text-slate-500">
+                  <tr>
+                    <th className="px-5 py-4 text-left">Product</th>
+                    <th className="px-5 py-4 text-left">Category</th>
+                    <th className="px-5 py-4 text-left">SKU</th>
+                    <th className="px-5 py-4 text-right">Price</th>
+                    <th className="px-5 py-4 text-center">In stock</th>
+                    <th className="px-5 py-4 text-center">Purchased</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
 
-              <tbody>
-                {filteredComponents.map((c, index) => {
-                  const id = getComponentId(c);
-                  const stock = Number(c.stock) || 0;
-                  const sold = Number(c.soldCount) || 0;
-                  const isOut = stock <= 0;
-                  const isLow = stock > 0 && stock < 10;
+                <tbody>
+                  {pageItems.map((c, index) => {
+                    const id = getComponentId(c);
+                    const stock = Number(c.stock) || 0;
+                    const sold = Number(c.soldCount) || 0;
+                    const isOut = stock <= 0;
+                    const isLow = stock > 0 && stock < 10;
 
-                  return (
-                    <motion.tr
-                      key={id}
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.025 }}
-                      className="border-t border-white/5 transition hover:bg-white/[0.025]"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-4">
-                          {c.image ? (
-                            <div className="relative shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950">
-                              <img
-                                src={c.image}
-                                alt={c.name}
-                                className="size-14 object-cover transition duration-300 hover:scale-110"
-                              />
+                    return (
+                      <motion.tr
+                        key={id}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.025 }}
+                        className="border-t border-white/5 transition hover:bg-white/[0.025]"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-4">
+                            {c.image ? (
+                              <div className="relative shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-950">
+                                <img
+                                  src={c.image}
+                                  alt={c.name}
+                                  className="size-14 object-cover transition duration-300 hover:scale-110"
+                                />
+                              </div>
+                            ) : (
+                              <div className="grid size-14 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5">
+                                <ImagePlus className="size-5 text-slate-600" />
+                              </div>
+                            )}
+
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-white">
+                                {c.name}
+                              </p>
+                              <p className="mt-1 max-w-[240px] truncate text-xs text-slate-500">
+                                {c.description || "No description available"}
+                              </p>
                             </div>
-                          ) : (
-                            <div className="grid size-14 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/5">
-                              <ImagePlus className="size-5 text-slate-600" />
-                            </div>
-                          )}
-
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-white">
-                              {c.name}
-                            </p>
-                            <p className="mt-1 max-w-[240px] truncate text-xs text-slate-500">
-                              {c.description || "No description available"}
-                            </p>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-5 py-4">
-                        <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300">
-                          {c.category}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <span className="rounded-md bg-black/20 px-2 py-1 font-mono text-xs text-slate-400">
-                          {c.sku}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4 text-right">
-                        <span className="font-semibold text-white">
-                          ₦{Number(c.price).toLocaleString()}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4 text-center">
-                        <div className="inline-flex flex-col items-center gap-1">
-                          <span
-                            className={`text-lg font-bold tabular-nums ${isOut
-                              ? "text-red-400"
-                              : isLow
-                                ? "text-amber-400"
-                                : "text-emerald-400"
-                              }`}
-                          >
-                            {stock}
+                        <td className="px-5 py-4">
+                          <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-300">
+                            {c.category}
                           </span>
+                        </td>
 
-                          <StockBadge stock={stock} />
-                        </div>
-                      </td>
+                        <td className="px-5 py-4">
+                          <span className="rounded-md bg-black/20 px-2 py-1 font-mono text-xs text-slate-400">
+                            {c.sku}
+                          </span>
+                        </td>
 
-                      <td className="px-5 py-4 text-center">
-                        <span className="text-base font-semibold tabular-nums text-white">
-                          {sold}
-                        </span>
-                        <p className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-500">
-                          {sold === 1 ? "unit" : "units"}
-                        </p>
-                      </td>
+                        <td className="px-5 py-4 text-right">
+                          <span className="font-semibold text-white">
+                            ₦{Number(c.price).toLocaleString()}
+                          </span>
+                        </td>
 
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex justify-end gap-1">
-                          <button
-                            onClick={() => setEditing(c)}
-                            className="grid size-9 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
-                            title="Edit component"
-                          >
-                            <Pencil className="size-4" />
-                          </button>
+                        <td className="px-5 py-4 text-center">
+                          <div className="inline-flex flex-col items-center gap-1">
+                            <span
+                              className={`text-lg font-bold tabular-nums ${isOut
+                                ? "text-red-400"
+                                : isLow
+                                  ? "text-amber-400"
+                                  : "text-emerald-400"
+                                }`}
+                            >
+                              {stock}
+                            </span>
 
-                          <button
-                            onClick={() => requestDelete(c)}
-                            className="grid size-9 place-items-center rounded-lg text-slate-400 transition hover:bg-red-500/10 hover:text-red-400"
-                            title="Delete component"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                            <StockBadge stock={stock} />
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 text-center">
+                          <span className="text-base font-semibold tabular-nums text-white">
+                            {sold}
+                          </span>
+                          <p className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-500">
+                            {sold === 1 ? "unit" : "units"}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4 text-right">
+                          <div className="flex justify-end gap-1">
+                            <button
+                              onClick={() => setEditing(c)}
+                              className="grid size-9 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
+                              title="Edit component"
+                            >
+                              <Pencil className="size-4" />
+                            </button>
+
+                            <button
+                              onClick={() => requestDelete(c)}
+                              className="grid size-9 place-items-center rounded-lg text-slate-400 transition hover:bg-red-500/10 hover:text-red-400"
+                              title="Delete component"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="px-5 pb-5">
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                pageSize={COMPONENTS_PAGE_SIZE}
+                onPageChange={handlePageChange}
+                itemLabel="components"
+                ariaLabel="Inventory pagination"
+                showSummary={false}
+                variant="dark"
+              />
+            </div>
+          </>
         )}
       </div>
 

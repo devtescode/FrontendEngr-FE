@@ -69,7 +69,15 @@ export const safeNullStr = (v: unknown): string | null => {
   return null;
 };
 
-const pickObj = (obj: any, keys: string[]) => {
+/** Returns the trimmed value only when it is an https URL. */
+export const httpsUrlOrNull = (v: unknown): string | null => {
+  if (typeof v !== "string") return null;
+
+  const t = v.trim();
+  return t.startsWith("https://") ? t : null;
+};
+
+const pickObj =(obj: any, keys: string[]) => {
   if (!isObj(obj)) return null;
 
   for (const k of keys) {
@@ -102,6 +110,8 @@ export type NormalizedOrder = {
   userName: string;
   matric: string;
   email: string | null;
+  /** student's profile photo (https only), null when absent */
+  userImage: string | null;
 
   items: NormalizedOrderItem[];
   /** convenience: sum of item quantities */
@@ -211,6 +221,7 @@ export function normalizeOrder(raw: any): NormalizedOrder {
     userName: safeStr(source.userName ?? source.userId?.fullName ?? "", ""),
     matric: safeStr(source.matric ?? source.userId?.matric ?? "", ""),
     email: safeNullStr(source.email ?? source.userId?.email ?? null),
+    userImage: httpsUrlOrNull(source.userImage),
 
     items,
     itemCount:

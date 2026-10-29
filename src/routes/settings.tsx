@@ -3,20 +3,28 @@ import { motion } from "framer-motion";
 import {
   AlertCircle,
   Check,
+  Camera,
   CheckCircle2,
   KeyRound,
+  Loader2,
   LockKeyhole,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { pushToast } from "@/components/ComponentCard";
 import { FormInput } from "@/components/FormInput";
 import { RequireAuth } from "@/components/RequireAuth";
-import { getCurrentUser } from "@/lib/auth";
 import { useChangePassword } from "@/hooks/useAuthMutations";
+import {
+  PROFILE_IMAGE_ACCEPT,
+  profileImageErrorMessage,
+  useProfile,
+  useUploadProfileImage,
+  validateProfileImage,
+} from "@/hooks/useProfile";
 import { toErrorMessage } from "@/lib/queryClient";
 
 export const Route = createFileRoute("/settings")({
@@ -33,10 +41,9 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsPage() {
-  // The signed-in student, read from the session. The Zustand store only
-  // ever held locally mocked users, so this was always empty for real
-  // students.
-  const user = getCurrentUser();
+  // The signed-in student: seeded from the session, then confirmed by
+  // GET /engineering/profile.
+  const { data: user } = useProfile();
 
   const changePasswordMutation = useChangePassword();
 
@@ -135,9 +142,7 @@ function SettingsPage() {
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="h-20 bg-gradient-to-br from-brand-navy via-slate-800 to-brand-accent" />
               <div className="-mt-8 px-5 pb-5">
-                <div className="flex size-16 items-center justify-center rounded-2xl border-4 border-white bg-brand-gold text-xl font-bold text-brand-navy shadow-sm">
-                  {user?.fullName?.charAt(0)?.toUpperCase() || "U"}
-                </div>
+                <ProfilePhoto fullName={user?.fullName} imageUrl={user?.profileImageUrl} />
                 <h2 className="mt-3 truncate text-base font-bold text-brand-navy">
                   {user?.fullName || "Your account"}
                 </h2>
@@ -301,6 +306,135 @@ function SettingsPage() {
           </main>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProfilePhoto({ fullName, imageUrl }: { fullName?: string; imageUrl?: string }) {
+  const uploadMutation = useUploadProfileImage();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+
+  const uploading = uploadMutation.isPending;
+  const initial = fullName?.charAt(0)?.toUpperCase() || "U";
+  const displayUrl = previewUrl ?? (imageUrl && imageUrl !== brokenUrl ? imageUrl : null);
+
+  // Release the local preview whenever it is replaced or the card unmounts.
+  useEffect(() => {
+    if (!previewUrl) return;
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  const onFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    // Reset so picking the same file again still fires a change event.
+    event.target.value = "";
+
+    if (!file || uploading) return;
+
+    setPhotoError(null);
+
+    const invalid = validateProfileImage(file);
+
+    if (invalid) {
+      setPhotoError(invalid);
+      pushToast("error", invalid);
+      return;
+    }
+
+    setPreviewUrl(URL.createObjectURL(file));
+
+    try {
+      const data = await uploadMutation.mutateAsync(file);
+      setBrokenUrl(null);
+      pushToast("success", data.message || "Your profile photo has been updated.");
+    } catch (uploadError) {
+      const message = profileImageErrorMessage(uploadError);
+      setPhotoError(message);
+      pushToast("error", message);
+    } finally {
+      setPreviewUrl(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="relative size-16 overflow-hidden rounded-2xl border-4 border-white bg-brand-gold shadow-sm">
+        {displayUrl ? (
+          <img
+            src={displayUrl}
+            alt={fullName ? `${fullName}'s profile picture` : "Your profile picture"}
+            className="size-full rounded-xl object-cover"
+            onError={() => {
+              if (displayUrl === imageUrl) setBrokenUrl(imageUrl);
+            }}
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="flex size-full items-center justify-center text-xl font-bold text-brand-navy"
+          >
+            {initial}
+          </div>
+        )}
+
+        {uploading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-brand-navy/50">
+            <Loader2 className="size-5 animate-spin text-white" aria-hidden="true" />
+          </div>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        id="profile-photo-input"
+        type="file"
+        accept={PROFILE_IMAGE_ACCEPT}
+        className="hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={onFileChange}
+        disabled={uploading}
+      />
+
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading}
+        aria-describedby={photoError ? "profile-photo-error" : "profile-photo-hint"}
+        className="mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-navy shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {uploading ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Camera className="size-4" aria-hidden="true" />
+        )}
+        {uploading ? "Uploading photo..." : imageUrl ? "Change photo" : "Upload photo"}
+      </button>
+
+      <span role="status" className="sr-only">
+        {uploading ? "Uploading your profile photo" : ""}
+      </span>
+
+      {photoError ? (
+        <p
+          id="profile-photo-error"
+          role="alert"
+          className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-red-700"
+        >
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          {photoError}
+        </p>
+      ) : (
+        <p id="profile-photo-hint" className="mt-2 text-xs leading-5 text-slate-400">
+          JPEG, PNG or WebP, up to 5 MB.
+        </p>
+      )}
     </div>
   );
 }

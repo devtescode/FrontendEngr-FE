@@ -31,6 +31,8 @@ export const Route = createFileRoute("/register")({
   }),
   component: RegisterPage,
 });
+type ConflictField = "matric" | "phoneNumber";
+
 function RegisterPage() {
   const navigate = useNavigate();
   const registerMutation = useUserRegister();
@@ -43,7 +45,20 @@ function RegisterPage() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [accountExists, setAccountExists] = useState(false);
+  // Server-reported conflicts tied to a specific field (409 ACCOUNT_EXISTS
+  // with `field`), shown inline under that input.
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<ConflictField, string>>
+  >({});
   const [loading, setLoading] = useState(false);
+  const clearFieldError = (field: ConflictField) =>
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+
   // Guards against double submits before the `loading` state re-renders.
   const submittingRef = useRef(false);
 
@@ -56,6 +71,7 @@ function RegisterPage() {
 
     setError(null);
     setAccountExists(false);
+    setFieldErrors({});
     setLoading(true);
 
     const formattedMatric = matric.trim().toUpperCase();
@@ -69,7 +85,9 @@ function RegisterPage() {
       );
     }
 
-    if (!phoneNumber.trim()) {
+    const cleanPhone = phoneNumber.trim();
+
+    if (!cleanPhone) {
       setLoading(false);
       return setError("Phone number is required.");
     }
@@ -92,7 +110,7 @@ function RegisterPage() {
         fullName,
         email: cleanEmail,
         matric: formattedMatric,
-        phoneNumber,
+        phoneNumber: cleanPhone,
         gender,
         password,
       });
@@ -120,6 +138,19 @@ function RegisterPage() {
       }
 
       if (code === "ACCOUNT_EXISTS") {
+        const field = (body as { field?: unknown } | undefined)?.field;
+
+        if (field === "matric" || field === "phoneNumber") {
+          setFieldErrors({
+            [field]:
+              body?.message ??
+              (field === "matric"
+                ? "This matric number is already registered."
+                : "This phone number is already registered."),
+          });
+          return;
+        }
+
         setAccountExists(true);
         setError(
           body?.message ??
@@ -172,18 +203,44 @@ function RegisterPage() {
           <Field
             label="Matric Number"
             value={matric}
-            onChange={setMatric}
+            onChange={(value) => {
+              setMatric(value);
+              clearFieldError("matric");
+            }}
             placeholder="EU250102-4768"
             icon={<Hash size={18} />}
+            invalid={Boolean(fieldErrors.matric)}
+            describedBy={fieldErrors.matric ? "matric-error" : undefined}
           />
+          {fieldErrors.matric && (
+            <p id="matric-error" role="alert" className="text-xs text-red-600">
+              {fieldErrors.matric}
+            </p>
+          )}
 
           <Field
             label="Phone Number"
             value={phoneNumber}
-            onChange={setPhoneNumber}
+            onChange={(value) => {
+              setPhoneNumber(value);
+              clearFieldError("phoneNumber");
+            }}
             placeholder="08064864821"
             icon={<Phone size={18} />}
+            invalid={Boolean(fieldErrors.phoneNumber)}
+            describedBy={
+              fieldErrors.phoneNumber ? "phoneNumber-error" : undefined
+            }
           />
+          {fieldErrors.phoneNumber && (
+            <p
+              id="phoneNumber-error"
+              role="alert"
+              className="text-xs text-red-600"
+            >
+              {fieldErrors.phoneNumber}
+            </p>
+          )}
 
           {/* Gender */}
           <label className="block">

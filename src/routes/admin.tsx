@@ -38,7 +38,7 @@ import type { NormalizedOrder } from "@/lib/normalize";
 import { useEffect, useMemo, useState } from "react";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Admin â€” EU Hardwarestore" }] }),
+  head: () => ({ meta: [{ title: "Admin — EU Hardwarestore" }] }),
   component: AdminLayout,
 });
 
@@ -77,9 +77,9 @@ const timeOf = (iso?: string | null) => {
 };
 
 function timeAgo(iso?: string | null): string {
-  if (!iso) return "â€”";
+  if (!iso) return "—";
   const then = timeOf(iso);
-  if (!then) return "â€”";
+  if (!then) return "—";
 
   const diff = Date.now() - then;
   if (diff < 0) return "just now";
@@ -107,9 +107,9 @@ function timeAgo(iso?: string | null): string {
 }
 
 function formatDateTime(iso?: string | null): string {
-  if (!iso) return "â€”";
+  if (!iso) return "—";
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return "â€”";
+  if (isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-NG", {
     day: "2-digit",
     month: "short",
@@ -378,7 +378,7 @@ function AdminLayoutShell({
                 Engr-BE API
               </p>
               <p className="truncate text-xs font-medium text-slate-300">
-                {apiOnline ? "Connected" : "Reconnectingâ€¦"}
+                {apiOnline ? "Connected" : "Reconnecting…"}
               </p>
             </div>
           </div> */}
@@ -402,7 +402,7 @@ function AdminLayoutShell({
         </div>
       </aside>
 
-      <main className="flex-1 overflow-x-hidden overflow-y-auto transition-all">
+      <main className="relative flex-1 overflow-x-hidden overflow-y-auto transition-all [scrollbar-gutter:stable]">
         <div className="sticky top-0 z-30 flex items-center gap-2.5 border-b border-white/5 bg-slate-950/95 px-3 py-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-950/80 lg:hidden">
           <button
             onClick={() => setOpen(true)}
@@ -552,7 +552,7 @@ function AdminOverview({
           <div className="min-w-0">
             {/* <p className="flex items-center gap-2 text-sm font-medium text-brand-accent">
               <Server className="size-4" />
-              Engr-BE Â· Admin Console
+              Engr-BE · Admin Console
             </p> */}
 
             <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
@@ -589,7 +589,7 @@ function AdminOverview({
             icon={<ShoppingCart className="size-5" />}
             label="Total Orders"
             value={stats.total}
-            hint={`${stats.paidCount} paid Â· ${stats.unpaid} unpaid`}
+            hint={`${stats.paidCount} paid · ${stats.unpaid} unpaid`}
           />
 
           <StatCard
@@ -604,7 +604,7 @@ function AdminOverview({
             icon={<HandCoins className="size-5" />}
             label="Awaiting Pickup"
             value={stats.awaitingPickup}
-            hint="Paid Â· not collected"
+            hint="Paid · not collected"
             tone="amber"
           />
 
@@ -673,7 +673,7 @@ function AdminOverview({
                 <p className="mt-1 text-xs text-slate-500">
                   {filter === "all"
                     ? `The ${Math.min(recent.length, 5)} most recent orders`
-                    : `${matchingCount} order${matchingCount === 1 ? "" : "s"} Â· showing the latest ${recent.length}`}
+                    : `${matchingCount} order${matchingCount === 1 ? "" : "s"} · showing the latest ${recent.length}`}
                 </p>
               </div>
 
@@ -850,7 +850,7 @@ function AdminOverview({
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-white">{c.name}</p>
                           <p className="mt-0.5 truncate font-mono text-[10px] text-slate-500 sm:text-[11px]">
-                            {c.sku || "â€”"}
+                            {c.sku || "—"}
                           </p>
                         </div>
 
@@ -885,7 +885,7 @@ function AdminOverview({
 }
 
 /* ============================================================
-   LATEST ORDERS â€” ROW
+   LATEST ORDERS — ROW
    ============================================================ */
 
 function OrderRow({
@@ -965,14 +965,14 @@ function OrderRow({
         </div>
 
         <p className="mt-1 truncate text-[11px] text-slate-500 sm:text-xs">
-          {firstLabel} Â· {unitCount} unit{unitCount === 1 ? "" : "s"}
+          {firstLabel} · {unitCount} unit{unitCount === 1 ? "" : "s"}
         </p>
 
-        {/* AMOUNT â€” mobile only (on desktop it sits on the right) */}
+        {/* AMOUNT — mobile only (on desktop it sits on the right) */}
         <p className="mt-1.5 text-sm font-bold text-white sm:hidden">{formatNaira(total)}</p>
       </div>
 
-      {/* AMOUNT + TIME â€” desktop */}
+      {/* AMOUNT + TIME — desktop */}
       <div className="hidden shrink-0 text-right sm:block">
         <p className="text-sm font-bold text-white">{formatNaira(total)}</p>
         <p className="mt-0.5 text-[11px] text-slate-500" title={formatDateTime(order.createdAt)}>

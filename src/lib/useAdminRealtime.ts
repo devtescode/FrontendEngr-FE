@@ -13,6 +13,8 @@ import { queryKeys } from "@/lib/queryKeys";
  *   • `components:refreshed` — stock levels changed after a payment
  *   • `orders:updated`      — a pickup status changed (room scoped)
  *   • `cart:updated`        — the cart changed (room scoped)
+ *   • `carts:changed`       — any cart changed (broadcast, admin refresh)
+ *   • `users:updated`       — a student changed their profile photo
  *
  * Instead of writing the payload into a second copy of the data, we
  * invalidate the affected queries and let them re-read from the server.
@@ -48,6 +50,15 @@ export function useAdminRealtime() {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.cart.all,
       });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.admin.carts(),
+      });
+    };
+
+    const invalidateUsers = () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.admin.users(),
+      });
     };
 
     socket.on("component:created", invalidateComponents);
@@ -56,6 +67,8 @@ export function useAdminRealtime() {
     socket.on("components:refreshed", invalidateComponents);
     socket.on("orders:updated", invalidateOrders);
     socket.on("cart:updated", invalidateCart);
+    socket.on("carts:changed", invalidateCart);
+    socket.on("users:updated", invalidateUsers);
 
     return () => {
       socket.off("component:created", invalidateComponents);
@@ -64,6 +77,8 @@ export function useAdminRealtime() {
       socket.off("components:refreshed", invalidateComponents);
       socket.off("orders:updated", invalidateOrders);
       socket.off("cart:updated", invalidateCart);
+      socket.off("carts:changed", invalidateCart);
+      socket.off("users:updated", invalidateUsers);
     };
   }, [queryClient]);
 }

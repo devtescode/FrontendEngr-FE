@@ -29,6 +29,7 @@ export type SessionUser = {
   phoneNumber?: string;
   gender?: string;
   role: "student" | "admin";
+  profileImageUrl?: string;
 };
 
 export type SessionAdmin = {
@@ -95,6 +96,10 @@ export function getCurrentUser(): SessionUser | null {
       phoneNumber: parsed.phoneNumber,
       gender: parsed.gender,
       role: parsed.role === "admin" ? "admin" : "student",
+      profileImageUrl:
+        typeof parsed.profileImageUrl === "string" && parsed.profileImageUrl
+          ? parsed.profileImageUrl
+          : undefined,
     };
   } catch {
     return null;
@@ -113,6 +118,19 @@ export function setUserSession(user: SessionUser, token: string) {
   writeSession(USER_KEY, JSON.stringify(user));
   writeSession(USER_TOKEN_KEY, String(token));
   writeSession(USER_ID_KEY, String(user.id));
+}
+
+/**
+ * Merges a patch into the stored student profile. Only USER_KEY is
+ * rewritten — the token and user id are left untouched. A no-op when
+ * nobody is signed in.
+ */
+export function updateSessionUser(patch: Partial<Omit<SessionUser, "id">>) {
+  const current = getCurrentUser();
+
+  if (!current) return;
+
+  writeSession(USER_KEY, JSON.stringify({ ...current, ...patch }));
 }
 
 export function clearUserSession() {

@@ -12,10 +12,20 @@ import {
   Hash,
   RefreshCw,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
+import { StudentAvatar } from "@/components/StudentAvatar";
 import { useAdminUsers } from "@/hooks/useAdminQueries";
 import { toErrorMessage } from "@/lib/queryClient";
+import { useClientPagination } from "@/hooks/useClientPagination";
+import { Pagination } from "@/components/Pagination";
+
+const USERS_PAGE_SIZE = 8;
 
 export const Route = createFileRoute("/admin/users")({
   head: () => ({
@@ -35,6 +45,7 @@ type UserType = {
   gender?: string;
   role?: string;
   createdAt?: string;
+  profileImageUrl?: string;
 };
 
 function AdminUsers() {
@@ -84,6 +95,41 @@ function AdminUsers() {
       );
     });
   }, [users, search]);
+
+  /*
+   * =====================================================
+   * PAGINATION
+   * =====================================================
+   */
+
+  const {
+    page,
+    setPage,
+    totalPages,
+    totalItems: totalFiltered,
+    pageItems: pageUsers,
+    rangeStart,
+    rangeEnd,
+  } = useClientPagination(
+    filteredUsers,
+    USERS_PAGE_SIZE,
+    search
+  );
+
+  const listTopRef = useRef<HTMLDivElement>(null);
+
+  const handlePageChange = useCallback(
+    (next: number) => {
+      setPage(next);
+      // Instant jump (never smooth), which also satisfies
+      // prefers-reduced-motion without a separate check.
+      listTopRef.current?.scrollIntoView({
+        behavior: "auto",
+        block: "start",
+      });
+    },
+    [setPage]
+  );
 
   /*
    * =====================================================
@@ -266,16 +312,34 @@ function AdminUsers() {
             RESULT
         ================================================= */}
 
-        <div className="mb-4 flex items-center justify-between">
+        <div
+          ref={listTopRef}
+          className="mb-4 flex scroll-mt-6 items-center justify-between"
+        >
 
           <p className="text-sm text-slate-500">
-            Showing{" "}
-            <span className="font-semibold text-slate-300">
-              {filteredUsers.length}
-            </span>{" "}
-            student
-            {filteredUsers.length !== 1 &&
-              "s"}
+            {totalFiltered === 0 ? (
+              <>
+                Showing{" "}
+                <span className="font-semibold text-slate-300">
+                  0
+                </span>{" "}
+                students
+              </>
+            ) : (
+              <>
+                Showing{" "}
+                <span className="font-semibold text-slate-300">
+                  {rangeStart}–{rangeEnd}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-slate-300">
+                  {totalFiltered}
+                </span>{" "}
+                student
+                {totalFiltered !== 1 && "s"}
+              </>
+            )}
           </p>
 
         </div>
@@ -310,6 +374,7 @@ function AdminUsers() {
              USER LIST
           ================================================= */
 
+          <>
           <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/70 shadow-xl">
 
             {/* TABLE HEADER */}
@@ -329,19 +394,8 @@ function AdminUsers() {
 
             <div className="divide-y divide-white/5">
 
-              {filteredUsers.map(
+              {pageUsers.map(
                 (user) => {
-
-                  const initials =
-                    user.fullName
-                      ?.split(" ")
-                      .map(
-                        (name) =>
-                          name[0]
-                      )
-                      .slice(0, 2)
-                      .join("")
-                      .toUpperCase();
 
                   return (
                     <div
@@ -353,9 +407,11 @@ function AdminUsers() {
 
                       <div className="flex items-center gap-4">
 
-                        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-brand-accent/10 font-bold text-brand-accent">
-                          {initials || "U"}
-                        </div>
+                        <StudentAvatar
+                          name={user.fullName}
+                          imageUrl={user.profileImageUrl}
+                          className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-brand-accent/10 font-bold text-brand-accent"
+                        />
 
                         <div className="min-w-0">
 
@@ -427,6 +483,19 @@ function AdminUsers() {
             </div>
 
           </div>
+
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalFiltered}
+            pageSize={USERS_PAGE_SIZE}
+            onPageChange={handlePageChange}
+            itemLabel="students"
+            ariaLabel="Students pagination"
+            showSummary={false}
+            variant="dark"
+          />
+          </>
         )}
 
       </div>
@@ -503,14 +572,6 @@ function UserDetailsModal({
   user: UserType;
   onClose: () => void;
 }) {
-  const initials =
-    user.fullName
-      ?.split(" ")
-      .map((name) => name[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
-
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4"
@@ -542,9 +603,11 @@ function UserDetailsModal({
 
             <div className="flex items-center gap-4">
 
-              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand-accent/10 text-lg font-bold text-brand-accent">
-                {initials || "U"}
-              </div>
+              <StudentAvatar
+                name={user.fullName}
+                imageUrl={user.profileImageUrl}
+                className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand-accent/10 text-lg font-bold text-brand-accent"
+              />
 
               <div>
 
@@ -619,11 +682,7 @@ function UserDetailsModal({
             }
             label="Registered"
             value={
-              user.createdAt
-                ? new Date(
-                    user.createdAt
-                  ).toLocaleDateString()
-                : "Unknown"
+              <RegisteredAt iso={user.createdAt} />
             }
           />
 
@@ -649,6 +708,29 @@ function UserDetailsModal({
 
 /*
  * =====================================================
+ * REGISTERED DATE
+ * =====================================================
+ */
+
+/** e.g. "12 Jun 2026, 8:03 pm"; null when the value isn't a valid date. */
+function formatRegistered(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function RegisteredAt({ iso }: { iso?: string }) {
+  const label = formatRegistered(iso);
+  if (!label || !iso) return <>Unknown</>;
+  return <time dateTime={iso}>{label}</time>;
+}
+
+/*
+ * =====================================================
  * DETAIL
  * =====================================================
  */
@@ -660,7 +742,7 @@ function Detail({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value: React.ReactNode;
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">

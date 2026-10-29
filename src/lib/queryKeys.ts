@@ -21,6 +21,13 @@ export type ComponentListParams = {
   category?: string;
 };
 
+export type CollectedListParams = {
+  page: number;
+  limit: number;
+  q: string;
+  sort: string;
+};
+
 export const queryKeys = {
   /* ---------------- catalog (public) ---------------- */
 
@@ -54,6 +61,13 @@ export const queryKeys = {
       [...queryKeys.orders.all, userId, "detail", orderId] as const,
   },
 
+  /* ---------------- profile (student scoped) ---------------- */
+
+  profile: {
+    all: ["profile"] as const,
+    me: (userId: string) => [...queryKeys.profile.all, userId] as const,
+  },
+
   /* ---------------- admin ---------------- */
 
   admin: {
@@ -61,7 +75,15 @@ export const queryKeys = {
     overview: () => [...queryKeys.admin.all, "overview"] as const,
     users: () => [...queryKeys.admin.all, "users"] as const,
     carts: () => [...queryKeys.admin.all, "carts"] as const,
-    collected: () => [...queryKeys.admin.all, "collected"] as const,
+    /**
+     * Without params: the prefix shared by every collected page, so
+     * `invalidateQueries({ queryKey: queryKeys.admin.collected() })`
+     * refreshes all of them. With params: one specific page.
+     */
+    collected: (params?: CollectedListParams) =>
+      params
+        ? ([...queryKeys.admin.all, "collected", params] as const)
+        : ([...queryKeys.admin.all, "collected"] as const),
     pickupSearch: (query: string) =>
       [...queryKeys.admin.all, "pickup", "search", query] as const,
   },

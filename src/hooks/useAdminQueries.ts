@@ -1,11 +1,17 @@
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { apiRequest } from "@/lib/apiClient";
 import { getAdminToken } from "@/lib/auth";
 import { componentApi, type BackendComponent } from "@/lib/api";
 import {
   extractOrders,
+  httpsUrlOrNull,
   normalizeOrder,
   type NormalizedOrder,
 } from "@/lib/normalize";
@@ -28,7 +34,27 @@ export type AdminUser = {
   role: string;
   /** not returned by the API today, kept for the existing UI */
   level?: string | number;
+  /** Cloudinary https URL; undefined when the student has no photo */
+  profileImageUrl?: string;
+  /** ISO registration timestamp; undefined when no valid source exists */
+  createdAt?: string;
 };
+
+/**
+ * Registration date as ISO: the backend `createdAt` when valid, else the
+ * timestamp embedded in a 24-hex Mongo ObjectId (legacy docs).
+ */
+function toRegisteredAt(createdAt: unknown, id: string): string | undefined {
+  if (typeof createdAt === "string" || typeof createdAt === "number") {
+    const d = new Date(createdAt);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  if (/^[0-9a-f]{24}$/i.test(id)) {
+    const d = new Date(parseInt(id.slice(0, 8), 16) * 1000);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return undefined;
+}
 
 export type AdminCart = {
   _id: string;
@@ -37,6 +63,7 @@ export type AdminCart = {
     fullName: string;
     email: string;
     matric: string;
+    profileImageUrl: string | null;
   } | null;
   items: {
     componentId: {
@@ -132,6 +159,12 @@ export function useAdminUsers() {
         phoneNumber: u.phoneNumber ?? "",
         gender: u.gender ?? "",
         role: u.role ?? "student",
+        profileImageUrl:
+          typeof u.profileImageUrl === "string" &&
+          u.profileImageUrl.startsWith("https://")
+            ? u.profileImageUrl
+            : undefined,
+        createdAt: toRegisteredAt(u.createdAt, String(u._id ?? u.id ?? "")),
       }));
     },
     enabled: adminEnabled(),
@@ -167,6 +200,7 @@ export function useAdminCarts() {
               fullName: c.userId.fullName ?? "",
               email: c.userId.email ?? "",
               matric: c.userId.matric ?? "",
+              profileImageUrl: httpsUrlOrNull(c.userId.profileImageUrl),
             }
           : null,
         items: Array.isArray(c.items)
@@ -204,28 +238,116 @@ export function useAdminCarts() {
   };
 }
 
-export function useAdminCollected() {
+export type CollectedSort = "recent" | "oldest" | "highest";
+
+export type CollectedPagination = {
+  page: number;
+  limit: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+export type CollectedStats = {
+  /** number of collected orders in the filtered set */
+  orders: number;
+  /** distinct students in the filtered set */
+  students: number;
+  /** sum of item quantities */
+  items: number;
+  /** total value in naira */
+  value: number;
+};
+
+type CollectedPage = {
+  orders: NormalizedOrder[];
+  pagination: CollectedPagination;
+  stats: CollectedStats;
+};
+
+const EMPTY_COLLECTED_STATS: CollectedStats = {
+  orders: 0,
+  students: 0,
+  items: 0,
+  value: 0,
+};
+
+const nonNegInt = (v: unknown, fb: number): number => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fb;
+};
+
+export function useAdminCollected({
+  page,
+  limit = 4,
+  q = "",
+  sort = "recent",
+}: {
+  page: number;
+  limit?: number;
+  q?: string;
+  sort?: CollectedSort;
+}) {
+  const trimmed = q.trim();
+  const params = { page, limit, q: trimmed, sort };
+
   const query = useQuery({
-    queryKey: queryKeys.admin.collected(),
-    queryFn: async ({ signal }): Promise<NormalizedOrder[]> => {
+    queryKey: queryKeys.admin.collected(params),
+    queryFn: async ({ signal }): Promise<CollectedPage> => {
       const raw = await apiRequest<any>("/admin/pickup/collected", {
         auth: "admin",
         signal,
+        query: { page, limit, q: trimmed, sort },
       });
 
-      return extractOrders(raw?.orders ?? []);
+      const orders = extractOrders(raw?.orders ?? []);
+      const p = raw?.pagination;
+      const s = raw?.stats;
+
+      return {
+        orders,
+        pagination: {
+          page: Math.max(1, nonNegInt(p?.page, page)),
+          limit: Math.max(1, nonNegInt(p?.limit, limit)),
+          totalItems: nonNegInt(p?.totalItems, orders.length),
+          totalPages: nonNegInt(p?.totalPages, orders.length > 0 ? 1 : 0),
+        },
+        stats: {
+          orders: nonNegInt(s?.orders, 0),
+          students: nonNegInt(s?.students, 0),
+          items: nonNegInt(s?.items, 0),
+          value: Number.isFinite(Number(s?.value)) ? Number(s.value) : 0,
+        },
+      };
     },
     enabled: adminEnabled(),
     staleTime: 15_000,
+    // Keep the previous page on screen while the next one loads.
+    placeholderData: keepPreviousData,
   });
 
+  const orders = useMemo(() => query.data?.orders ?? [], [query.data]);
+
+  const pagination = useMemo<CollectedPagination>(
+    () =>
+      query.data?.pagination ?? {
+        page,
+        limit,
+        totalItems: 0,
+        totalPages: 0,
+      },
+    [query.data, page, limit]
+  );
+
   return {
-    orders: useMemo(() => query.data ?? [], [query.data]),
+    orders,
+    pagination,
+    stats: query.data?.stats ?? EMPTY_COLLECTED_STATS,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     isError: query.isError,
     error: query.error,
     refetch: query.refetch,
+    isPlaceholderData: query.isPlaceholderData,
   };
 }
 

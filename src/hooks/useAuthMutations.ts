@@ -55,6 +55,7 @@ export type UserLoginResponse = {
     phoneNumber?: string;
     gender?: string;
     role?: string;
+    profileImageUrl?: string;
   };
 };
 
@@ -97,6 +98,7 @@ export function useUserLogin() {
         phoneNumber: raw.phoneNumber,
         gender: raw.gender,
         role: raw.role === "admin" ? "admin" : "student",
+        profileImageUrl: raw.profileImageUrl || undefined,
       };
 
       // Any cached data belongs to the previous account.
