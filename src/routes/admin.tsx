@@ -411,7 +411,7 @@ function AdminLayoutShell({
           >
             <Menu className="size-4 sm:size-5" />
           </button>
-          <span className="truncate text-xs font-semibold tracking-tight text-white sm:text-sm">Admin Console</span>
+          <span className="truncate text-xs font-semibold tracking-tight text-white sm:text-sm">Admin</span>
         </div>
         <div className="w-full max-w-full overflow-x-hidden">
           {children}
