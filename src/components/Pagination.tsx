@@ -49,42 +49,26 @@ export function getPaginationItems(page: number, totalPages: number): PageItem[]
 }
 
 /**
- * Mobile window: at most four slots so the control never overflows a narrow
- * viewport. The active page is always present and the first/last page stay
- * one tap away.
+ * Mobile window: only the first, active and last pages, with a maximum of
+ * three numbered buttons. Previous/Next cover the pages in between and keep
+ * the control inside a 320px viewport.
  */
 export function getCompactPaginationItems(page: number, totalPages: number): PageItem[] {
-  if (totalPages <= 5) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
-  }
+  if (totalPages <= 1) return [];
 
-  const start = Math.max(1, page - 1);
-  const end = Math.min(totalPages, page + 1);
+  const current = Math.min(Math.max(1, page), totalPages);
 
-  const items: PageItem[] = [];
-
-  if (start > 1) {
-    items.push(1, "ellipsis");
-  }
-
-  for (let current = start; current <= end; current += 1) {
-    items.push(current);
-  }
-
-  if (end < totalPages) {
-    items.push("ellipsis", totalPages);
-  }
-
-  return items;
+  return Array.from(new Set([1, current, totalPages])).sort((a, b) => a - b);
 }
 
 const controlClass =
   "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-brand-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 sm:px-3";
 
 const pageButtonClass =
-  "grid size-9 shrink-0 place-items-center rounded-lg text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40";
+  "grid size-10 shrink-0 place-items-center rounded-lg text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 sm:size-9";
 
-const ellipsisClass = "grid size-9 shrink-0 place-items-center text-sm text-slate-400";
+const ellipsisClass =
+  "grid size-10 shrink-0 place-items-center text-sm text-slate-400 sm:size-9";
 
 type VariantClasses = {
   nav: string;
@@ -122,10 +106,11 @@ const darkClasses: VariantClasses = {
   control:
     "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/70 px-2.5 text-sm font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-white/[0.02] disabled:text-slate-600 sm:px-3",
   pageButton:
-    "grid size-9 shrink-0 place-items-center rounded-lg text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-40",
+    "grid size-10 shrink-0 place-items-center rounded-lg text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-40 sm:size-9",
   pageActive: "border border-brand-accent/40 bg-brand-accent text-white shadow-sm",
   pageInactive: "border border-transparent text-slate-300 hover:border-white/10 hover:bg-white/10 hover:text-white",
-  ellipsis: "grid size-9 shrink-0 place-items-center text-sm text-slate-600",
+  ellipsis:
+    "grid size-10 shrink-0 place-items-center text-sm text-slate-600 sm:size-9",
 };
 
 export function Pagination({

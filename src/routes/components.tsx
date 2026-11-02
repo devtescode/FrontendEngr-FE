@@ -149,6 +149,11 @@ function CatalogIndex() {
     [components],
   );
 
+  const safePage = Math.min(
+    Math.max(1, page),
+    Math.max(1, pagination.totalPages),
+  );
+
   const hasActiveFilters = q.trim().length > 0 || cat !== "All";
   const hasFilters = hasActiveFilters || sort !== "recent";
   const showInventoryEmpty =
@@ -224,21 +229,32 @@ function CatalogIndex() {
           </div>
         </motion.div>
 
-        <div className="mb-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-slate-100">
+        <div
+          aria-busy={loading || refreshing}
+          className="mb-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-slate-100"
+        >
           <SummaryStat
             icon={Boxes}
             label="Matching components"
-            value={pagination.totalItems.toLocaleString("en-NG")}
+            value={
+              loading
+                ? "…"
+                : pagination.totalItems.toLocaleString("en-NG")
+            }
           />
           <SummaryStat
             icon={PackageCheck}
             label="In stock on this page"
-            value={inStockOnPage.toLocaleString("en-NG")}
+            value={loading ? "…" : inStockOnPage.toLocaleString("en-NG")}
           />
           <SummaryStat
             icon={PackageSearch}
             label="Current page"
-            value={`${page} of ${Math.max(1, pagination.totalPages)}`}
+            value={
+              loading
+                ? "Updating…"
+                : `${safePage} of ${Math.max(1, pagination.totalPages)}`
+            }
           />
         </div>
 
@@ -321,7 +337,10 @@ function CatalogIndex() {
         </div>
 
         {error && components.length > 0 && (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+          <div
+            role="status"
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800"
+          >
             <p className="flex items-start gap-2 text-sm">
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               Live refresh failed. Showing the last successfully loaded page.
@@ -340,7 +359,10 @@ function CatalogIndex() {
         {loading ? (
           <ComponentGridSkeleton />
         ) : error && components.length === 0 ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-10 text-center">
+          <div
+            role="alert"
+            className="rounded-2xl border border-red-200 bg-red-50 p-10 text-center"
+          >
             <div className="mx-auto grid size-12 place-items-center rounded-xl bg-red-100 text-red-500">
               <AlertCircle className="size-5" />
             </div>
@@ -361,7 +383,10 @@ function CatalogIndex() {
             </button>
           </div>
         ) : showInventoryEmpty ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm sm:p-14">
+          <div
+            role="status"
+            className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm sm:p-14"
+          >
             <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-accent/10 text-brand-accent">
               <PackageSearch className="size-6" />
             </div>
@@ -382,7 +407,11 @@ function CatalogIndex() {
             </button>
           </div>
         ) : showNoResults ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm sm:p-14">
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm sm:p-14"
+          >
             <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-slate-100 text-slate-500">
               <Search className="size-6" />
             </div>
@@ -420,12 +449,12 @@ function CatalogIndex() {
             </div>
 
             <Pagination
-              page={page}
+              page={safePage}
               totalPages={pagination.totalPages}
               totalItems={pagination.totalItems}
               pageSize={pagination.pageSize}
               onPageChange={setPage}
-              disabled={loading}
+              disabled={loading || refreshing}
             />
           </>
         )}

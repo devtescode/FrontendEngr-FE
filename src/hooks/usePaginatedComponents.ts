@@ -180,6 +180,8 @@ export function usePaginatedComponents({
 
   // Realtime updates: the backend broadcasts whenever the catalog changes.
   useEffect(() => {
+    let hasConnected = socket.connected;
+
     if (!socket.connected) {
       socket.connect();
     }
@@ -197,14 +199,27 @@ export function usePaginatedComponents({
       }, REALTIME_REFRESH_DELAY_MS);
     };
 
+    const handleConnect = () => {
+      // The first connection is covered by the initial query. Only resync
+      // after a reconnect, otherwise events missed while offline stay missed.
+      if (hasConnected) scheduleRefresh();
+      hasConnected = true;
+    };
+
     const handleCreated = () => {
       if (resetPageOnCreate) {
-        // If we are not already on page 1, the page change itself refetches
-        // page 1. Scheduling another refresh here would duplicate it.
+        // Invalidate only page 1. Invalidating every list would also refetch
+        // the page that is about to be unmounted.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.components.list({ ...listParams, page: 1 }),
+          exact: true,
+        });
+
         if (pageRef.current !== 1) {
           setPageState({ signature, page: 1 });
-          return;
         }
+
+        return;
       }
 
       scheduleRefresh();
@@ -218,6 +233,7 @@ export function usePaginatedComponents({
       scheduleRefresh();
     };
 
+    socket.on("connect", handleConnect);
     socket.on("component:created", handleCreated);
     socket.on("component:updated", handleUpdated);
     socket.on("component:deleted", handleDeleted);
@@ -225,6 +241,7 @@ export function usePaginatedComponents({
     socket.on("components:refreshed", handleUpdated);
 
     return () => {
+      socket.off("connect", handleConnect);
       socket.off("component:created", handleCreated);
       socket.off("component:updated", handleUpdated);
       socket.off("component:deleted", handleDeleted);
@@ -232,7 +249,7 @@ export function usePaginatedComponents({
 
       if (refreshTimer) clearTimeout(refreshTimer);
     };
-  }, [queryClient, resetPageOnCreate, signature]);
+  }, [queryClient, resetPageOnCreate, signature, listParams]);
 
   // Memoised so the identity only changes when the data does.
   const components = useMemo(() => data?.data ?? [], [data]);
@@ -240,24 +257,16 @@ export function usePaginatedComponents({
   const pagination = useMemo<PaginationMeta>(() => {
     const meta = data?.pagination;
 
-    if (!meta) {
-      return { ...EMPTY_PAGINATION, pageSize: safePageSize };
-    }
+    return meta
+      ? meta
+      : { ...EMPTY_PAGINATION, pageSize: safePageSize };
+  }, [data, safePageSize]);
 
-    if (!query.isPlaceholderData) return meta;
-
-    // While the next page is in flight the totals are still valid, but the
-    // page indicator should already show the page the user asked for.
-    return {
-      ...meta,
-      currentPage: listParams.page,
-      hasNextPage: listParams.page < meta.totalPages,
-      hasPreviousPage: listParams.page > 1,
-    };
-  }, [data, query.isPlaceholderData, listParams.page, safePageSize]);
-
-  const loading = query.isPending;
-  const refreshing = query.isFetching && !query.isPending;
+  // Debouncing is part of loading: while the user is typing, the rendered
+  // cards still belong to the previous search term and must not be treated as
+  // a settled empty/no-results result.
+  const loading = query.isPending || debouncedSearch !== search.trim();
+  const refreshing = !loading && query.isFetching;
 
   const error = query.isError
     ? "We couldn't load the components right now. Check your connection and try again."
