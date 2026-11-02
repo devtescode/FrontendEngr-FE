@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  keepPreviousData,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   componentApi,
   type BackendComponent,
   type ComponentSortField,
-  type PaginatedComponentsResponse,
   type PaginationMeta,
   type SortOrder,
 } from "@/lib/api";
@@ -89,14 +84,26 @@ export function usePaginatedComponents({
   // A search, category or sort change always restarts the list at page 1.
   // The page is derived from the filter signature, so the change costs a
   // single request instead of one for the old page and one for the new one.
-  const signature = [sort, order, debouncedSearch, activeCategory ?? ""].join(
-    "|"
-  );
+  // JSON keeps the signature unambiguous even when a search contains "|".
+  const signature = JSON.stringify([
+    sort,
+    order,
+    debouncedSearch,
+    activeCategory ?? "",
+  ]);
 
   const [pageState, setPageState] = useState<{
     signature: string;
     page: number;
   }>({ signature, page: 1 });
+
+  // Persist the reset after the new-signature render. Without this, going
+  // page 3 -> search -> clear search would restore page 3 from the old state.
+  useEffect(() => {
+    setPageState((current) =>
+      current.signature === signature ? current : { signature, page: 1 }
+    );
+  }, [signature]);
 
   const page = pageState.signature === signature ? pageState.page : 1;
 
@@ -134,20 +141,13 @@ export function usePaginatedComponents({
         category: listParams.category,
         signal,
       }),
-    // Keep the cards on screen while the next page loads.
-    placeholderData: keepPreviousData,
     staleTime: 15_000,
   });
 
-  // The last response that succeeded, so a failed background refresh can
-  // still show the page the user was looking at.
-  const lastGoodRef = useRef<PaginatedComponentsResponse | null>(null);
-
-  useEffect(() => {
-    if (query.data) lastGoodRef.current = query.data;
-  }, [query.data]);
-
-  const data = query.data ?? lastGoodRef.current;
+  // React Query keeps the previous data after a failed background refetch of
+  // the same key, but it never leaks data from a different page or filter into
+  // a failed query. That is exactly the behaviour the list needs.
+  const data = query.data;
 
   // The server clamps an out-of-range page (for example after the last card
   // on a page is deleted). Follow it, and seed the clamped page's cache
@@ -157,7 +157,6 @@ export function usePaginatedComponents({
 
     if (!meta) return;
     if (meta.currentPage === listParams.page) return;
-    if (query.isPlaceholderData) return;
 
     queryClient.setQueryData(
       queryKeys.components.list({ ...listParams, page: meta.currentPage }),
@@ -165,7 +164,7 @@ export function usePaginatedComponents({
     );
 
     setPageState({ signature, page: meta.currentPage });
-  }, [data, listParams, query.isPlaceholderData, queryClient, signature]);
+  }, [data, listParams, queryClient, signature]);
 
   const setPage = useCallback(
     (nextPage: number) => {
