@@ -171,7 +171,7 @@ export function FeaturedComponents({
               </h2>
 
               <p className="mt-3 max-w-xl text-sm leading-7 text-slate-500 sm:text-base">
-                The six most recent additions to the lab shelf, with stock
+                Newest additions to the lab shelf, six per page, with stock
                 counts synced from inventory. In-stock items are ready for
                 campus pickup.
               </p>

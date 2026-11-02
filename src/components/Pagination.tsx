@@ -143,10 +143,14 @@ export function Pagination({
     onPageChange(nextPage);
   };
 
-  const renderItem = (item: PageItem, keyPrefix: string) => {
+  const renderItem = (item: PageItem, keyPrefix: string, index: number) => {
     if (item === "ellipsis") {
       return (
-        <span key={`${keyPrefix}-ellipsis`} aria-hidden="true" className={styles.ellipsis}>
+        <span
+          key={`${keyPrefix}-ellipsis-${index}`}
+          aria-hidden="true"
+          className={styles.ellipsis}
+        >
           …
         </span>
       );
@@ -171,7 +175,12 @@ export function Pagination({
 
   return (
     <nav
-      aria-label={ariaLabel ?? `Component ${itemLabel} pagination`}
+      aria-label={
+        ariaLabel ??
+        (itemLabel === "components"
+          ? "Component catalog pagination"
+          : `${itemLabel} pagination`)
+      }
       className={`${styles.nav} ${className}`}
     >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
@@ -189,7 +198,10 @@ export function Pagination({
           </p>
         )}
 
-        <p aria-live="polite" className={styles.pageInfo}>
+        <p
+          aria-live={showSummary ? undefined : "polite"}
+          className={styles.pageInfo}
+        >
           Page <span className={styles.pageInfoStrong}>{safePage}</span> of{" "}
           <span className={styles.pageInfoStrong}>{totalPages}</span>
         </p>
@@ -207,14 +219,18 @@ export function Pagination({
           <span className="hidden sm:inline">Previous</span>
         </button>
 
-        {/* Compact window for narrow screens — never more than four slots. */}
+        {/* Compact window for narrow screens — at most three page numbers. */}
         <div className="flex items-center justify-center gap-0.5 sm:hidden">
-          {compactItems.map((item) => renderItem(item, "compact"))}
+          {compactItems.map((item, index) =>
+            renderItem(item, "compact", index)
+          )}
         </div>
 
         {/* Wider window for tablet and desktop. */}
         <div className="hidden items-center gap-1 sm:flex">
-          {desktopItems.map((item) => renderItem(item, "desktop"))}
+          {desktopItems.map((item, index) =>
+            renderItem(item, "desktop", index)
+          )}
         </div>
 
         <button
