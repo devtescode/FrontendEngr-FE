@@ -1,8 +1,4 @@
-import {
-  createFileRoute,
-  Outlet,
-  useRouterState,
-} from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
 
 import { motion } from "framer-motion";
 import {
@@ -106,22 +102,14 @@ function CatalogIndex() {
 
   const activeSort = SORTS.find((option) => option.id === sort) ?? SORTS[0];
 
-  const {
-    components,
-    pagination,
-    page,
-    setPage,
-    loading,
-    refreshing,
-    error,
-    refresh,
-  } = usePaginatedComponents({
-    pageSize: 6,
-    sort: activeSort.sort,
-    order: activeSort.order,
-    search: q,
-    category: cat,
-  });
+  const { components, pagination, page, setPage, loading, refreshing, error, refresh } =
+    usePaginatedComponents({
+      pageSize: 6,
+      sort: activeSort.sort,
+      order: activeSort.order,
+      search: q,
+      category: cat,
+    });
 
   // Connection indicator only. Component data refreshes are owned by the
   // pagination hook so there is exactly one listener per event.
@@ -149,17 +137,12 @@ function CatalogIndex() {
     [components],
   );
 
-  const safePage = Math.min(
-    Math.max(1, page),
-    Math.max(1, pagination.totalPages),
-  );
+  const safePage = Math.min(Math.max(1, page), Math.max(1, pagination.totalPages));
 
   const hasActiveFilters = q.trim().length > 0 || cat !== "All";
   const hasFilters = hasActiveFilters || sort !== "recent";
-  const showInventoryEmpty =
-    !loading && !error && pagination.totalItems === 0 && !hasActiveFilters;
-  const showNoResults =
-    !loading && !error && pagination.totalItems === 0 && hasActiveFilters;
+  const showInventoryEmpty = !loading && !error && pagination.totalItems === 0 && !hasActiveFilters;
+  const showNoResults = !loading && !error && pagination.totalItems === 0 && hasActiveFilters;
 
   const handleSearchChange = (value: string) => {
     // The hook owns the page reset for searches: the term is debounced, so
@@ -205,17 +188,15 @@ function CatalogIndex() {
             </h1>
 
             <p className="mt-3 text-sm leading-6 text-slate-500 sm:text-base">
-              Browse components, check live stock, and add what you need to your cart. 
-              Recently updated components appear first.
+              Browse components, check live stock, and add what you need to your cart. Recently
+              updated components appear first.
             </p>
           </div>
 
           <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
             <span
               className={`size-1.5 rounded-full ${
-                isLive
-                  ? "animate-pulse bg-emerald-500 motion-reduce:animate-none"
-                  : "bg-slate-300"
+                isLive ? "animate-pulse bg-emerald-500 motion-reduce:animate-none" : "bg-slate-300"
               }`}
             />
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-500">
@@ -236,11 +217,7 @@ function CatalogIndex() {
           <SummaryStat
             icon={Boxes}
             label="Matching components"
-            value={
-              loading
-                ? "…"
-                : pagination.totalItems.toLocaleString("en-NG")
-            }
+            value={loading ? "…" : pagination.totalItems.toLocaleString("en-NG")}
           />
           <SummaryStat
             icon={PackageCheck}
@@ -250,11 +227,7 @@ function CatalogIndex() {
           <SummaryStat
             icon={PackageSearch}
             label="Current page"
-            value={
-              loading
-                ? "Updating…"
-                : `${safePage} of ${Math.max(1, pagination.totalPages)}`
-            }
+            value={loading ? "Updating…" : `${safePage} of ${Math.max(1, pagination.totalPages)}`}
           />
         </div>
 
@@ -366,12 +339,9 @@ function CatalogIndex() {
             <div className="mx-auto grid size-12 place-items-center rounded-xl bg-red-100 text-red-500">
               <AlertCircle className="size-5" />
             </div>
-            <h2 className="mt-4 text-lg font-bold text-brand-navy">
-              We couldn't load the catalog
-            </h2>
+            <h2 className="mt-4 text-lg font-bold text-brand-navy">We couldn't load the catalog</h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-              Check your connection and try again. Your cart and account are
-              unaffected.
+              Check your connection and try again. Your cart and account are unaffected.
             </p>
             <button
               type="button"
@@ -390,12 +360,10 @@ function CatalogIndex() {
             <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-accent/10 text-brand-accent">
               <PackageSearch className="size-6" />
             </div>
-            <h2 className="mt-4 text-lg font-bold text-brand-navy">
-              No components listed yet
-            </h2>
+            <h2 className="mt-4 text-lg font-bold text-brand-navy">No components listed yet</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-              The lab inventory is empty right now. New parts will appear here
-              as soon as they are added.
+              The lab inventory is empty right now. New parts will appear here as soon as they are
+              added.
             </p>
             <button
               type="button"
@@ -419,8 +387,8 @@ function CatalogIndex() {
               No components match your filters
             </h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-              Try a different search term or category. Filters are applied
-              across the entire inventory, not just this page.
+              Try a different search term or category. Filters are applied across the entire
+              inventory, not just this page.
             </p>
             <button
               type="button"
@@ -478,9 +446,7 @@ function SummaryStat({
         <Icon className="size-4" />
       </div>
       <div>
-        <p className="text-base font-bold leading-none text-brand-navy">
-          {value}
-        </p>
+        <p className="text-base font-bold leading-none text-brand-navy">{value}</p>
         <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
           {label}
         </p>

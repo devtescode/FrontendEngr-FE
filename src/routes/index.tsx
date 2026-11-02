@@ -141,100 +141,6 @@ function Index() {
     resetPageOnCreate: true,
   });
 
-  function PolicyAccordion({
-  icon: Icon,
-  title,
-  content,
-  defaultOpen = false,
-}: {
-  icon: React.ElementType;
-  title: string;
-  content: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = React.useState(defaultOpen);
-
-  return (
-    <motion.div
-      layout
-      className={`overflow-hidden rounded-2xl border bg-white transition-all duration-300 ${
-        open
-          ? "border-brand-accent/30 shadow-lg shadow-brand-accent/5"
-          : "border-slate-200 shadow-sm"
-      }`}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-slate-50 md:p-6"
-        aria-expanded={open}
-      >
-        <div className="flex min-w-0 items-center gap-4">
-          <div
-            className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
-              open
-                ? "bg-brand-accent text-white"
-                : "bg-brand-accent/10 text-brand-accent"
-            }`}
-          >
-            <Icon className="size-5" />
-          </div>
-
-          <div>
-            <h3 className="text-base font-bold text-brand-navy md:text-lg">
-              {title}
-            </h3>
-
-            <p className="mt-0.5 text-xs text-slate-400">
-              {open ? "Click to close" : "Click to read policy"}
-            </p>
-          </div>
-        </div>
-
-        <motion.div
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-          className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
-            open
-              ? "bg-brand-accent/10 text-brand-accent"
-              : "bg-slate-100 text-slate-500"
-          }`}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </motion.div>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeInOut" }}
-          >
-            <div className="border-t border-slate-100 px-5 pb-6 pt-5 text-sm leading-7 text-slate-600 md:px-6">
-              {content}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-
   return (
     <NavAppShell>
       <header className="relative overflow-hidden pt-20 pb-32">
@@ -661,6 +567,99 @@ function Index() {
         </div>
       </section>
     </NavAppShell>
+  );
+}
+
+function PolicyAccordion({
+  icon: Icon,
+  title,
+  content,
+  defaultOpen = false,
+}: {
+  icon: React.ElementType;
+  title: string;
+  content: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+
+  return (
+    <motion.div
+      layout
+      className={`overflow-hidden rounded-2xl border bg-white transition-all duration-300 ${
+        open
+          ? "border-brand-accent/30 shadow-lg shadow-brand-accent/5"
+          : "border-slate-200 shadow-sm"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-slate-50 md:p-6"
+        aria-expanded={open}
+      >
+        <div className="flex min-w-0 items-center gap-4">
+          <div
+            className={`flex size-11 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
+              open
+                ? "bg-brand-accent text-white"
+                : "bg-brand-accent/10 text-brand-accent"
+            }`}
+          >
+            <Icon className="size-5" />
+          </div>
+
+          <div>
+            <h3 className="text-base font-bold text-brand-navy md:text-lg">
+              {title}
+            </h3>
+
+            <p className="mt-0.5 text-xs text-slate-400">
+              {open ? "Click to close" : "Click to read policy"}
+            </p>
+          </div>
+        </div>
+
+        <motion.div
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
+            open
+              ? "bg-brand-accent/10 text-brand-accent"
+              : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </motion.div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+          >
+            <div className="border-t border-slate-100 px-5 pb-6 pt-5 text-sm leading-7 text-slate-600 md:px-6">
+              {content}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 

@@ -67,8 +67,7 @@ const controlClass =
 const pageButtonClass =
   "grid size-10 shrink-0 place-items-center rounded-lg text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 sm:size-9";
 
-const ellipsisClass =
-  "grid size-10 shrink-0 place-items-center text-sm text-slate-400 sm:size-9";
+const ellipsisClass = "grid size-10 shrink-0 place-items-center text-sm text-slate-400 sm:size-9";
 
 type VariantClasses = {
   nav: string;
@@ -108,9 +107,9 @@ const darkClasses: VariantClasses = {
   pageButton:
     "grid size-10 shrink-0 place-items-center rounded-lg text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-40 sm:size-9",
   pageActive: "border border-brand-accent/40 bg-brand-accent text-white shadow-sm",
-  pageInactive: "border border-transparent text-slate-300 hover:border-white/10 hover:bg-white/10 hover:text-white",
-  ellipsis:
-    "grid size-10 shrink-0 place-items-center text-sm text-slate-600 sm:size-9",
+  pageInactive:
+    "border border-transparent text-slate-300 hover:border-white/10 hover:bg-white/10 hover:text-white",
+  ellipsis: "grid size-10 shrink-0 place-items-center text-sm text-slate-600 sm:size-9",
 };
 
 export function Pagination({
@@ -146,11 +145,7 @@ export function Pagination({
   const renderItem = (item: PageItem, keyPrefix: string, index: number) => {
     if (item === "ellipsis") {
       return (
-        <span
-          key={`${keyPrefix}-ellipsis-${index}`}
-          aria-hidden="true"
-          className={styles.ellipsis}
-        >
+        <span key={`${keyPrefix}-ellipsis-${index}`} aria-hidden="true" className={styles.ellipsis}>
           …
         </span>
       );
@@ -177,9 +172,7 @@ export function Pagination({
     <nav
       aria-label={
         ariaLabel ??
-        (itemLabel === "components"
-          ? "Component catalog pagination"
-          : `${itemLabel} pagination`)
+        (itemLabel === "components" ? "Component catalog pagination" : `${itemLabel} pagination`)
       }
       className={`${styles.nav} ${className}`}
     >
@@ -190,18 +183,12 @@ export function Pagination({
             <span className={styles.summaryStrong}>
               {rangeStart}–{rangeEnd}
             </span>{" "}
-            of{" "}
-            <span className={styles.summaryStrong}>
-              {totalItems.toLocaleString("en-NG")}
-            </span>{" "}
+            of <span className={styles.summaryStrong}>{totalItems.toLocaleString("en-NG")}</span>{" "}
             {itemLabel}
           </p>
         )}
 
-        <p
-          aria-live={showSummary ? undefined : "polite"}
-          className={styles.pageInfo}
-        >
+        <p aria-live={showSummary ? undefined : "polite"} className={styles.pageInfo}>
           Page <span className={styles.pageInfoStrong}>{safePage}</span> of{" "}
           <span className={styles.pageInfoStrong}>{totalPages}</span>
         </p>
@@ -221,16 +208,12 @@ export function Pagination({
 
         {/* Compact window for narrow screens — at most three page numbers. */}
         <div className="flex items-center justify-center gap-0.5 sm:hidden">
-          {compactItems.map((item, index) =>
-            renderItem(item, "compact", index)
-          )}
+          {compactItems.map((item, index) => renderItem(item, "compact", index))}
         </div>
 
         {/* Wider window for tablet and desktop. */}
         <div className="hidden items-center gap-1 sm:flex">
-          {desktopItems.map((item, index) =>
-            renderItem(item, "desktop", index)
-          )}
+          {desktopItems.map((item, index) => renderItem(item, "desktop", index))}
         </div>
 
         <button

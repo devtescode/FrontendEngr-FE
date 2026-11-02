@@ -112,11 +112,7 @@ export function FeaturedComponents({
   );
 
   const pageUnits = useMemo(
-    () =>
-      components.reduce(
-        (total, component) => total + Math.max(0, component.stock),
-        0,
-      ),
+    () => components.reduce((total, component) => total + Math.max(0, component.stock), 0),
     [components],
   );
 
@@ -134,14 +130,10 @@ export function FeaturedComponents({
 
   const statusConfig = STATUS_CONFIG[status];
   const statusCopy = STATUS_COPY[status];
-  const showStats =
-    status === "live" || status === "stale" || status === "restocking";
+  const showStats = status === "live" || status === "stale" || status === "restocking";
 
   return (
-    <section
-      id="featured"
-      className="relative mx-auto max-w-7xl px-6 py-16 md:py-24"
-    >
+    <section id="featured" className="relative mx-auto max-w-7xl px-6 py-16 md:py-24">
       <Reveal>
         <div className="relative overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
           <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-brand-accent via-brand-gold to-emerald-500" />
@@ -171,9 +163,8 @@ export function FeaturedComponents({
               </h2>
 
               <p className="mt-3 max-w-xl text-sm leading-7 text-slate-500 sm:text-base">
-                Newest additions to the lab shelf, six per page, with stock
-                counts synced from inventory. In-stock items are ready for
-                campus pickup.
+                Newest additions to the lab shelf, six per page, with stock counts synced from
+                inventory. In-stock items are ready for campus pickup.
               </p>
 
               <div className="mt-6 flex flex-wrap gap-2">
@@ -241,9 +232,7 @@ export function FeaturedComponents({
                   <AvailabilityStat
                     icon={Boxes}
                     label="In stock here"
-                    value={
-                      showStats ? inStockCount.toLocaleString("en-NG") : "—"
-                    }
+                    value={showStats ? inStockCount.toLocaleString("en-NG") : "—"}
                   />
                   <AvailabilityStat
                     icon={PackageCheck}
@@ -272,12 +261,10 @@ export function FeaturedComponents({
           <div className="mx-auto grid size-12 place-items-center rounded-xl bg-red-100 text-red-500">
             <AlertCircle className="size-5" />
           </div>
-          <h3 className="mt-4 text-lg font-bold text-brand-navy">
-            We couldn't load the lab stock
-          </h3>
+          <h3 className="mt-4 text-lg font-bold text-brand-navy">We couldn't load the lab stock</h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-            Check your connection and try again. Only six records are fetched
-            at a time, so retrying is quick.
+            Check your connection and try again. Only six records are fetched at a time, so retrying
+            is quick.
           </p>
           <button
             type="button"
@@ -293,12 +280,9 @@ export function FeaturedComponents({
           <div className="mx-auto grid size-12 place-items-center rounded-xl bg-brand-accent/10 text-brand-accent">
             <Package className="size-5" />
           </div>
-          <h3 className="mt-4 text-lg font-bold text-brand-navy">
-            The shelf is being restocked
-          </h3>
+          <h3 className="mt-4 text-lg font-bold text-brand-navy">The shelf is being restocked</h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-            New components are on their way to the lab. Refresh to check for
-            new stock.
+            New components are on their way to the lab. Refresh to check for new stock.
           </p>
           <button
             type="button"
@@ -341,7 +325,7 @@ export function FeaturedComponents({
             totalItems={pagination.totalItems}
             pageSize={pagination.pageSize}
             onPageChange={onPageChange}
-            disabled={loading}
+            disabled={loading || refreshing}
           />
         </>
       )}
@@ -349,13 +333,7 @@ export function FeaturedComponents({
   );
 }
 
-function FeaturePill({
-  icon: Icon,
-  label,
-}: {
-  icon: ElementType;
-  label: string;
-}) {
+function FeaturePill({ icon: Icon, label }: { icon: ElementType; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-600">
       <Icon className="size-3.5 text-brand-accent" />

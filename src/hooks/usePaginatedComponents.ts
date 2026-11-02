@@ -85,12 +85,7 @@ export function usePaginatedComponents({
   // The page is derived from the filter signature, so the change costs a
   // single request instead of one for the old page and one for the new one.
   // JSON keeps the signature unambiguous even when a search contains "|".
-  const signature = JSON.stringify([
-    sort,
-    order,
-    debouncedSearch,
-    activeCategory ?? "",
-  ]);
+  const signature = JSON.stringify([sort, order, debouncedSearch, activeCategory ?? ""]);
 
   const [pageState, setPageState] = useState<{
     signature: string;
@@ -100,15 +95,12 @@ export function usePaginatedComponents({
   // Persist the reset after the new-signature render. Without this, going
   // page 3 -> search -> clear search would restore page 3 from the old state.
   useEffect(() => {
-    setPageState((current) =>
-      current.signature === signature ? current : { signature, page: 1 }
-    );
+    setPageState((current) => (current.signature === signature ? current : { signature, page: 1 }));
   }, [signature]);
 
   const page = pageState.signature === signature ? pageState.page : 1;
 
   const pageRef = useRef(page);
-  pageRef.current = page;
 
   const listParams = useMemo(
     () => ({
@@ -119,15 +111,15 @@ export function usePaginatedComponents({
       search: debouncedSearch,
       category: activeCategory,
     }),
-    [
-      page,
-      safePageSize,
-      sort,
-      order,
-      debouncedSearch,
-      activeCategory,
-    ]
+    [page, safePageSize, sort, order, debouncedSearch, activeCategory],
   );
+
+  const latestQueryRef = useRef({ page, signature, listParams });
+
+  useEffect(() => {
+    pageRef.current = page;
+    latestQueryRef.current = { page, signature, listParams };
+  }, [page, signature, listParams]);
 
   const query = useQuery({
     queryKey: queryKeys.components.list(listParams),
@@ -160,7 +152,7 @@ export function usePaginatedComponents({
 
     queryClient.setQueryData(
       queryKeys.components.list({ ...listParams, page: meta.currentPage }),
-      data
+      data,
     );
 
     setPageState({ signature, page: meta.currentPage });
@@ -171,7 +163,7 @@ export function usePaginatedComponents({
       const next = Number.isFinite(nextPage) ? Math.floor(nextPage) : 1;
       setPageState({ signature, page: Math.max(1, next) });
     },
-    [signature]
+    [signature],
   );
 
   const refresh = useCallback(() => {
@@ -208,15 +200,20 @@ export function usePaginatedComponents({
 
     const handleCreated = () => {
       if (resetPageOnCreate) {
+        const latest = latestQueryRef.current;
+
         // Invalidate only page 1. Invalidating every list would also refetch
         // the page that is about to be unmounted.
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.components.list({ ...listParams, page: 1 }),
+          queryKey: queryKeys.components.list({
+            ...latest.listParams,
+            page: 1,
+          }),
           exact: true,
         });
 
-        if (pageRef.current !== 1) {
-          setPageState({ signature, page: 1 });
+        if (latest.page !== 1) {
+          setPageState({ signature: latest.signature, page: 1 });
         }
 
         return;
@@ -249,7 +246,7 @@ export function usePaginatedComponents({
 
       if (refreshTimer) clearTimeout(refreshTimer);
     };
-  }, [queryClient, resetPageOnCreate, signature, listParams]);
+  }, [queryClient, resetPageOnCreate]);
 
   // Memoised so the identity only changes when the data does.
   const components = useMemo(() => data?.data ?? [], [data]);
@@ -257,9 +254,7 @@ export function usePaginatedComponents({
   const pagination = useMemo<PaginationMeta>(() => {
     const meta = data?.pagination;
 
-    return meta
-      ? meta
-      : { ...EMPTY_PAGINATION, pageSize: safePageSize };
+    return meta ? meta : { ...EMPTY_PAGINATION, pageSize: safePageSize };
   }, [data, safePageSize]);
 
   // Debouncing is part of loading: while the user is typing, the rendered
