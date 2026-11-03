@@ -4,22 +4,14 @@ import {
   useNavigate,
   // Navigate,
 } from "@tanstack/react-router";
-import { motion } from "framer-motion";
-import {
-  useEffect,
-  useState,
-  type ReactNode,
-  type SyntheticEvent,
-} from "react";
-import {  useStore } from "@/lib/store";
+import { useEffect, useState, type ReactNode, type SyntheticEvent } from "react";
+import { useStore } from "@/lib/store";
 import { connectUserSocket, socket } from "@/lib/socket";
-import {
-  getApiErrorBody,
-  getApiErrorCode,
-  useUserLogin,
-} from "@/hooks/useAuthMutations";
+import { getApiErrorBody, getApiErrorCode, useUserLogin } from "@/hooks/useAuthMutations";
 import { toErrorMessage } from "@/lib/queryClient";
 import {
+  AlertCircle,
+  ArrowRight,
   Mail,
   Lock,
   Loader2,
@@ -28,6 +20,8 @@ import {
   CheckCircle2,
   MailWarning,
 } from "lucide-react";
+
+import { AuthShell } from "@/components/auth/AuthShell";
 
 type LoginSearch = {
   /** Set by the verify-email page after a successful verification. */
@@ -40,7 +34,14 @@ function isTruthyFlag(value: unknown): boolean {
 
 export const Route = createFileRoute("/login")({
   head: () => ({
-    meta: [{ title: "Sign in — PulseLab" }],
+    meta: [
+      { title: "Sign in — EU Hardwarestore" },
+      {
+        name: "description",
+        content:
+          "Sign in to your EU Hardwarestore student account to order lab components and track campus pickup.",
+      },
+    ],
   }),
   validateSearch: (search: Record<string, unknown>): LoginSearch => {
     const { verified, ...rest } = search;
@@ -81,10 +82,7 @@ function LoginPage() {
     try {
       const parsedUser = JSON.parse(savedUser);
 
-      const userId =
-        parsedUser?.id ??
-        parsedUser?._id ??
-        parsedUser?.userId;
+      const userId = parsedUser?.id ?? parsedUser?._id ?? parsedUser?.userId;
 
       if (userId) {
         useStore.setState({
@@ -212,128 +210,133 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-2 bg-slate-50">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md rounded-sm bg-white p-6 shadow-sm"
-      >
-        <h1 className="text-3xl font-bold text-brand-navy">
-          Welcome back
-        </h1>
+    <AuthShell
+      eyebrow="Student account"
+      title="Welcome back."
+      description="Sign in to order components, follow live stock and collect your parts at the EU lab."
+    >
+      {verified && !unverifiedEmail && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-6 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800"
+        >
+          <CheckCircle2 size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>Your email has been verified. You can now sign in.</span>
+        </div>
+      )}
 
-        <p className="text-slate-500 mt-1 text-sm">
-          Sign in with your details
-        </p>
+      <form onSubmit={submit} className="space-y-5">
+        <Field
+          label="Email address"
+          value={email}
+          onChange={setEmail}
+          type="email"
+          placeholder="you@elizade.edu.ng"
+          icon={<Mail size={18} />}
+          autoComplete="email"
+        />
 
-        {verified && !unverifiedEmail && (
+        <div>
+          <Field
+            label="Password"
+            value={password}
+            onChange={setPassword}
+            type="password"
+            placeholder="Enter your password"
+            icon={<Lock size={18} />}
+            autoComplete="current-password"
+            revealable
+          />
+
+          <div className="mt-2.5 flex justify-end">
+            <Link
+              to="/forgot-password"
+              className="rounded-sm text-xs font-semibold text-brand-accent transition hover:text-brand-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        </div>
+
+        {error && (
           <div
-            role="status"
-            aria-live="polite"
-            className="mt-6 flex items-start gap-2 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700"
+            role="alert"
+            className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700"
           >
-            <CheckCircle2 size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
-            <span>Your email has been verified. You can now log in.</span>
+            <AlertCircle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <span>{error}</span>
           </div>
         )}
 
-        <form
-          onSubmit={submit}
-          className="mt-8 space-y-4"
-        >
-          <Field
-            label="Email"
-            value={email}
-            onChange={setEmail}
-            type="email"
-            // placeholder="you@elizade.edu.ng"
-            placeholder="teslimagboola09@gmail.com"
-            icon={<Mail size={18} />}
-          />
-
-          <div>
-            <Field
-              label="Password"
-              value={password}
-              onChange={setPassword}
-              type="password"
-              placeholder="••••••••"
-              icon={<Lock size={18} />}
-            />
-
-            <div className="mt-2 flex justify-end">
-              <Link
-                to="/forgot-password"
-                className="rounded-sm text-sm font-medium text-brand-accent transition hover:text-brand-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2"
-              >
-                Forgot password?
-              </Link>
-            </div>
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-600">{error}</p>
-          )}
-
-          {unverifiedEmail && (
-            <div
-              role="alert"
-              className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800"
-            >
-              <div className="flex items-start gap-2">
-                <MailWarning size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
-                <p>
-                  Please verify your email address before logging in. Check
-                  your inbox for the verification link, or request a new one.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate({
-                    to: "/verify-email",
-                    search: { email: unverifiedEmail, reason: "login" },
-                  })
-                }
-                className="mt-3 w-full h-12 rounded-lg border border-brand-navy bg-white font-semibold text-brand-navy transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2"
-              >
-                Verify my email
-              </button>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full h-12 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-              loading
-                ? "bg-slate-400 text-white cursor-not-allowed"
-                : "bg-brand-navy text-white hover:bg-slate-800"
-            }`}
+        {unverifiedEmail && (
+          <div
+            role="alert"
+            className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3.5 text-sm text-amber-800"
           >
-            {loading ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                <span>Signing in...</span>
-              </>
-            ) : (
-              "Sign in"
-            )}
-          </button>
-        </form>
+            <div className="flex items-start gap-2.5">
+              <MailWarning size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <p>
+                Please verify your email address before signing in. Check your inbox for the
+                verification link, or request a new one.
+              </p>
+            </div>
 
-        <p className="text-sm text-slate-500 text-center mt-6">
-          No account?{" "}
+            <button
+              type="button"
+              onClick={() =>
+                navigate({
+                  to: "/verify-email",
+                  search: { email: unverifiedEmail, reason: "login" },
+                })
+              }
+              className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-lg border border-amber-300 bg-white text-sm font-semibold text-amber-900 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+            >
+              Verify my email
+            </button>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          aria-busy={loading}
+          className={`group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2 ${
+            loading
+              ? "cursor-not-allowed bg-slate-300 text-slate-600 shadow-none"
+              : "bg-brand-gold text-brand-navy shadow-lg shadow-brand-gold/20 hover:bg-[#e88a0a] hover:shadow-xl"
+          }`}
+        >
+          {loading ? (
+            <>
+              <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+              <span>Signing in…</span>
+            </>
+          ) : (
+            <>
+              <span>Sign in</span>
+              <ArrowRight
+                size={17}
+                className="transition-transform group-hover:translate-x-0.5"
+                aria-hidden="true"
+              />
+            </>
+          )}
+        </button>
+      </form>
+
+      <div className="mt-6 border-t border-slate-100 pt-5 text-center">
+        <p className="text-sm text-slate-500">
+          New to EU Hardwarestore?{" "}
           <Link
             to="/register"
-            className="text-brand-accent font-semibold"
+            className="rounded-sm font-semibold text-brand-accent transition hover:text-brand-blue hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent focus-visible:ring-offset-2"
           >
-            Register
+            Create an account
           </Link>
         </p>
-      </motion.div>
-    </div>
+      </div>
+    </AuthShell>
   );
 }
 
@@ -374,13 +377,13 @@ export function Field({
 
   return (
     <label className="block">
-      <span className="text-xs font-mono uppercase tracking-widest text-slate-500">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
         {label}
       </span>
 
-      <div className="relative mt-1">
+      <div className="relative mt-2">
         {icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
             {icon}
           </div>
         )}
@@ -398,9 +401,11 @@ export function Field({
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           required
-          className={`w-full h-11 rounded-sm border bg-white text-brand-navy focus:outline-none focus:ring-2 focus:ring-brand-accent/10 focus:border-brand-accent transition disabled:cursor-not-allowed disabled:bg-slate-50 ${
-            invalid ? "border-red-400" : "border-slate-200"
-          } ${icon ? "pl-10" : "pl-3"} ${canReveal ? "pr-11" : "pr-3"}`}
+          className={`h-12 w-full rounded-xl border bg-slate-50/70 text-sm font-medium text-brand-navy outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:ring-4 disabled:cursor-not-allowed disabled:bg-slate-100 ${
+            invalid
+              ? "border-red-300 focus:border-red-400 focus:ring-red-100"
+              : "border-slate-200 focus:border-brand-accent focus:ring-brand-accent/10"
+          } ${icon ? "pl-11" : "pl-3.5"} ${canReveal ? "pr-12" : "pr-3.5"}`}
         />
 
         {canReveal && (
@@ -409,7 +414,7 @@ export function Field({
             onClick={() => setVisible((isVisible) => !isVisible)}
             aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`}
             aria-pressed={visible}
-            className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-sm text-slate-400 transition hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent"
+            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-400 transition hover:text-brand-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-accent"
           >
             {visible ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>

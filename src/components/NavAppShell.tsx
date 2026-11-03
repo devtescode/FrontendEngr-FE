@@ -1,14 +1,15 @@
 import type { ReactNode } from "react";
+
 import { HomePageNavbar } from "./HomePageNavbar";
+import { HomeFooter } from "./home/HomeFooter";
 import { ToastHost } from "./ComponentCard";
-// import { Footer } from "./Footer";
 
 export function NavAppShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="flex min-h-screen flex-col bg-background">
       <HomePageNavbar />
       <main className="flex-1">{children}</main>
-      {/* <Footer /> */}
+      <HomeFooter />
       <ToastHost />
     </div>
   );

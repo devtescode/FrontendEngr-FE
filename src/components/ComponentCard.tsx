@@ -10,6 +10,7 @@ import {
   Info,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import type { BackendComponent } from "@/lib/api";
 import { socket } from "@/lib/socket";
@@ -29,6 +30,25 @@ type Toast = {
   kind: ToastKind;
   message: string;
 };
+
+type CartSocketPayload = {
+  userId?: string | { _id?: string; id?: string };
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+
+  return fallback;
+}
 
 // =====================================================
 // GLOBAL TOAST BUS
@@ -80,13 +100,7 @@ export function ToastHost() {
   );
 }
 
-function ToastItem({
-  toast,
-  onDismiss,
-}: {
-  toast: Toast;
-  onDismiss: (id: string) => void;
-}) {
+function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
   const config = {
     success: {
       icon: CheckCircle2,
@@ -122,17 +136,11 @@ function ToastItem({
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
       className="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border border-white/10 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur-md ring-1 ${config.ring}"
     >
-      <div
-        className={`grid size-8 shrink-0 place-items-center rounded-lg ${config.bg}`}
-      >
+      <div className={`grid size-8 shrink-0 place-items-center rounded-lg ${config.bg}`}>
         <Icon className={`size-4 ${config.iconColor}`} />
       </div>
 
-      <p
-        className={`min-w-0 flex-1 pt-1 text-sm font-medium ${config.text}`}
-      >
-        {toast.message}
-      </p>
+      <p className={`min-w-0 flex-1 pt-1 text-sm font-medium ${config.text}`}>{toast.message}</p>
 
       <button
         type="button"
@@ -150,13 +158,7 @@ function ToastItem({
 // COMPONENT CARD
 // =====================================================
 
-export function ComponentCard({
-  c,
-  index = 0,
-}: {
-  c: BackendComponent;
-  index?: number;
-}) {
+export function ComponentCard({ c, index = 0 }: { c: BackendComponent; index?: number }) {
   const isOutOfStock = c.stock <= 0;
   const isLowStock = c.stock > 0 && c.stock <= 5;
 
@@ -170,20 +172,13 @@ export function ComponentCard({
   // Every card on the page reads the same query key, so the cart is
   // requested exactly once no matter how many cards are rendered.
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { cart, isLoading: cartLoading } = useCartQuery();
-  const {
-    addToCart,
-    updateQuantity,
-    removeFromCart,
-  } = useCartMutations();
+  const { addToCart, updateQuantity, removeFromCart } = useCartMutations();
 
-  const quantity =
-    cart.items.find((item) => item.componentId === componentId)?.quantity ?? 0;
+  const quantity = cart.items.find((item) => item.componentId === componentId)?.quantity ?? 0;
 
-  const isMutating =
-    addToCart.isPending ||
-    updateQuantity.isPending ||
-    removeFromCart.isPending;
+  const isMutating = addToCart.isPending || updateQuantity.isPending || removeFromCart.isPending;
 
   // Guests can browse the catalog without any cart request.
   const cartReady = !cartLoading;
@@ -204,22 +199,16 @@ export function ComponentCard({
   // The backend pushes a fresh cart after an add and after a payment
   // webhook. Invalidate the shared query so every card re-reads it.
   useEffect(() => {
-    const handleCartUpdated = (cart: any) => {
+    const handleCartUpdated = (cart: CartSocketPayload) => {
       if (!sessionStorage.getItem("pulselab_token")) return;
 
       // Ignore a queued event that belongs to another user.
       const currentUserId = sessionStorage.getItem("pulselab_userId");
       const rawUserId = cart?.userId;
       const eventUserId =
-        rawUserId && typeof rawUserId === "object"
-          ? rawUserId._id ?? rawUserId.id
-          : rawUserId;
+        rawUserId && typeof rawUserId === "object" ? (rawUserId._id ?? rawUserId.id) : rawUserId;
 
-      if (
-        currentUserId &&
-        eventUserId &&
-        String(eventUserId) !== currentUserId
-      ) {
+      if (currentUserId && eventUserId && String(eventUserId) !== currentUserId) {
         return;
       }
 
@@ -241,6 +230,7 @@ export function ComponentCard({
 
     if (!token) {
       pushToast("info", "Sign in to add items to your cart.");
+      navigate({ to: "/login" });
       return;
     }
 
@@ -261,13 +251,10 @@ export function ComponentCard({
       });
 
       pushToast("success", `${c.name} added to cart`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Add to cart error:", error);
 
-      pushToast(
-        "error",
-        error?.message || "Failed to add item to cart"
-      );
+      pushToast("error", getErrorMessage(error, "Failed to add item to cart"));
     } finally {
       setLoading(false);
     }
@@ -281,6 +268,7 @@ export function ComponentCard({
 
     if (!token) {
       pushToast("info", "Sign in to add items to your cart.");
+      navigate({ to: "/login" });
       return;
     }
 
@@ -292,7 +280,7 @@ export function ComponentCard({
     if (quantity >= c.stock) {
       pushToast(
         "error",
-        `Only ${c.stock} unit${c.stock === 1 ? "" : "s"} available for ${c.name}.`
+        `Only ${c.stock} unit${c.stock === 1 ? "" : "s"} available for ${c.name}.`,
       );
       return;
     }
@@ -304,13 +292,10 @@ export function ComponentCard({
         componentId,
         quantity: quantity + 1,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Increase quantity error:", error);
 
-      pushToast(
-        "error",
-        error?.message || "Failed to increase quantity"
-      );
+      pushToast("error", getErrorMessage(error, "Failed to increase quantity"));
     } finally {
       setLoading(false);
     }
@@ -324,6 +309,7 @@ export function ComponentCard({
 
     if (!token) {
       pushToast("info", "Sign in to add items to your cart.");
+      navigate({ to: "/login" });
       return;
     }
 
@@ -350,13 +336,10 @@ export function ComponentCard({
         componentId,
         quantity: quantity - 1,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Decrease quantity error:", error);
 
-      pushToast(
-        "error",
-        error?.message || "Failed to decrease quantity"
-      );
+      pushToast("error", getErrorMessage(error, "Failed to decrease quantity"));
     } finally {
       setLoading(false);
     }
@@ -370,15 +353,18 @@ export function ComponentCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.05 }}
-      whileHover={{ y: -6 }}
-      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl"
+      className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-xl"
     >
       {/* IMAGE */}
-      <div className="relative h-66 overflow-hidden bg-slate-50">
+      <div className="relative aspect-[4/3] overflow-hidden bg-slate-50">
         {c.image ? (
           <img
             src={c.image}
             alt={c.name}
+            loading="lazy"
+            decoding="async"
+            width={640}
+            height={480}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
@@ -436,16 +422,10 @@ export function ComponentCard({
           </div>
 
           <div className="text-right">
-            <p className="text-xs font-medium text-slate-400">
-              Available
-            </p>
+            <p className="text-xs font-medium text-slate-400">Available</p>
             <p
               className={`mt-1 text-sm font-semibold ${
-                isOutOfStock
-                  ? "text-red-500"
-                  : isLowStock
-                    ? "text-amber-600"
-                    : "text-emerald-600"
+                isOutOfStock ? "text-red-500" : isLowStock ? "text-amber-600" : "text-emerald-600"
               }`}
             >
               {c.stock} units
@@ -479,12 +459,8 @@ export function ComponentCard({
             </button>
 
             <div className="flex flex-col items-center">
-              <span className="text-base font-bold text-brand-navy">
-                {quantity}
-              </span>
-              <span className="text-[10px] uppercase tracking-wide text-slate-400">
-                In cart
-              </span>
+              <span className="text-base font-bold text-brand-navy">{quantity}</span>
+              <span className="text-[10px] uppercase tracking-wide text-slate-400">In cart</span>
             </div>
 
             <button

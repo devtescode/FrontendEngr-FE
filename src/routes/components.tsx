@@ -21,26 +21,34 @@ import { AppShell } from "@/components/AppShell";
 import { ComponentCard } from "@/components/ComponentCard";
 import { ComponentGridSkeleton } from "@/components/ComponentGridSkeleton";
 import { Pagination } from "@/components/Pagination";
-import { RequireAuth } from "@/components/RequireAuth";
 
 import { usePaginatedComponents } from "@/hooks/usePaginatedComponents";
 import type { Category } from "@/lib/data";
 import { socket } from "@/lib/socket";
 
+type CatalogSearch = {
+  q?: string;
+};
+
 export const Route = createFileRoute("/components")({
   head: () => ({
     meta: [
       {
-        title: "Components — PulseLab",
+        title: "Components — EU Hardwarestore",
+      },
+      {
+        name: "description",
+        content:
+          "Browse live Elizade University lab inventory: microcontrollers, sensors, prototyping parts and more.",
       },
     ],
   }),
 
-  component: () => (
-    <RequireAuth role="student">
-      <ComponentsLayout />
-    </RequireAuth>
-  ),
+  validateSearch: (search: Record<string, unknown>): CatalogSearch => ({
+    q: typeof search.q === "string" && search.q.trim() ? search.q.trim() : undefined,
+  }),
+
+  component: ComponentsLayout,
 });
 
 function ComponentsLayout() {
@@ -95,10 +103,16 @@ const SORTS = [
 type SortId = (typeof SORTS)[number]["id"];
 
 function CatalogIndex() {
-  const [q, setQ] = useState("");
+  const { q: searchQuery } = Route.useSearch();
+  const [q, setQ] = useState(searchQuery ?? "");
   const [cat, setCat] = useState<(typeof CATEGORIES)[number]>("All");
   const [sort, setSort] = useState<SortId>("recent");
   const [isLive, setIsLive] = useState(socket.connected);
+
+  // Keep the catalog in sync when the navbar sends a new ?q= search.
+  useEffect(() => {
+    setQ(searchQuery ?? "");
+  }, [searchQuery]);
 
   const activeSort = SORTS.find((option) => option.id === sort) ?? SORTS[0];
 
