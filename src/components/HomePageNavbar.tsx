@@ -134,9 +134,10 @@ export function HomePageNavbar() {
           <motion.button
             type="button"
             aria-label="Close navigation menu"
-            initial={{ opacity: 0 }}
+            initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.24, ease: "easeOut" }}
             onClick={closeMenus}
             className="fixed inset-0 top-24 z-10 bg-slate-950/40 backdrop-blur-sm lg:hidden"
           />
@@ -316,10 +317,18 @@ export function HomePageNavbar() {
           {mobileOpen && (
             <motion.div
               id="mobile-navigation"
-              initial={reduceMotion ? false : { opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-              transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
+              initial={reduceMotion ? false : { opacity: 0, y: -20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -12, scale: 0.98 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : {
+                      y: { type: "spring", stiffness: 360, damping: 32 },
+                      scale: { type: "spring", stiffness: 360, damping: 32 },
+                      opacity: { duration: 0.18, ease: "easeOut" },
+                    }
+              }
               className="absolute inset-x-0 top-full z-50 flex max-h-[calc(100dvh-6rem)] flex-col border-t border-slate-200 bg-white shadow-2xl lg:hidden"
             >
               <div className="mx-auto flex w-full max-w-7xl flex-col overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:px-6">
