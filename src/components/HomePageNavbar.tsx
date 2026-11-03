@@ -137,7 +137,7 @@ export function HomePageNavbar() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={closeMenus}
-            className="fixed inset-0 top-24 z-40 bg-slate-950/40 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 top-24 z-10 bg-slate-950/40 backdrop-blur-sm lg:hidden"
           />
         )}
       </AnimatePresence>
@@ -147,7 +147,7 @@ export function HomePageNavbar() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: reduceMotion ? 0 : 0.45, ease: "easeOut" }}
         aria-label="Main navigation"
-        className="border-b border-slate-200/80 bg-white/85 backdrop-blur-xl"
+        className="relative z-20 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl"
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link
@@ -319,22 +319,9 @@ export function HomePageNavbar() {
               animate={{ opacity: 1, y: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
               transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
-              className="absolute inset-x-0 top-full z-50 flex h-[calc(100vh-6rem)] flex-col border-t border-slate-200 bg-white shadow-2xl h-[calc(100dvh-6rem)] lg:hidden"
+              className="absolute inset-x-0 top-full z-50 flex max-h-[calc(100dvh-6rem)] flex-col border-t border-slate-200 bg-white shadow-2xl lg:hidden"
             >
-              <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:px-6">
-                <form onSubmit={submitSearch} role="search" className="mb-4">
-                  <label className="relative block">
-                    <span className="sr-only">Search components</span>
-                    <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Search microcontrollers, sensors, parts…"
-                      className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-base text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-brand-accent/40 focus:bg-white focus:ring-2 focus:ring-brand-accent/20"
-                    />
-                  </label>
-                </form>
-
+              <div className="mx-auto flex w-full max-w-7xl flex-col overflow-y-auto overscroll-contain px-4 pb-6 pt-4 sm:px-6">
                 <div className="grid gap-1">
                   <MobileLink to="/" icon={Home} onClick={closeMenus}>
                     Home
@@ -350,29 +337,7 @@ export function HomePageNavbar() {
                   </MobileLink>
                 </div>
 
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                  <p className="px-2 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Policies
-                  </p>
-                  <div className="grid gap-0.5">
-                    {POLICY_LINKS.map((policy) => (
-                      <Link
-                        key={policy.hash}
-                        to="/"
-                        hash={policy.hash}
-                        onClick={closeMenus}
-                        className="flex items-center gap-2.5 rounded-lg px-2 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-brand-navy"
-                      >
-                        <policy.icon className="size-4 text-brand-accent" />
-                        {policy.label}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-200 bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:px-6">
-                <div className="mx-auto grid max-w-7xl grid-cols-2 gap-2">
+                <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-200 pt-4">
                   <Link
                     to="/register"
                     onClick={closeMenus}
