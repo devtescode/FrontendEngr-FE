@@ -119,11 +119,12 @@ export function HomePageNavbar() {
             <span className="truncate">Elizade University · Ilara Mokin, Ondo State</span>
           </p>
           <a
-            href="mailto:support@euhardwarestore.ng"
+            href="mailto:euhardwarestore@gmail.com"
             className="hidden items-center gap-1.5 transition hover:text-white sm:flex"
           >
             <Mail className="size-3 text-brand-gold" />
-            support@euhardwarestore.ng
+            {/* euhardwarestore@gmail.com */}
+            euhardwarestore@gmail.com
           </a>
         </div>
       </div>

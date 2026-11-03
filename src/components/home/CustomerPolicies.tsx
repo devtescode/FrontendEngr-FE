@@ -211,7 +211,7 @@ export function CustomerPolicies() {
             </div>
 
             <a
-              href="mailto:support@euhardwarestore.ng"
+              href="mailto:euhardwarestore@gmail.com"
               className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-brand-navy transition-all hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 focus-visible:ring-offset-brand-navy active:scale-95"
             >
               Contact Support

@@ -184,7 +184,7 @@ export function HomeFooter() {
               </div>
 
               <a
-                href="mailto:support@euhardwarestore.ng"
+                href="mailto:euhardwarestore@gmail.com"
                 className="group flex items-start gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 focus-visible:ring-offset-brand-navy"
               >
                 <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/5 text-brand-gold transition-colors duration-200 group-hover:border-brand-gold/30 group-hover:bg-brand-gold/10">
@@ -195,7 +195,7 @@ export function HomeFooter() {
                     Email support
                   </span>
                   <span className="mt-1 flex items-start gap-1 break-all text-sm text-white/65 transition-colors duration-200 group-hover:text-brand-gold">
-                    support@euhardwarestore.ng
+                    euhardwarestore@gmail.com
                     <ArrowUpRight
                       className="mt-1 size-3.5 shrink-0 opacity-60 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:opacity-100"
                       aria-hidden="true"

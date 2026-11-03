@@ -47,7 +47,7 @@ const BRAND = {
   tagline: "Engineering Components Store",
   address: "Engineering Building, Room 204",
   phone: "+234 806 486 4821",
-  email: "support@euhardwarestore.ng",
+  email: "euhardwarestore@gmail.com",
 };
 
 // =====================================================
