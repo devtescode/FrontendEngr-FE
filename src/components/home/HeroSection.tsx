@@ -53,7 +53,7 @@ export function HeroSection() {
 
           <p className="mt-6 max-w-xl text-base leading-7 text-slate-300 sm:text-lg sm:leading-8">
             The official inventory system for Elizade University engineering students. Order
-            microcontrollers, sensors, and mechanical parts for your projects — pay securely, then
+            microcontrollers, sensors, and mechanical parts for your projects pay securely, then
             pick them up at the lab.
           </p>
 
@@ -71,7 +71,7 @@ export function HeroSection() {
               className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-6 text-sm font-semibold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-brand-navy"
             >
               How It Works
-              <Sparkles className="size-4 text-brand-gold" />
+              {/* <Sparkles className="size-4 text-brand-gold" /> */}
             </a>
           </div>
 
